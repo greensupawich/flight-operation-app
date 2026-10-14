@@ -199,3 +199,62 @@ export function renderInvites(tbody, invites, profiles, onDone) {
       else onDone();
     }));
 }
+
+// =====================================================================
+//  ประวัติการแก้ไข (audit_log · migration_32) — อ่านได้เฉพาะ admin
+// =====================================================================
+export const AUDIT_TABLE_LABEL = {
+  missions:"ภารกิจ", mission_crew:"ลูกเรือในภารกิจ", flight_legs:"ขาบิน", post_flight_reports:"รายงานหลังบิน",
+  discrepancies:"ข้อขัดข้อง", safety_reports:"รายงานอันตราย", report_media:"ไฟล์แนบ",
+  crew_members:"ทะเบียนนักบิน", crew_aliases:"ชื่อเรียกอื่น", crew_unavailable:"วันไม่ว่าง",
+  queue_entries:"คิวบิน", crew_hours_carry:"ชม.ยกยอด", aircraft:"เครื่องบิน",
+  aircraft_status_history:"สถานภาพเครื่อง", aircraft_defects:"ข้อบกพร่องเครื่อง", aircraft_checks:"กำหนดตรวจ",
+  airfields:"สนามบิน", holidays:"วันหยุด", day_notes:"เวรประจำวัน", archive_log:"Export/เคลียร์",
+  profiles:"ผู้ใช้", user_invites:"เพิ่มผู้ใช้ล่วงหน้า",
+};
+const AUDIT_OP = { INSERT:["เพิ่ม","var(--good)"], UPDATE:["แก้","var(--warn)"], DELETE:["ลบ","var(--crit)"] };
+// ช่องที่ใช้บอกว่าแถวนี้คือ "อะไร" ตอนเพิ่ม/ลบ
+const AUDIT_NAME_KEYS = ["mission_name","callsign","full_name","code","email","tail_number","description",
+  "name","alias","off_date","log_date","entry_date","mission_date","note","total_hours","position","crew_name","file_name"];
+const AUDIT_HIDE = new Set(["id","created_at","created_by","updated_at","updated_by"]);
+
+export async function loadAudit({ table = "", before = null, limit = 100 } = {}) {
+  let q = supabase.from("audit_log").select("*").order("id", { ascending: false }).limit(limit);
+  if (table)  q = q.eq("table_name", table);
+  if (before) q = q.lt("id", before);
+  const { data, error } = await q;
+  return { rows: data || [], error };
+}
+
+const short = (v) => {
+  if (v === null || v === undefined || v === "") return "—";
+  const s = typeof v === "object" ? JSON.stringify(v) : String(v);
+  return s.length > 60 ? s.slice(0, 60) + "…" : s;
+};
+
+function auditDetail(r) {
+  if (r.op === "UPDATE") {
+    const keys = Object.keys(r.new_data || {}).filter((k) => !AUDIT_HIDE.has(k));
+    return keys.slice(0, 5).map((k) =>
+      `<div><span class="mono muted">${esc(k)}</span>: ${esc(short(r.old_data?.[k]))} → <b>${esc(short(r.new_data?.[k]))}</b></div>`
+    ).join("") + (keys.length > 5 ? `<div class="muted">… อีก ${keys.length - 5} ช่อง</div>` : "");
+  }
+  const d = (r.op === "INSERT" ? r.new_data : r.old_data) || {};
+  const parts = AUDIT_NAME_KEYS.filter((k) => d[k] !== null && d[k] !== undefined && d[k] !== "")
+    .slice(0, 4).map((k) => `<span class="mono muted">${esc(k)}</span>: ${esc(short(d[k]))}`);
+  return parts.join(" · ") || `<span class="mono muted">${esc(r.row_id || "")}</span>`;
+}
+
+export function renderAudit(tbody, rows, { append = false } = {}) {
+  const html = rows.map((r) => {
+    const [opTxt, opColor] = AUDIT_OP[r.op] || [r.op, "inherit"];
+    return `<tr>
+      <td class="mono" style="font-size:12px;white-space:nowrap">${esc(fmtTime(r.at))}</td>
+      <td style="font-size:12.5px">${esc(r.actor_email || "-")}</td>
+      <td style="white-space:nowrap"><b style="color:${opColor}">${opTxt}</b> ${esc(AUDIT_TABLE_LABEL[r.table_name] || r.table_name)}</td>
+      <td style="font-size:12.5px;line-height:1.6">${auditDetail(r)}</td>
+    </tr>`;
+  }).join("");
+  if (append) tbody.insertAdjacentHTML("beforeend", html);
+  else tbody.innerHTML = html || `<tr><td colspan="4" class="empty">ยังไม่มีประวัติ</td></tr>`;
+}

@@ -84,13 +84,31 @@
     <p class="muted" style="margin-top:14px;font-size:12.5px">
       💡 มี 2 ทางให้คนเข้าใช้งาน: (1) admin เพิ่มอีเมลล่วงหน้าในกล่อง "เพิ่มผู้ใช้" หรือ (2) ผู้ใช้ล็อกอิน Google แล้วกรอกคำขอ จะโผล่ในกล่อง "คำขอใช้งาน" ให้กด <b>✓ อนุมัติ</b>
     </p>
+
+    <!-- ===== ประวัติการแก้ไข (audit log) ===== -->
+    <h2 class="sec" style="margin-top:30px">ประวัติการแก้ไข</h2>
+    <p class="muted" style="font-size:12.5px;margin:0 0 10px">
+      บันทึกอัตโนมัติทุกครั้งที่ผู้ใช้เพิ่ม/แก้/ลบข้อมูลผ่านเว็บ — ไม่มีใครแก้หรือลบประวัตินี้ได้ (รวม admin)
+    </p>
+    <div style="display:flex;gap:10px;align-items:center;margin-bottom:10px">
+      <select id="auTable" style="max-width:240px"><option value="">ทุกตาราง</option></select>
+      <span class="muted" id="auMsg" style="font-size:12.5px"></span>
+    </div>
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>เวลา</th><th>ผู้แก้</th><th>รายการ</th><th>รายละเอียด</th></tr></thead>
+        <tbody id="auRows"><tr><td colspan="4" class="empty">กำลังโหลด…</td></tr></tbody>
+      </table>
+    </div>
+    <div style="text-align:center;margin-top:10px"><button class="btn sm" id="auMore" hidden>โหลดเพิ่ม</button></div>
   </div>
 </main>
 
 <script type="module">
   import { requireAuth } from "./js/auth.js";
   import { renderTopbar } from "./js/ui.js";
-  import { loadProfiles, renderRequests, renderUsers, loadInvites, addInvite, renderInvites, ROLES, ROLE_LABEL, MAX_ADMINS } from "./js/admin.js";
+  import { loadProfiles, renderRequests, renderUsers, loadInvites, addInvite, renderInvites, ROLES, ROLE_LABEL, MAX_ADMINS,
+           loadAudit, renderAudit, AUDIT_TABLE_LABEL } from "./js/admin.js";
 
   const profile = await requireAuth(["admin"]);   // เข้าได้เฉพาะ admin
   if (profile) {
@@ -140,6 +158,29 @@
     });
 
     refresh();
+
+    // ---------- ประวัติการแก้ไข ----------
+    const auTb = document.getElementById("auRows"), auMore = document.getElementById("auMore");
+    const auSel = document.getElementById("auTable"), auMsg = document.getElementById("auMsg");
+    auSel.insertAdjacentHTML("beforeend", Object.entries(AUDIT_TABLE_LABEL)
+      .map(([k, v]) => `<option value="${k}">${v}</option>`).join(""));
+    let auLast = null;
+    async function loadAu(append = false) {
+      auMore.disabled = true;
+      const { rows, error } = await loadAudit({ table: auSel.value, before: append ? auLast : null });
+      auMore.disabled = false;
+      if (error) {
+        auTb.innerHTML = `<tr><td colspan="4" class="empty">โหลดประวัติไม่ได้ — ต้องรัน db/migration_32_audit_log.sql ก่อน</td></tr>`;
+        auMore.hidden = true; return;
+      }
+      renderAudit(auTb, rows, { append });
+      if (rows.length) auLast = rows[rows.length - 1].id;
+      auMore.hidden = rows.length < 100;
+      auMsg.textContent = "";
+    }
+    auSel.addEventListener("change", () => loadAu(false));
+    auMore.addEventListener("click", () => loadAu(true));
+    loadAu();
   }
 </script>
 </body>
