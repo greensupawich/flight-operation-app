@@ -94,6 +94,7 @@
   if (profile) {
     renderTopbar(profile);
     const planner = canPlan(profile);
+    const canAvail = ["admin", "planner", "pilot", "crew"].includes(profile.role);   // viewer ดูได้อย่างเดียว (migration_31)
 
     let date = new URLSearchParams(location.search).get("date");
     if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
@@ -168,7 +169,7 @@
         ? offs.map(o => `<div class="off-item" data-crew="${o.crew_member_id}">
              <b>${esc(o.crew_members?.full_name || "-")}</b>
              <span>${esc(o.note || "")}</span>
-             <button class="btn sm off-del" data-del title="ลบ">ลบ</button>
+             ${canAvail ? `<button class="btn sm off-del" data-del title="ลบ">ลบ</button>` : ""}
            </div>`).join("")
         : `<div class="muted" style="font-size:13px">ไม่มี</div>`;
       list.querySelectorAll("[data-del]").forEach(b => b.addEventListener("click", async (e) => {
@@ -183,7 +184,7 @@
     }
 
     document.getElementById("avail").hidden = false;
-    buildAddPanel();
+    if (canAvail) buildAddPanel();
     renderOffList();
 
     const [yy,mm,dd] = date.split("-").map(Number);

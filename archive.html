@@ -128,7 +128,7 @@
 </main>
 
 <script type="module">
-  import { requireAuth, canPlan } from "./js/auth.js";
+  import { requireAuth, canPlan, isAdmin } from "./js/auth.js";
   import { renderTopbar } from "./js/ui.js";
   import { KINDS, KIND_COLORS, DEFAULT_KIND, esc } from "./js/missions.js";
   import { thumbsHtml, bindThumbs } from "./js/media.js";
@@ -218,7 +218,7 @@
         else if (stale) status = `<span class="tag warn">มีข้อมูลเพิ่มหลัง export — export ใหม่</span>`;
         else if (partial) status = `<span class="tag warn">ไฟล์แนบไม่ครบใน zip — export ใหม่</span>`;
         else status = `<span class="tag ok">พร้อมเคลียร์</span>`;
-        const canPurge = !needsMigration && old && exported && !stale && !partial && r.missions > 0;
+        const canPurge = isAdmin(profile) && !needsMigration && old && exported && !stale && !partial && r.missions > 0;
         return `<tr data-i="${i}">
           <td><b>${ymLabel(r.ym)}</b></td>
           <td class="num">${r.missions}</td>
