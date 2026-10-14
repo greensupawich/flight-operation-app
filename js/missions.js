@@ -1,0 +1,183 @@
+// =====================================================================
+//  missions.js — ปฏิทินภารกิจ + อ่าน/เขียนภารกิจ + ลูกเรือ
+// =====================================================================
+import { supabase } from "./supabase.js";
+
+// ---------- ชนิดภารกิจ (สีตามกระดานจัดบินจริง) ----------
+export const KINDS = {
+  fcf: "F.C.F",
+  dechochai: "เดโชชัย",
+  palace: "ภารกิจสำนักพระราชวัง",
+  rtaf: "ภารกิจ ทอ.",
+  training: "ฝึกบิน",
+  stby: "STBY (Standby)",
+  stby_dechochai: "STBY เดโชชัย",
+};
+export const DEFAULT_KIND = "rtaf";
+// bg = สีพื้นตามกระดาน, fg = สีตัวอักษรที่อ่านออกบนพื้นนั้น
+export const KIND_COLORS = {
+  fcf:       { bg: "#D9783A", fg: "#1F1206" },
+  dechochai: { bg: "#E53935", fg: "#FFFFFF" },
+  palace:    { bg: "#A5D46A", fg: "#16240A" },
+  rtaf:      { bg: "#4DA3E8", fg: "#08202F" },
+  training:  { bg: "#FFFFFF", fg: "#16202E" },
+  stby:      { bg: "#FFFFFF", fg: "#16202E" },   // ช่อง ST ในกระดานคิวบินเป็นพื้นขาว
+  stby_dechochai: { bg: "#FDE0DE", fg: "#B71C1C" },   // STBY ที่รอเรียกเป็นเดโชชัย (ชมพูอ่อน ต่างจากเดโชชัยจริง)
+};
+// ชนิด STBY = เตรียมพร้อม ยังไม่ปฏิบัติจริง (ไม่ขึ้นการ์ดภารกิจ/ไม่นับคิว/ไม่อยู่ในสถิติ)
+//  ถ้าถูกเรียกใช้ ผู้เกี่ยวข้องเปลี่ยนชนิดเป็นภารกิจจริง (เช่น stby_dechochai → dechochai) เอง
+export const STBY_KINDS = ["stby", "stby_dechochai"];
+export const isStby = (k) => STBY_KINDS.includes(k);
+export const kindStyle = (k) => {
+  const c = KIND_COLORS[k] || KIND_COLORS[DEFAULT_KIND];
+  return `background:${c.bg};color:${c.fg}`;
+};
+
+// ---------- คุณวุฒินักบิน (สีตามตารางรายชื่อนักบิน) ----------
+export const QUALS = ["IP", "P", "CP"];
+export const QUAL_COLORS = {
+  IP: { bg: "#F8CBAD", fg: "#4A2410" },   // ส้ม
+  P:  { bg: "#BDD7EE", fg: "#0F2C45" },   // ฟ้า
+  CP: { bg: "#D9D2E9", fg: "#2E2346" },   // ม่วง
+};
+export const qualStyle = (q) => {
+  const c = QUAL_COLORS[q];
+  return c ? `background:${c.bg};color:${c.fg}` : "";
+};
+
+// ---------- ตำแหน่งลูกเรือ (เรียงตามฟอร์ม) ----------
+export const PILOT_ROLES = ["AC", "IP", "P", "CP", "N"];
+export const OTHER_ROLES = ["FM", "RO", "LM", "AH"];
+export const CREW_ROLES  = [...PILOT_ROLES, ...OTHER_ROLES];
+// N ไม่นับ ชม.บิน (AC นับเมื่อผูกทะเบียนนักบิน · ไม่อยู่ในทะเบียนก็ได้)
+export const NO_HOURS_ROLES = ["N"];
+
+const MISSION_SELECT =
+  "*, aircraft(id,tail_number,type), mission_crew(id,position,crew_name,crew_member_id,sort_order), post_flight_reports(id,total_hours)";
+
+// ภารกิจนี้มีรายงานหลังบินแล้วหรือยัง (1 ภารกิจ = 1 รายงาน — อาจมาเป็น object หรือ array)
+export const reportOf = (m) => {
+  const r = m?.post_flight_reports;
+  return Array.isArray(r) ? (r[0] || null) : (r || null);
+};
+
+// =====================================================================
+//  ปฏิทิน — นับจำนวนภารกิจต่อวันในเดือนที่กำหนด
+//  คืน { "2026-09-11": 3, ... }
+// =====================================================================
+export async function loadMonthCounts(year, month /* 0-11 */) {
+  const first = new Date(Date.UTC(year, month, 1));
+  const last  = new Date(Date.UTC(year, month + 1, 0));
+  const { data, error } = await supabase
+    .from("missions")
+    .select("mission_date")
+    .gte("mission_date", iso(first))
+    .lte("mission_date", iso(last));
+  if (error) { console.error(error); return {}; }
+  const counts = {};
+  (data || []).forEach((r) => { counts[r.mission_date] = (counts[r.mission_date] || 0) + 1; });
+  return counts;
+}
+
+// ---------- ภารกิจทั้งหมดของวันหนึ่ง (พร้อมลูกเรือ) ----------
+export async function loadMissionsByDate(dateStr) {
+  const { data, error } = await supabase
+    .from("missions").select(MISSION_SELECT)
+    .eq("mission_date", dateStr)
+    .order("created_at", { ascending: true });
+  if (error) { console.error(error); return []; }
+  return data || [];
+}
+
+export async function getMission(id) {
+  const { data, error } = await supabase
+    .from("missions").select(MISSION_SELECT).eq("id", id).single();
+  if (error) { console.error(error); return null; }
+  return data;
+}
+
+// =====================================================================
+//  บันทึกภารกิจ (สร้างใหม่ถ้าไม่มี id) + แทนที่รายชื่อลูกเรือทั้งชุด
+//  crew = [{ position, crew_name, crew_member_id }]
+// =====================================================================
+export async function saveMission(id, fields, crew) {
+  const { data: { session } } = await supabase.auth.getSession();
+  let missionId = id;
+
+  if (missionId) {
+    const { error } = await supabase.from("missions").update(fields).eq("id", missionId);
+    if (error) return { error };
+  } else {
+    const { data, error } = await supabase.from("missions")
+      .insert({ ...fields, created_by: session?.user?.id }).select("id").single();
+    if (error) return { error };
+    missionId = data.id;
+  }
+
+  // แทนที่ลูกเรือทั้งชุด (ลบของเดิมแล้วใส่ใหม่ — ง่ายและตรงกับฟอร์ม)
+  const { error: delErr } = await supabase.from("mission_crew").delete().eq("mission_id", missionId);
+  if (delErr) return { error: delErr, id: missionId };
+
+  const rows = (crew || [])
+    .filter((c) => c.crew_name && c.crew_name.trim())
+    .map((c, i) => ({
+      mission_id: missionId,
+      position: c.position,
+      crew_name: c.crew_name.trim(),
+      crew_member_id: c.crew_member_id || null,
+      sort_order: i,
+    }));
+
+  if (rows.length) {
+    const { error } = await supabase.from("mission_crew").insert(rows);
+    if (error) return { error, id: missionId };
+  }
+  return { id: missionId };
+}
+
+export async function deleteMission(id) {
+  const { error } = await supabase.from("missions").delete().eq("id", id);
+  return error;
+}
+
+// ---------- เครื่องบิน (รายการตายตัว 6 ลำ — seed ไว้ใน migration_02) ----------
+export async function loadAircraft() {
+  const { data } = await supabase.from("aircraft").select("id,tail_number,type").order("tail_number");
+  return data || [];
+}
+
+// ชื่อที่แสดง เช่น "ATR72-600/60301"
+export const acLabel = (a) => a ? `${a.type || ""}/${a.tail_number}` : "-";
+
+// ---------- ชื่อเดิม / ชื่ออื่นของนักบิน (migration_15) ----------
+// คืน Map(crewId -> [ชื่อเดิม]) หรือ null ถ้ายังไม่มีตาราง
+export async function loadAliasMap() {
+  const { data, error } = await supabase.from("crew_aliases").select("alias,crew_member_id");
+  if (error) return null;
+  const map = new Map();
+  (data || []).forEach((a) => {
+    if (!map.has(a.crew_member_id)) map.set(a.crew_member_id, []);
+    map.get(a.crew_member_id).push(a.alias);
+  });
+  return map;
+}
+
+// ---------- ทะเบียนลูกเรือ (ไว้เลือกตอนจัดลูกเรือ — ชม.บินผูกกับรหัสในทะเบียน) ----------
+export async function loadCrewRoster() {
+  const [{ data }, aliases] = await Promise.all([
+    supabase.from("crew_members").select("id,code,full_name,position").eq("active", true).order("full_name"),
+    loadAliasMap(),
+  ]);
+  return (data || []).map((c) => ({ ...c, aliases: aliases?.get(c.id) || [] }));
+}
+
+// ---------- helper ----------
+export const iso = (d) =>
+  `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}-${String(d.getUTCDate()).padStart(2, "0")}`;
+
+export const isoLocal = (d) =>
+  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+
+export function esc(s) {
+  return String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+}

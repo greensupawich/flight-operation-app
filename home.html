@@ -1,0 +1,406 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<!-- CSP: อนุญาตเฉพาะโดเมนที่ใช้จริง · เพิ่มโดเมนใหม่ (CDN/API) ต้องแก้ทุกหน้า -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' https://esm.sh https://cdnjs.cloudflare.com https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob: https://iljapjszrjuzjjbtxctu.supabase.co; media-src 'self' blob: https://iljapjszrjuzjjbtxctu.supabase.co; connect-src 'self' data: https://iljapjszrjuzjjbtxctu.supabase.co wss://iljapjszrjuzjjbtxctu.supabase.co https://esm.sh https://cdn.jsdelivr.net https://tessdata.projectnaptha.com; worker-src 'self' blob: https://cdn.jsdelivr.net; object-src 'none'; base-uri 'self'; form-action 'self'">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Flight Operation · หน้าหลัก</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bai+Jamjuree:wght@600;700&family=IBM+Plex+Sans+Thai:wght@400;500;600&family=IBM+Plex+Mono&display=swap">
+<link rel="stylesheet" href="css/style.css">
+<link rel="stylesheet" href="css/sheet.css">
+<style>
+  main .wrap{max-width:1720px}
+  .home-head{display:flex;align-items:end;gap:12px;flex-wrap:wrap;margin-bottom:16px}
+  .home-head .links{margin-inline-start:auto;display:flex;gap:8px;flex-wrap:wrap}
+
+  /* กระดาน: แผงสถานภาพเครื่อง (ซ้าย) + การ์ดภารกิจ (ขวา) */
+  #fit{overflow:hidden}
+  #fit>.board{transform-origin:top left}
+  .board{display:grid;grid-template-columns:380px minmax(0,1fr);gap:18px;align-items:start}
+  /* การ์ดภารกิจ 3 ใบต่อบรรทัดเสมอ */
+  .sheets.three{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;align-items:start}
+
+  /* โหมด scale ความกว้างพอดีจอ: บังคับเลย์เอาต์เดสก์ท็อป ไม่ให้ media query ทำการ์ดตกบรรทัด */
+  body.fit-w .board{grid-template-columns:380px minmax(0,1fr)}
+  body.fit-w .sheets.three{grid-template-columns:repeat(3,minmax(0,1fr))}
+  /* จอแคบ (มือถือ) ที่ไม่ scale: ยุบเป็นคอลัมน์เดียว เลื่อนได้ปกติ */
+  @media(max-width:700px){
+    body:not(.fit-w) .board{grid-template-columns:1fr}
+    body:not(.fit-w) .sheets.three{grid-template-columns:1fr}
+  }
+
+  /* ย่อการ์ดบนกระดานหน้าหลักให้ 3 ใบพอดีในคอลัมน์ขวา */
+  .board .sheet-top{padding:6px 9px;gap:6px}
+  .board .sheet-top .btn{padding:3px 7px;font-size:11px}
+  .board table.fm{font-size:11px}
+  .board table.fm td{padding:3px 5px;line-height:1.35}
+  .board table.fm td.lb{font-size:10px}
+  .board .crewgrid span{font-size:10.5px;padding:1px 3px}
+
+  /* ---- แผงสถานภาพเครื่อง ---- */
+  .acp{border:2px solid var(--line-strong);border-radius:8px;overflow:hidden;background:var(--surface);
+       box-shadow:var(--shadow);position:sticky;top:12px}
+  .acp-title{background:var(--surface-2);border-bottom:2px solid var(--line-strong);text-align:center;
+             padding:8px 10px;font-family:"Bai Jamjuree",sans-serif;font-weight:700;line-height:1.35}
+  .acp-title .t1{font-size:14px}
+  .acp-title .t2{font-size:12px;color:var(--muted);font-weight:600}
+  .acp-title .t3{font-size:12px;color:var(--primary);font-weight:700;margin-top:2px}
+
+  .acp-row{display:grid;grid-template-columns:60px minmax(0,1fr) 132px;border-top:1px solid var(--line-strong)}
+  .acp-tail{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;
+            color:#fff;padding:6px 2px;text-align:center}
+  .acp-row.s-FMC .acp-tail{background:#2E7D5B}
+  .acp-row.s-PMC .acp-tail{background:#E0A32B;color:#2a1e00}
+  .acp-row.s-NMC .acp-tail{background:#C0392B}
+  .acp-tail .num{font-family:"Bai Jamjuree",sans-serif;font-weight:700;font-size:19px;line-height:1}
+  .acp-tail .st{font-family:"IBM Plex Mono",monospace;font-weight:700;font-size:10.5px}
+  .acp-defs{padding:5px 8px;border-inline:1px solid var(--line-strong);font-size:11px;line-height:1.4;
+            color:var(--ink)}
+  .acp-defs ol{margin:0;padding-inline-start:15px}
+  .acp-defs li{margin:1px 0}
+  .acp-defs .dash{color:var(--faint)}
+  .acp-checks{padding:5px 7px;display:flex;flex-direction:column;gap:2px;font-size:11px}
+  .acp-chk{display:flex;gap:5px;align-items:baseline}
+  .acp-chk .nm{font-family:"IBM Plex Mono",monospace;font-weight:700;color:var(--primary);min-width:46px}
+  .acp-chk .due{color:var(--ink)}
+
+  /* ---- บล็อก STBY ---- */
+  .acp-stby{border-top:2px solid var(--line-strong);background:var(--surface-2);padding:8px 10px}
+  .acp-stby .hd{display:flex;align-items:center;gap:8px;font-weight:700;font-size:12.5px;margin-bottom:5px}
+  .acp-stby .hd .tag{font-family:"IBM Plex Mono",monospace;background:#fff;color:#16202E;
+                     border:1px solid var(--line-strong);border-radius:5px;padding:1px 7px;font-size:11px}
+  .acp-stby .cw{display:grid;grid-template-columns:38px 1fr;gap:1px 8px;font-size:11.5px}
+  .acp-stby .cw .rl{font-family:"IBM Plex Mono",monospace;font-weight:700;color:var(--muted)}
+  .acp-stby .poc{margin-top:5px;font-size:11px;color:var(--muted)}
+  .acp-empty{padding:10px;text-align:center;color:var(--faint);font-size:12px}
+
+  /* ---- ท้ายกระดาน: น.จัดบินภารกิจ (วันถัดไป) ---- */
+  .acp-foot{border-top:2px solid var(--line-strong);background:var(--surface-2);padding:9px 10px}
+  .acp-foot .fline{padding:5px 0}
+  .acp-foot .fline + .fline{border-top:1px dashed var(--line)}
+  .acp-foot .lb{font-size:11.5px;font-weight:700;color:var(--muted);text-align:center;margin-bottom:6px}
+  .acp-foot .lb .dt{color:var(--primary)}
+  .acp-foot .show{text-align:center;font-size:13px;font-weight:600;color:var(--ink);min-height:18px}
+  .acp-foot .show .ph{font-family:"IBM Plex Mono",monospace;color:var(--muted);margin-inline-start:8px;font-weight:500}
+  .acp-foot .show .none{color:var(--faint);font-weight:400}
+  .acp-foot .edit{display:none;gap:6px;flex-wrap:wrap}
+  .acp-foot.editing .edit{display:flex}
+  .acp-foot.editing .show{display:none}
+  .acp-foot .edit input{flex:1;min-width:110px;font-size:12.5px;padding:5px 8px}
+  .acp-foot .edit input.ph{flex:none;width:130px;font-family:"IBM Plex Mono",monospace}
+  .acp-foot .tools{display:flex;justify-content:center;gap:8px;margin-top:6px}
+
+  /* ---- Export PDF: พิมพ์กระดานตาม layout เดิม แนวนอน 1 หน้า ---- */
+  /* (JS preparePrint() จะ scale #fit>.board ให้พอดี A4 แนวนอนก่อนพิมพ์) */
+  @media print {
+    @page { size: A4 landscape; margin: 6mm; }
+    * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+    .topbar, .home-head { display: none !important; }
+    body { background: #fff !important; }
+    main { padding: 0 !important; }
+    main .wrap { max-width: none !important; padding: 0 !important; }
+    .acp { position: static !important; box-shadow: none !important; }
+    .sheet { box-shadow: none !important; break-inside: avoid; }
+    .acp-foot .tools, .acp-foot .edit, .sheet-actions { display: none !important; }
+  }
+</style>
+</head>
+<body>
+<main>
+  <div class="wrap">
+    <div class="page-head home-head">
+      <div>
+        <h1 id="title">ภารกิจวันนี้</h1>
+        <div class="sub" id="sub">กำลังโหลด…</div>
+      </div>
+      <div class="links">
+        <button class="btn sm" id="prevDay" title="วันก่อนหน้า">←</button>
+        <input type="date" id="datePick" style="width:auto">
+        <button class="btn sm" id="nextDay" title="วันถัดไป">→</button>
+        <button class="btn sm ghost" id="todayBtn">วันนี้</button>
+        <button class="btn sm ghost" id="pdfBtn">🖨️ Export PDF</button>
+        <a class="btn sm ghost" id="dayLink" href="day.html">หน้าภารกิจ</a>
+        <a class="btn sm ghost" href="status.html">สถานภาพเครื่อง</a>
+        <a class="btn sm primary" id="addBtn" href="#" hidden>+ เพิ่มภารกิจ</a>
+      </div>
+    </div>
+
+    <div id="fit">
+      <div class="board">
+        <aside class="acp" id="acp"><div class="acp-empty">กำลังโหลด…</div></aside>
+        <div class="sheets three" id="sheets"><div class="empty">กำลังโหลด…</div></div>
+      </div>
+    </div>
+  </div>
+</main>
+
+<script type="module">
+  import { getCurrentProfile, canPlan } from "./js/auth.js";
+  import { renderTopbar } from "./js/ui.js";
+  import { loadMissionsByDate, reportOf, isStby } from "./js/missions.js";
+  import { sheetHTML, orderMissions, hasCustomOrder, wireReorder, resetOrder, wireSheetDelete } from "./js/mission-sheet.js";
+  import { loadAircraft, loadDefects, loadChecks } from "./js/status.js";
+  import { supabase } from "./js/supabase.js";
+
+  const profile = await getCurrentProfile();
+
+  if (!profile || !profile.email) {          // ยังไม่ล็อกอิน
+    location.href = "index.html";
+  } else if (profile.status !== "active") {  // ล็อกอินแล้วแต่ยังไม่อนุมัติ
+    location.href = "pending.html";
+  } else {
+    renderTopbar(profile);
+    const planner = canPlan(profile);
+    const esc = (s) => String(s ?? "").replace(/[&<>"]/g, c => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;" }[c]));
+
+    const TH_MONTH = ["มกราคม","กุมภาพันธ์","มีนาคม","เมษายน","พฤษภาคม","มิถุนายน",
+                      "กรกฎาคม","สิงหาคม","กันยายน","ตุลาคม","พฤศจิกายน","ธันวาคม"];
+    const TH_DOW = ["อาทิตย์","จันทร์","อังคาร","พุธ","พฤหัสบดี","ศุกร์","เสาร์"];
+    const n = new Date();
+    const ymd = (d) => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
+    // วันที่กำลังดู (เลื่อนย้อนหลัง/ไปหน้าได้) · ค่าเริ่มต้น = วันนี้
+    let view, vNext, date, nextDate;
+    function setView(d) {
+      view = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+      vNext = new Date(view.getFullYear(), view.getMonth(), view.getDate()+1);
+      date = ymd(view); nextDate = ymd(vNext);
+    }
+    setView(n);
+    function updateHeader() {
+      document.getElementById("title").textContent =
+        `ภารกิจวัน${TH_DOW[view.getDay()]}ที่ ${view.getDate()} ${TH_MONTH[view.getMonth()]} ${view.getFullYear() + 543}`;
+      document.getElementById("dayLink").href = `day.html?date=${date}`;
+      document.getElementById("datePick").value = date;
+      if (planner) { const a = document.getElementById("addBtn"); a.hidden = false; a.href = `mission.html?new=1&date=${date}`; }
+    }
+
+    // ---- แผงสถานภาพเครื่อง (ซ้าย) ----
+    const stLabel = (a) => {
+      const m = String(a.status_note || "").match(/(NMCS|PMCS|FMC|PMC|NMC)/);
+      return m ? m[1] : a.status;         // แสดง NMCS ตามกระดานถ้ามีในหมายเหตุ
+    };
+    const tail3 = (t) => String(t || "").slice(-3);
+
+    // วัน (พ.ศ. ย่อ เช่น 17 ก.ย.69)
+    const TH_MON_SHORT = ["ม.ค.","ก.พ.","มี.ค.","เม.ย.","พ.ค.","มิ.ย.","ก.ค.","ส.ค.","ก.ย.","ต.ค.","พ.ย.","ธ.ค."];
+    const shortTH = (d) => `${d.getDate()} ${TH_MON_SHORT[d.getMonth()]}${String(d.getFullYear()+543).slice(-2)}`;
+
+    // น.จัดบินภารกิจ (ระดับวัน) — เก็บใน day_notes (migration_20) · พรุ่งนี้ = แถวของวันถัดไป
+    async function loadDayNote(d) {
+      const { data, error } = await supabase.from("day_notes")
+        .select("duty_officer,duty_phone").eq("log_date", d).maybeSingle();
+      if (error) { console.warn("day_notes:", error.message); return null; }
+      return data;
+    }
+    async function saveDayNote(d, officer, phone) {
+      const { error } = await supabase.from("day_notes")
+        .upsert({ log_date: d, duty_officer: officer || null, duty_phone: phone || null, updated_at: new Date().toISOString() },
+                { onConflict: "log_date" });
+      return error;
+    }
+
+    function acpRow(a, defs, chks) {
+      const dHTML = defs.length
+        ? `<ol>${defs.map(d => `<li>${esc(d)}</li>`).join("")}</ol>`
+        : `<span class="dash">—</span>`;
+      const cHTML = chks.length
+        ? chks.map(c => `<div class="acp-chk"><span class="nm">${esc(c.name)}</span><span class="due">${esc(c.due_text || "")}</span></div>`).join("")
+        : `<span class="dash">—</span>`;
+      return `<div class="acp-row s-${a.status}">
+        <div class="acp-tail"><span class="num">${esc(tail3(a.tail_number))}</span><span class="st">${esc(stLabel(a))}</span></div>
+        <div class="acp-defs">${dHTML}</div>
+        <div class="acp-checks">${cHTML}</div>
+      </div>`;
+    }
+
+    // บล็อก STBY จากภารกิจชนิด stby (ถ้ามี)
+    function stbyBlock(stbys) {
+      if (!stbys.length) return "";
+      return stbys.map(m => {
+        const crew = (m.mission_crew || []);
+        const rolesOrder = ["AC","IP","P","CP","N","FM","RO","LM","AH"];
+        const lines = rolesOrder.map(r => {
+          const names = crew.filter(c => (c.position||"").toUpperCase() === r)
+                            .sort((a,b)=>(a.sort_order||0)-(b.sort_order||0))
+                            .map(c => (c.crew_name||"").trim()).filter(Boolean);
+          return names.length ? `<div class="rl">${r}</div><div>${names.map(esc).join("  ·  ")}</div>` : "";
+        }).join("");
+        const acType = m.aircraft ? esc(m.aircraft.type || "ATR72-500/600") : "ATR72-500/600";
+        return `<div class="acp-stby">
+          <div class="hd">${m.kind === "stby_dechochai" ? "STBY เดโชชัย" : "STBY"} <span class="tag">${acType}</span> <span class="tag">COWBOY ${esc(m.callsign || "-")}</span></div>
+          ${lines ? `<div class="cw">${lines}</div>` : `<div class="poc">— ยังไม่ระบุลูกเรือ —</div>`}
+        </div>`;
+      }).join("");
+    }
+
+    // ท้ายกระดาน: น.จัดบินภารกิจ วันนี้ + พรุ่งนี้ — แก้ได้เฉพาะผู้วางแผน
+    function footLine(note, labelHTML, key) {
+      const officer = note?.duty_officer || "", phone = note?.duty_phone || "";
+      const show = officer
+        ? `${esc(officer)}${phone ? `<span class="ph">${esc(phone)}</span>` : ""}`
+        : `<span class="none">${planner ? "— กดแก้ไขเพื่อกรอกชื่อ —" : "— ยังไม่ระบุ —"}</span>`;
+      return `<div class="fline">
+        <div class="lb">${labelHTML}</div>
+        <div class="show">${show}</div>
+        ${planner ? `<div class="edit">
+          <input data-officer="${key}" value="${esc(officer)}" placeholder="ชื่อ น.จัดบินภารกิจ เช่น ร.อ.บัณฑิต">
+          <input class="ph" data-phone="${key}" value="${esc(phone)}" placeholder="เบอร์โทร">
+        </div>` : ""}
+      </div>`;
+    }
+    function footHTML(noteToday, noteNext) {
+      return `<div class="acp-foot" id="foot">
+        ${footLine(noteToday, `น.จัดบินภารกิจวันนี้ <span class="dt">${shortTH(view)}</span>`, "today")}
+        ${footLine(noteNext,  `น.จัดบินภารกิจพรุ่งนี้ <span class="dt">${shortTH(vNext)}</span>`, "next")}
+        ${planner ? `
+        <div class="tools">
+          <button class="btn sm ghost" data-edit>แก้ไข</button>
+          <button class="btn sm primary" data-save style="display:none">บันทึก</button>
+          <button class="btn sm ghost" data-cancel style="display:none">ยกเลิก</button>
+        </div>` : ""}
+      </div>`;
+    }
+
+    function renderAcp(aircraft, defMap, chkMap, stbys, noteToday, noteNext) {
+      const box = document.getElementById("acp");
+      const rows = aircraft.length
+        ? aircraft.map(a => acpRow(a, defMap.get(a.id) || [], chkMap.get(a.id) || [])).join("")
+        : `<div class="acp-empty">ยังไม่มีเครื่องในระบบ</div>`;
+      box.innerHTML = `
+        <div class="acp-title">
+          <div class="t1">ภารกิจ ฝูง.603 บน.6</div>
+          <div class="t2">วัน${TH_DOW[view.getDay()]} ที่ ${view.getDate()} ${TH_MONTH[view.getMonth()]} พ.ศ.${view.getFullYear()+543}</div>
+          <div class="t3">ATR72-500/600</div>
+        </div>
+        ${rows}
+        ${stbyBlock(stbys)}
+        ${footHTML(noteToday, noteNext)}`;
+      wireFoot();
+    }
+
+    function wireFoot() {
+      const foot = document.getElementById("foot");
+      if (!foot || !planner) return;
+      const editBtn = foot.querySelector("[data-edit]");
+      const saveBtn = foot.querySelector("[data-save]");
+      const cancelBtn = foot.querySelector("[data-cancel]");
+      const toggle = (on) => {
+        foot.classList.toggle("editing", on);
+        editBtn.style.display = on ? "none" : "";
+        saveBtn.style.display = on ? "" : "none";
+        cancelBtn.style.display = on ? "" : "none";
+        fitWidth();
+      };
+      editBtn.addEventListener("click", () => toggle(true));
+      cancelBtn.addEventListener("click", () => { refresh(); });
+      saveBtn.addEventListener("click", async () => {
+        saveBtn.disabled = true; saveBtn.textContent = "…";
+        const val = (sel) => foot.querySelector(sel).value.trim();
+        const e1 = await saveDayNote(date, val('[data-officer="today"]'), val('[data-phone="today"]'));
+        const e2 = await saveDayNote(nextDate, val('[data-officer="next"]'), val('[data-phone="next"]'));
+        const err = e1 || e2;
+        if (err) { alert("บันทึกไม่สำเร็จ: " + err.message); saveBtn.disabled = false; saveBtn.textContent = "บันทึก"; }
+        else refresh();
+      });
+    }
+
+    // ปุ่มล้างลำดับที่จัดเอง → กลับไปเรียงตาม T/O
+    function addResetButton(ids) {
+      const b = document.createElement("button");
+      b.className = "btn sm ghost order-reset"; b.textContent = "↺ เรียงตาม T/O";
+      b.addEventListener("click", async () => {
+        if (!confirm("ล้างลำดับที่จัดเอง แล้วเรียงการ์ดตามเวลา T/O?")) return;
+        const err = await resetOrder(ids);
+        if (err) alert("ไม่สำเร็จ: " + err.message); refresh();
+      });
+      document.getElementById("sub").appendChild(b);
+    }
+
+    async function refresh() {
+      updateHeader();
+      const box = document.getElementById("sheets");
+      const [all, aircraft, defMap, chkMap, noteToday, noteNext] = await Promise.all([
+        loadMissionsByDate(date), loadAircraft(), loadDefects(), loadChecks(),
+        loadDayNote(date), loadDayNote(nextDate)
+      ]);
+      const stbys = all.filter(m => isStby(m.kind));
+      const list = orderMissions(all.filter(m => !isStby(m.kind)));   // ลำดับที่จัดเอง หรือ T/O
+
+      renderAcp(aircraft, defMap, chkMap, stbys, noteToday, noteNext);
+
+      const done = list.filter(m => m.status !== "cancelled" && reportOf(m)).length;
+      const cancelled = list.filter(m => m.status === "cancelled").length;
+      const custom = hasCustomOrder(list);
+      document.getElementById("sub").textContent = list.length
+        ? `${list.length} ภารกิจ · ${custom ? "เรียงตามที่จัดเอง" : "เรียงตามเวลา T/O"}${planner && list.length > 1 ? " (ลาก ⠿ เพื่อย้าย)" : ""} · รายงานแล้ว ${done}${cancelled ? ` · ยกเลิก ${cancelled}` : ""}${stbys.length ? ` · STBY ${stbys.length}` : ""}`
+        : "ยังไม่มีภารกิจในวันนี้";
+      box.innerHTML = list.length
+        ? list.map(m => sheetHTML(m, { planner })).join("")
+        : `<div class="empty" style="grid-column:1/-1">ยังไม่มีภารกิจในวันนี้${planner ? ' · กด "+ เพิ่มภารกิจ" เพื่อสร้าง' : ""}</div>`;
+      wireSheetDelete(box, refresh);
+      if (planner) {
+        wireReorder(box, (err) => { if (err) { alert("บันทึกลำดับไม่สำเร็จ: " + err.message); refresh(); } else refresh(); });
+        if (custom) addResetButton(list.map(m => m.id));
+      }
+      fitWidth();
+      setTimeout(fitWidth, 250);   // เผื่อฟอนต์/เลย์เอาต์ปรับตัวหลังโหลด
+    }
+
+    // scale ทั้งกระดานให้ "ความกว้าง" พอดีจอ (การ์ด 3 ใบอยู่บรรทัดแรกเสมอ) · แนวตั้งเลื่อนได้ปกติ
+    const DESIGN_W = 1520;
+    function fitWidth() {
+      const fit = document.getElementById("fit");
+      const board = fit && fit.querySelector(".board");
+      if (!board) return;
+      board.style.transform = "none"; board.style.width = ""; fit.style.height = "";
+      if (window.innerWidth < 700) { document.body.classList.remove("fit-w"); return; }
+      document.body.classList.add("fit-w");
+      board.style.width = DESIGN_W + "px";
+      const h = board.scrollHeight;
+      const s = fit.clientWidth / DESIGN_W;
+      board.style.transform = `scale(${s})`;
+      fit.style.height = (h * s) + "px";
+    }
+    let fitT; addEventListener("resize", () => { clearTimeout(fitT); fitT = setTimeout(fitWidth, 120); });
+
+    // ---- นำทางวัน + Export PDF ----
+    const shiftDay = (n2) => { setView(new Date(view.getFullYear(), view.getMonth(), view.getDate() + n2)); refresh(); };
+    document.getElementById("prevDay").addEventListener("click", () => shiftDay(-1));
+    document.getElementById("nextDay").addEventListener("click", () => shiftDay(1));
+    document.getElementById("todayBtn").addEventListener("click", () => { setView(n); refresh(); });
+    document.getElementById("datePick").addEventListener("change", (e) => {
+      if (!e.target.value) return;
+      const [y, mo, da] = e.target.value.split("-").map(Number);
+      setView(new Date(y, mo - 1, da)); refresh();
+    });
+    // ---- เตรียมกระดานให้พอดี 1 หน้า A4 แนวนอน ก่อนพิมพ์ ----
+    const baseTitle = document.title;
+    function preparePrint() {
+      const fit = document.getElementById("fit");
+      const board = fit && fit.querySelector(".board");
+      if (!board) return;
+      board.style.transform = "none"; board.style.width = DESIGN_W + "px"; fit.style.height = "";
+      const h = board.scrollHeight, w = DESIGN_W;
+      const pageW = 1040, pageH = 700;          // พื้นที่ใช้งานโดยประมาณของ A4 แนวนอน (px @96dpi ลบขอบ)
+      const s = Math.min(pageW / w, pageH / h);
+      board.style.transformOrigin = "top left";
+      board.style.transform = `scale(${s})`;
+      fit.style.height = (h * s) + "px";
+    }
+    addEventListener("beforeprint", preparePrint);
+    addEventListener("afterprint", () => { document.title = baseTitle; fitWidth(); });
+
+    document.getElementById("pdfBtn").addEventListener("click", () => {
+      document.title = `ใบจัดบิน วันที่ ${view.getDate()} ${TH_MON_SHORT[view.getMonth()]} ${view.getFullYear() + 543}`;
+      preparePrint();
+      setTimeout(() => window.print(), 60);
+    });
+
+    refresh();
+  }
+</script>
+</body>
+</html>

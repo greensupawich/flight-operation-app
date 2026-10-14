@@ -1,0 +1,375 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<!-- CSP: อนุญาตเฉพาะโดเมนที่ใช้จริง · เพิ่มโดเมนใหม่ (CDN/API) ต้องแก้ทุกหน้า -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' https://esm.sh https://cdnjs.cloudflare.com https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob: https://iljapjszrjuzjjbtxctu.supabase.co; media-src 'self' blob: https://iljapjszrjuzjjbtxctu.supabase.co; connect-src 'self' data: https://iljapjszrjuzjjbtxctu.supabase.co wss://iljapjszrjuzjjbtxctu.supabase.co https://esm.sh https://cdn.jsdelivr.net https://tessdata.projectnaptha.com; worker-src 'self' blob: https://cdn.jsdelivr.net; object-src 'none'; base-uri 'self'; form-action 'self'">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Flight Operation · ข้อมูลภารกิจ</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bai+Jamjuree:wght@600;700&family=IBM+Plex+Sans+Thai:wght@400;500;600&family=IBM+Plex+Mono&display=swap">
+<link rel="stylesheet" href="css/style.css">
+<style>
+  .fieldset{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);
+            padding:18px 20px;margin-bottom:16px;box-shadow:var(--shadow)}
+  .fieldset h3{font-family:"Bai Jamjuree",sans-serif;font-weight:600;font-size:15px;margin:0 0 4px;
+               display:flex;align-items:center;gap:8px}
+  .fieldset .hint{font-size:12.5px;color:var(--faint);margin:0 0 14px}
+  .row{display:grid;gap:12px}
+  .r2{grid-template-columns:repeat(2,1fr)}
+  .r3{grid-template-columns:repeat(3,1fr)}
+  .r5{grid-template-columns:repeat(5,1fr)}
+  label{margin:0 0 5px}
+  /* ---- ลูกเรือแบบเพิ่ม/ลบแถวได้ (แบบ flight-ops) ---- */
+  .crew-block{background:var(--surface-2);border:1px solid var(--line);border-radius:10px;
+              padding:13px 14px;margin-bottom:12px}
+  .crew-title{font-size:13px;font-weight:700;margin-bottom:9px;display:flex;align-items:center;gap:8px}
+  .crew-title .tag{font-family:"IBM Plex Mono",monospace;background:var(--surface);border:1px solid var(--line);
+                   border-radius:6px;padding:2px 8px;font-size:12px}
+  .crew-title .nohr{background:var(--crit-soft);color:var(--crit);border:0;border-radius:5px;
+                    padding:2px 7px;font-size:10.5px;font-weight:700}
+  .crew-dyn{display:flex;flex-direction:column;gap:6px}
+  .crew-dyn-row{display:flex;gap:6px;align-items:center}
+  .crew-dyn-row input{flex:1}
+  .crew-dyn-row select{width:88px;flex-shrink:0}
+  .btn-mini{flex-shrink:0;padding:7px 11px;font-size:14px;line-height:1;border-radius:8px;
+            border:1px solid var(--line-strong);background:var(--surface);color:var(--crit);
+            cursor:pointer;font-family:inherit;font-weight:700}
+  .btn-mini:hover{background:var(--crit-soft)}
+  .btn-add{align-self:flex-start;margin-top:4px}
+  .bar{position:sticky;bottom:0;background:var(--surface);border-top:1px solid var(--line);
+       padding:14px 0;display:flex;gap:10px;margin-top:8px}
+  .err{color:var(--crit);font-size:13px;align-self:center}
+  @media(max-width:700px){ .r5,.r3,.r2{grid-template-columns:1fr 1fr} }
+</style>
+</head>
+<body>
+<main>
+  <div class="wrap" style="max-width:880px">
+    <div class="page-head">
+      <h1 id="title">เพิ่มภารกิจ</h1>
+      <div class="sub" id="sub"></div>
+    </div>
+
+    <!-- เครื่อง / callsign / ชนิด -->
+    <div class="fieldset">
+      <h3>✈️ เครื่องบินและภารกิจ</h3>
+      <div class="row r3">
+        <div><label>วันที่</label><input type="date" id="f_date"></div>
+        <div><label>หมายเลขเครื่อง (A/C No.)</label><select id="f_aircraft"></select></div>
+        <div><label>Callsign</label><input id="f_callsign" placeholder="เช่น CBY01"></div>
+      </div>
+      <div class="row r2" style="margin-top:12px">
+        <div><label>ชนิดภารกิจ</label><select id="f_kind"></select></div>
+        <div><label>ชื่อภารกิจ</label><input id="f_name" placeholder="เช่น ส่ง จก.ยก.ทอ. และคณะ"></div>
+      </div>
+    </div>
+
+    <!-- เวลา -->
+    <div class="fieldset">
+      <h3>🕐 เวลา</h3>
+      <p class="hint">กรอกเป็นเลข 4 หลัก เช่น 0800 · ใส่ "-" หรือ "STBY" ได้</p>
+      <div class="row r5">
+        <div><label>SHOWTIME</label><input id="f_showtime" placeholder="-"></div>
+        <div><label>BRIEF</label><input id="f_brief" placeholder="0800"></div>
+        <div><label>STEP</label><input id="f_step" placeholder="0830"></div>
+        <div><label>TAXI</label><input id="f_taxi" placeholder="-"></div>
+        <div><label>T/O</label><input id="f_to" placeholder="0900"></div>
+      </div>
+    </div>
+
+    <!-- ชพ. / จัดรับรอง / PAX -->
+    <div class="fieldset">
+      <h3>⛽ เชื้อเพลิง · รับรอง · ผู้โดยสาร</h3>
+      <div class="row r3">
+        <div><label>ชพ. (Tons)</label><input id="f_fuel" placeholder="เช่น 3.5 T / STBY"></div>
+        <div><label>จัดรับรอง</label><input id="f_catering" placeholder="เช่น 1 ขา"></div>
+        <div><label>PAX. (จำนวน ผดส.)</label><input id="f_pax" placeholder="เช่น 35 หรือ -/-/20"></div>
+      </div>
+    </div>
+
+    <!-- เส้นทาง -->
+    <div class="fieldset">
+      <h3>🧭 เส้นทางบินและจุดจอด</h3>
+      <label>เส้นทางบิน</label>
+      <input id="f_route" placeholder="เช่น บน.6 - บน.41 - บน.6">
+      <div class="row r2" style="margin-top:12px">
+        <div><label>จุดจอด — ไป</label><input id="f_parkOut" placeholder="เช่น N14"></div>
+        <div><label>จุดจอด — กลับ</label><input id="f_parkIn" placeholder="เช่น N14 / RTAF"></div>
+      </div>
+    </div>
+
+    <!-- คณะ -->
+    <div class="fieldset">
+      <h3>👤 คณะและผู้ประสานงาน</h3>
+      <label>หน.คณะฯ</label>
+      <input id="f_head" placeholder="เช่น พล.อ.ท.นิทัศน์ ยูประพัฒน์">
+      <div class="row r2" style="margin-top:12px">
+        <div><label>ชื่อ POC</label><input id="f_pocName" placeholder="เช่น น.ท.ธิติ สุขยอย"></div>
+        <div><label>เบอร์ POC</label><input id="f_pocPhone" placeholder="09 3424 9399"></div>
+      </div>
+    </div>
+
+    <!-- ลูกเรือ -->
+    <div class="fieldset">
+      <h3>🧑‍✈️ รายชื่อลูกเรือ</h3>
+      <p class="hint">
+        กด <b>+ เพิ่ม</b> เพื่อเพิ่มคน · กด <b>−</b> เพื่อลบแถว<br>
+        <b>นักบิน (นบ.)</b> ต้องเลือกจาก<b>ทะเบียนนักบิน</b> (พิมพ์ชื่อ รหัส หรือ IP/P/CP เพื่อกรอง) — ชม.บินสะสมให้อัตโนมัติ ·
+        ยังไม่มีชื่อ? <a href="crew.html">เพิ่มในทะเบียนนักบิน</a><br>
+        <b>FM / RO / LM / AH</b> พิมพ์ชื่อได้อิสระ (ลงกระดานอย่างเดียว ไม่เก็บทะเบียน/ไม่สะสม ชม.)<br>
+        <b>AC</b> ไม่จำเป็นต้องอยู่ในทะเบียน (พิมพ์ชื่อได้) — ถ้าอยู่ในทะเบียน นับ ชม.บินให้ด้วย ·
+        <b style="color:var(--crit)">N ไม่นับชั่วโมงบิน</b>
+      </p>
+      <div id="crewBox"></div>
+    </div>
+
+    <!-- หมายเหตุ -->
+    <div class="fieldset">
+      <h3>📝 หมายเหตุ</h3>
+      <textarea id="f_remark" rows="3" placeholder="เช่น บ.จริง A320 บรีฟ 0530 วิ่งขึ้น 0700"></textarea>
+    </div>
+
+    <div class="bar">
+      <button class="btn primary" id="save">บันทึกภารกิจ</button>
+      <a class="btn ghost" id="back" href="dashboard.html">ยกเลิก</a>
+      <span class="err" id="err"></span>
+    </div>
+  </div>
+</main>
+
+<script type="module">
+  import { attachCombo } from "./js/combobox.js";
+  import { requireAuth, canPlan } from "./js/auth.js";
+  import { renderTopbar } from "./js/ui.js";
+  import { getMission, saveMission, loadAircraft, loadCrewRoster, acLabel,
+           KINDS, DEFAULT_KIND, KIND_COLORS, qualStyle, PILOT_ROLES, OTHER_ROLES, esc } from "./js/missions.js";
+
+  const profile = await requireAuth();
+  if (profile) {
+    renderTopbar(profile);
+    if (!canPlan(profile)) { alert("คุณไม่มีสิทธิ์แก้ไขภารกิจ"); location.href = "dashboard.html"; }
+
+    const q = new URLSearchParams(location.search);
+    const missionId = q.get("id");
+    const presetDate = q.get("date");
+
+    // ---- ชนิดภารกิจ ----
+    document.getElementById("f_kind").innerHTML =
+      Object.entries(KINDS).map(([k,l]) => `<option value="${k}">${l}</option>`).join("");
+    const kindSel = document.getElementById("f_kind");
+    kindSel.value = DEFAULT_KIND;
+    // ทาสี select ตามชนิดที่เลือก ให้เห็นเหมือนกระดาน
+    const paintKind = () => {
+      const c = KIND_COLORS[kindSel.value];
+      kindSel.style.background = c.bg; kindSel.style.color = c.fg; kindSel.style.fontWeight = "600";
+    };
+    kindSel.addEventListener("change", paintKind);
+
+    // ---- เครื่องบิน (รายการตายตัว 6 ลำ) ----
+    const aircraft = await loadAircraft();
+    function fillAircraft(sel) {
+      document.getElementById("f_aircraft").innerHTML =
+        `<option value="">— เลือกเครื่อง —</option>` +
+        aircraft.map(a => `<option value="${a.id}" ${a.id===sel?"selected":""}>${esc(acLabel(a))}</option>`).join("");
+    }
+    fillAircraft();
+
+    // ---- ทะเบียนลูกเรือ (autocomplete + ผูกรหัสประจำตัว) ----
+    const roster = await loadCrewRoster();
+    const byName = new Map(), byCode = new Map();
+    roster.forEach(p => {
+      byName.set(p.full_name.trim().toLowerCase(), p);
+      byCode.set(String(p.code).trim().toLowerCase(), p);
+    });
+    // พิมพ์ได้ทั้งชื่อและรหัส
+    const resolveCrew = (text) => {
+      const k = (text || "").trim().toLowerCase();
+      return byName.get(k) || byCode.get(k) || null;
+    };
+
+    // =================================================================
+    //  ลูกเรือ — แถวเพิ่ม/ลบได้ (แบบ flight-ops)
+    //   • นักบิน: 1 แถว = [เลือกตำแหน่ง AC/IP/P/CP/N] + ชื่อ
+    //   • FM/RO/LM/AH: 1 แถว = ชื่อ
+    // =================================================================
+    let pilots = [];                                   // [{role, name}]
+    const others = Object.fromEntries(OTHER_ROLES.map(r => [r, []]));   // {FM:[name,...]}
+
+    document.getElementById("crewBox").innerHTML = `
+      <div class="crew-block">
+        <div class="crew-title"><span class="tag">นบ.</span> นักบิน <span style="font-weight:400;color:var(--faint);font-size:11.5px">(จากทะเบียน)</span>
+          <span class="nohr">AC · N ไม่นับ ชม.บิน</span></div>
+        <div class="crew-dyn" id="pilotRows"></div>
+      </div>
+      ${OTHER_ROLES.map(r => `
+      <div class="crew-block">
+        <div class="crew-title"><span class="tag">${r}</span></div>
+        <div class="crew-dyn" id="rows_${r}"></div>
+      </div>`).join("")}`;
+
+    function renderPilots() {
+      const el = document.getElementById("pilotRows");
+      el.innerHTML = pilots.map((p, i) => `
+        <div class="crew-dyn-row" data-row="${i}">
+          <select data-i="${i}">${PILOT_ROLES.map(r =>
+            `<option value="${r}" ${p.role === r ? "selected" : ""}>${r}</option>`).join("")}</select>
+          <div class="cb">
+            <input class="cb-input" autocomplete="off"
+                   placeholder="พิมพ์ชื่อหรือรหัส แล้วเลือกจากรายชื่อ">
+            <span class="cb-badge"></span>
+            <div class="cb-list" hidden></div>
+          </div>
+          <button type="button" class="btn-mini" data-del="${i}">\u2212</button>
+        </div>`).join("") +
+        `<button type="button" class="btn sm ghost btn-add" data-add>+ เพิ่มนักบิน</button>`;
+
+      el.querySelectorAll("select[data-i]").forEach(sel =>
+        sel.addEventListener("change", e => { pilots[+e.target.dataset.i].role = e.target.value; }));
+      el.querySelectorAll("[data-del]").forEach(b =>
+        b.addEventListener("click", () => { pilots.splice(+b.dataset.del, 1); renderPilots(); }));
+      el.querySelector("[data-add]").addEventListener("click",
+        () => { pilots.push({ role: "IP", name: "", crew_member_id: null }); renderPilots(); });
+
+      el.querySelectorAll(".crew-dyn-row").forEach(row => wireCombo(row, +row.dataset.row));
+    }
+
+    // ใช้ combobox ที่แยกเป็นโมดูล (js/combobox.js) — ผูก crew_member_id ทันทีที่เลือก
+    // hint = รหัส (พิมพ์รหัสตรง ๆ ก็ผูกได้) · tag = ชิปสีคุณวุฒิ (พิมพ์ IP/P/CP เพื่อกรองได้)
+    const comboItems = () => roster.map(p => ({
+      id: p.id, label: p.full_name, hint: p.code, aliases: p.aliases || [],
+      tag: p.position ? { text: p.position, style: qualStyle(p.position) } : null,
+    }));
+
+    function wireCombo(row, i) {
+      attachCombo(row.querySelector(".cb"), comboItems(), {
+        value: pilots[i].name || "",
+        id: pilots[i].crew_member_id,
+        emptyHtml: `ไม่พบในทะเบียน — <a href="crew.html" target="_blank">เปิดทะเบียนนักบินเพื่อเพิ่ม</a>`,
+        onChange: ({ text, item }) => {
+          pilots[i].name = text;
+          pilots[i].crew_member_id = item ? item.id : null;
+        },
+      });
+    }
+
+    function renderOther(role) {
+      const el = document.getElementById(`rows_${role}`);
+      el.innerHTML = others[role].map((name, i) => `
+        <div class="crew-dyn-row">
+          <input data-i="${i}" value="${esc(name)}" placeholder="ชื่อ ${role}">
+          <button type="button" class="btn-mini" data-del="${i}">−</button>
+        </div>`).join("") +
+        `<button type="button" class="btn sm ghost btn-add" data-add>+ เพิ่ม ${role}</button>`;
+
+      el.querySelectorAll("input[data-i]").forEach(s =>
+        s.addEventListener("input", e => { others[role][+e.target.dataset.i] = e.target.value; }));
+      el.querySelectorAll("[data-del]").forEach(b =>
+        b.addEventListener("click", () => { others[role].splice(+b.dataset.del, 1); renderOther(role); }));
+      el.querySelector("[data-add]").addEventListener("click",
+        () => { others[role].push(""); renderOther(role); });
+    }
+
+    const renderCrew = () => { renderPilots(); OTHER_ROLES.forEach(renderOther); };
+
+    // ---- โหลดข้อมูลเดิม (โหมดแก้ไข) ----
+    const $ = (id) => document.getElementById(id);
+    if (missionId) {
+      document.getElementById("title").textContent = "แก้ไขภารกิจ";
+      const m = await getMission(missionId);
+      if (m) {
+        $("f_date").value = m.mission_date || ""; fillAircraft(m.aircraft_id);
+        $("f_callsign").value = m.callsign || ""; $("f_kind").value = KINDS[m.kind] ? m.kind : DEFAULT_KIND;
+        $("f_name").value = m.mission_name || "";
+        $("f_showtime").value = m.showtime || ""; $("f_brief").value = m.brief_time || "";
+        $("f_step").value = m.step_time || ""; $("f_taxi").value = m.taxi_time || "";
+        $("f_to").value = m.takeoff_time || "";
+        $("f_fuel").value = m.fuel || ""; $("f_catering").value = m.catering || ""; $("f_pax").value = m.pax || "";
+        $("f_route").value = m.route || "";
+        $("f_parkOut").value = m.parking_out || ""; $("f_parkIn").value = m.parking_in || "";
+        $("f_head").value = m.head_delegation || ""; $("f_pocName").value = m.poc_name || "";
+        $("f_pocPhone").value = m.poc_phone || ""; $("f_remark").value = m.remark || "";
+        $("back").href = `day.html?date=${m.mission_date}`;
+
+        // เติมลูกเรือเดิมเข้า state
+        (m.mission_crew || []).sort((a,b)=>(a.sort_order||0)-(b.sort_order||0)).forEach((c) => {
+          const role = (c.position || "").toUpperCase();
+          if (PILOT_ROLES.includes(role)) pilots.push({ role, name: c.crew_name || "", crew_member_id: c.crew_member_id || null });
+          else if (OTHER_ROLES.includes(role)) others[role].push(c.crew_name || "");
+        });
+      }
+    } else {
+      $("f_date").value = presetDate || new Date().toISOString().slice(0,10);
+      if (presetDate) $("back").href = `day.html?date=${presetDate}`;
+    }
+
+    // ค่าเริ่มต้น: อย่างน้อยกลุ่มละ 1 แถวว่าง ให้พร้อมกรอก
+    if (!pilots.length) pilots = [{ role: "IP", name: "", crew_member_id: null }];
+    OTHER_ROLES.forEach(r => { if (!others[r].length) others[r] = [""]; });
+    paintKind();
+    renderCrew();
+
+    // ---- บันทึก ----
+    document.getElementById("save").addEventListener("click", async () => {
+      const err = document.getElementById("err");
+      err.textContent = "";
+      if (!$("f_date").value) { err.textContent = "กรุณาเลือกวันที่"; return; }
+      if (!$("f_name").value.trim()) { err.textContent = "กรุณากรอกชื่อภารกิจ"; return; }
+
+      const fields = {
+        mission_date: $("f_date").value,
+        mission_name: $("f_name").value.trim(),
+        aircraft_id: $("f_aircraft").value || null,
+        callsign: $("f_callsign").value.trim(),
+        kind: $("f_kind").value,
+        showtime: $("f_showtime").value.trim(), brief_time: $("f_brief").value.trim(),
+        step_time: $("f_step").value.trim(),   taxi_time: $("f_taxi").value.trim(),
+        takeoff_time: $("f_to").value.trim(),
+        fuel: $("f_fuel").value.trim(), catering: $("f_catering").value.trim(), pax: $("f_pax").value.trim(),
+        route: $("f_route").value.trim(),
+        parking_out: $("f_parkOut").value.trim(), parking_in: $("f_parkIn").value.trim(),
+        head_delegation: $("f_head").value.trim(),
+        poc_name: $("f_pocName").value.trim(), poc_phone: $("f_pocPhone").value.trim(),
+        remark: $("f_remark").value.trim(),
+      };
+
+      // รวบรวมลูกเรือ + ผูก profile ถ้าชื่อตรงกับผู้ใช้ในระบบ
+      const crew = [];
+      const unknown = [];
+      // นักบิน → ใช้ crew_member_id ที่ผูกไว้จาก dropdown
+      pilots.forEach(p => {
+        const name = (p.name || "").trim();
+        if (!name) return;
+        const m = p.crew_member_id ? roster.find(x => x.id === p.crew_member_id) : resolveCrew(name);
+        if (!m) {
+          // AC ไม่อยู่ในทะเบียนได้ → เก็บชื่อล้วน (ไม่นับ ชม.)
+          if (p.role === "AC") { crew.push({ position: "AC", crew_name: name, crew_member_id: null }); return; }
+          unknown.push(name); return;
+        }
+        crew.push({ position: p.role, crew_name: m.full_name, crew_member_id: m.id });
+      });
+      // FM/RO/LM/AH → ชื่อล้วน ไม่ผูกทะเบียน
+      OTHER_ROLES.forEach(r => others[r].forEach(n => {
+        const name = (n || "").trim();
+        if (name) crew.push({ position: r, crew_name: name, crew_member_id: null });
+      }));
+
+      if (unknown.length) {
+        err.innerHTML = `นักบินเหล่านี้ยังไม่ได้เลือกจากทะเบียน: <b>${unknown.join(", ")}</b> — ` +
+          `เลือกจากรายการที่เลื่อนลงมา หรือ <a href="crew.html" target="_blank">เพิ่มเข้าทะเบียนก่อน</a> ` +
+          `(เปิดแท็บใหม่ ข้อมูลในฟอร์มไม่หาย)`;
+        return;
+      }
+
+      const btn = document.getElementById("save");
+      btn.disabled = true; btn.textContent = "กำลังบันทึก…";
+      const res = await saveMission(missionId, fields, crew);
+      btn.disabled = false; btn.textContent = "บันทึกภารกิจ";
+      if (res.error) { err.textContent = "บันทึกไม่สำเร็จ: " + res.error.message; return; }
+      location.href = `day.html?date=${fields.mission_date}`;
+    });
+  }
+</script>
+</body>
+</html>

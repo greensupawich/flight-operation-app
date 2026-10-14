@@ -1,0 +1,567 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<!-- CSP: อนุญาตเฉพาะโดเมนที่ใช้จริง · เพิ่มโดเมนใหม่ (CDN/API) ต้องแก้ทุกหน้า -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' https://esm.sh https://cdnjs.cloudflare.com https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob: https://iljapjszrjuzjjbtxctu.supabase.co; media-src 'self' blob: https://iljapjszrjuzjjbtxctu.supabase.co; connect-src 'self' data: https://iljapjszrjuzjjbtxctu.supabase.co wss://iljapjszrjuzjjbtxctu.supabase.co https://esm.sh https://cdn.jsdelivr.net https://tessdata.projectnaptha.com; worker-src 'self' blob: https://cdn.jsdelivr.net; object-src 'none'; base-uri 'self'; form-action 'self'">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Flight Operation · รายงานหลังบิน</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bai+Jamjuree:wght@600;700&family=IBM+Plex+Sans+Thai:wght@400;500;600&family=IBM+Plex+Mono&display=swap">
+<link rel="stylesheet" href="css/style.css">
+<style>
+  .panel h3{font-family:"Bai Jamjuree",sans-serif;font-weight:600;font-size:16px;margin:0 0 4px;
+            display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+  .panel .hint{font-size:12.5px;color:var(--faint);margin:0 0 14px;line-height:1.6}
+  .routebox{background:var(--surface-2);border:1px solid var(--line);border-radius:9px;
+            padding:9px 13px;font-weight:600;font-size:13.5px;margin-bottom:14px;
+            display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+  .routebox .lbl{font-size:11.5px;color:var(--faint);font-weight:500}
+
+  /* ---- ขาการบิน ---- */
+  .leg{display:grid;grid-template-columns:26px 1fr 22px 1fr 88px auto;gap:8px;align-items:center;
+       margin-bottom:8px}
+  .leg .no{font-family:"IBM Plex Mono",monospace;font-size:12.5px;color:var(--faint);text-align:center;
+           font-weight:600}
+  .leg .arrow{text-align:center;color:var(--faint);font-size:14px}
+  .leg input{margin:0}
+  .leg .ops{display:flex;gap:4px}
+  .ibtn{flex-shrink:0;width:30px;height:34px;border-radius:8px;border:1px solid var(--line-strong);
+        background:var(--surface);color:var(--muted);cursor:pointer;font-size:13px;font-family:inherit;
+        line-height:1;display:grid;place-items:center}
+  .ibtn:hover:not(:disabled){background:var(--surface-2);color:var(--ink)}
+  .ibtn:disabled{opacity:.3;cursor:default}
+  .ibtn.del{color:var(--crit)}
+  .ibtn.del:hover{background:var(--crit-soft)}
+  .leg-head{display:grid;grid-template-columns:26px 1fr 22px 1fr 88px auto;gap:8px;
+            font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--faint);
+            font-family:"IBM Plex Mono",monospace;margin-bottom:6px}
+  .leg-head span:nth-child(5){text-align:end}
+  /* ภารกิจวัง/เดโชชัย: คอลัมน์ติ๊ก "คณะวัง" */
+  .vipmode .leg,.vipmode .leg-head{grid-template-columns:26px 1fr 22px 1fr 88px 62px auto}
+  .leg .vip{display:flex;align-items:center;justify-content:center;gap:4px;font-size:12px;color:var(--muted);
+            margin:0;cursor:pointer;white-space:nowrap}
+  .leg .vip input{width:18px;height:18px;margin:0;accent-color:var(--accent)}
+  .leg.is-vip{background:var(--accent-soft);border-radius:8px}
+  .vip-split{display:flex;gap:16px;flex-wrap:wrap;font-size:13px;margin-top:8px;color:var(--muted)}
+  .vip-split b{color:var(--ink);font-variant-numeric:tabular-nums}
+  .result-grid{display:grid;grid-template-columns:1.3fr 1fr 1fr;gap:12px;align-items:end}
+  @media(max-width:640px){ .result-grid{grid-template-columns:1fr} }
+  .result-grid label{margin:0 0 5px}
+  .result-grid .big{font-family:"Bai Jamjuree",sans-serif;font-weight:700;font-size:18px}
+  #resultSel.mcp{background:var(--good-soft);border-color:var(--good);color:var(--good);font-weight:700}
+  #resultSel.bad{background:var(--crit-soft);border-color:var(--crit);color:var(--crit);font-weight:700}
+  .plan-note{font-size:11.5px;color:var(--faint);margin-top:4px}
+  .total{display:flex;justify-content:space-between;align-items:center;background:var(--good-soft);
+         border-radius:10px;padding:13px 18px;margin-top:14px}
+  .total .lb{font-weight:600;color:var(--good);font-size:14px}
+  .total .val{font-family:"Bai Jamjuree",sans-serif;font-weight:700;font-size:24px;color:var(--good);
+              font-variant-numeric:tabular-nums}
+  .disc-item{display:flex;gap:10px;align-items:start;background:var(--surface-2);border:1px solid var(--line);
+             border-radius:9px;padding:10px 12px;margin-bottom:8px;font-size:13.5px}
+  .disc-item .txt{flex:1}
+  .msg{font-size:13.5px;margin-top:10px;min-height:18px}
+  .msg.ok{color:var(--good)} .msg.err{color:var(--crit)}
+  /* ---- รายงานอันตราย (safety) ---- */
+  .safety-meta{flex-wrap:wrap;gap:16px}
+  .safety-item{display:grid;grid-template-columns:110px 1fr 34px;gap:8px;align-items:start;
+               background:var(--surface-2);border:1px solid var(--line);border-radius:9px;padding:10px 12px;margin-bottom:8px}
+  .safety-item .sf-time{font-family:"IBM Plex Mono",monospace}
+  .safety-item textarea{margin:0;resize:vertical}
+  .safety-item .sf-media,.disc-item .d-media{grid-column:1/-1}
+  .disc-item{flex-wrap:wrap}
+  .disc-item .d-media,.disc-item .upl-note{flex-basis:100%}
+  .att-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:6px}
+  @media(max-width:560px){ .safety-item{grid-template-columns:1fr 34px} .safety-item .sf-time{grid-column:1/2} .safety-item textarea{grid-column:1/3} }
+  @media(max-width:640px){
+    .leg,.leg-head{grid-template-columns:22px 1fr 16px 1fr;row-gap:6px}
+    .leg .hrs{grid-column:2/4} .leg .ops{grid-column:4/5;justify-content:end}
+    .leg-head span:nth-child(5),.leg-head span:nth-child(6),.leg-head span:nth-child(7){display:none}
+    .vipmode .leg,.vipmode .leg-head{grid-template-columns:22px 1fr 16px 1fr}
+    .vipmode .leg .hrs{grid-column:2/3} .vipmode .leg .vip{grid-column:3/5;justify-content:start}
+    .vipmode .leg .ops{grid-column:4/5}
+  }
+</style>
+</head>
+<body>
+<main>
+  <div class="wrap" style="max-width:780px">
+    <div class="page-head">
+      <h1>รายงานหลังบิน</h1>
+      <div class="sub" id="sub">กำลังโหลด…</div>
+    </div>
+
+    <!-- ผลภารกิจ -->
+    <div class="panel" style="margin-bottom:16px">
+      <h3>✅ ผลภารกิจ</h3>
+      <div class="result-grid">
+        <div><label for="resultSel">ผลภารกิจ</label>
+          <select id="resultSel">
+            <option value="">— ยังไม่ระบุ —</option>
+            <option value="MCP">MCP · Mission Complete</option>
+            <option value="INCOMPLETE">ไม่สำเร็จ</option>
+            <option value="CANCELLED">ยกเลิก</option>
+          </select></div>
+        <div><label for="totalInput">ชม.บินรวม</label>
+          <input id="totalInput" class="big" type="number" step="0.1" min="0" placeholder="0.0"></div>
+        <div><label for="parkRet">จุดจอดขากลับ</label>
+          <input id="parkRet" class="big" placeholder="เช่น N15" style="text-transform:uppercase">
+          <div class="plan-note" id="parkPlan"></div></div>
+      </div>
+      <p class="hint" id="totalHint" style="margin:10px 0 0">กรอก ชม.บินรวมได้เลย หรือกรอก ชม.รายขาด้านล่าง ระบบจะรวมให้</p>
+    </div>
+
+    <!-- ขาการบิน -->
+    <div class="panel">
+      <h3>🧭 ขาการบิน
+        <button class="btn sm ghost" id="regen" style="margin-inline-start:auto">↻ สร้างขาใหม่จากเส้นทาง</button>
+      </h3>
+      <p class="hint">ระบบแตกขาให้อัตโนมัติจากเส้นทางบิน — กรอกแค่ <b>ชม.</b> ของแต่ละขา · เพิ่ม/ลบ/สลับลำดับได้</p>
+      <div class="routebox"><span class="lbl">เส้นทางบิน</span><span id="routeTxt">-</span></div>
+
+      <p class="hint" id="vipHint" hidden>👑 ภารกิจนี้เป็น<b id="vipKind"></b> — ติ๊ก <b>คณะวัง</b> ในขาที่มีคณะอยู่บนเครื่อง ·
+        ชม.ขาที่ติ๊กนับเป็นภารกิจนี้ในหน้าสถิติ ขาที่เหลือนับเป็น <b>ฝึกบิน</b></p>
+      <div id="legsWrap">
+      <div class="leg-head">
+        <span>#</span><span>จาก</span><span></span><span>ถึง</span><span>ชม.</span><span class="vip-h" hidden style="text-align:center">คณะวัง</span><span></span>
+      </div>
+      <div id="legsBox"></div>
+      </div>
+      <button class="btn sm" id="addLeg" style="margin-top:4px">+ เพิ่มขา</button>
+
+      <div class="total">
+        <span class="lb">รวม ชม.รายขา</span>
+        <span class="val" id="totalVal">0.0</span>
+      </div>
+      <div class="vip-split" id="vipSplit" hidden></div>
+    </div>
+
+    <!-- หมายเหตุ -->
+    <div class="panel" style="margin-top:16px">
+      <h3>📝 หมายเหตุ</h3>
+      <textarea id="remarks" rows="3" placeholder="บันทึกเพิ่มเติมเกี่ยวกับการบินครั้งนี้"></textarea>
+    </div>
+
+    <!-- ข้อขัดข้อง -->
+    <div class="panel" style="margin-top:16px">
+      <h3>🔧 ข้อขัดข้อง</h3>
+      <p class="hint">บันทึกแล้วจะเข้าไปรวมในสถิติของเครื่องลำนี้ · แนบรูป/วีดีโอได้ (รูปย่ออัตโนมัติ · วีดีโอไม่เกิน 50 MB)</p>
+      <div id="discList"></div>
+      <div style="display:flex;gap:8px;align-items:end;margin-top:10px">
+        <div style="flex:1"><label style="margin-top:0">รายละเอียด</label>
+          <input id="discText" placeholder="เช่น ไฟสัญญาณ HYD ติดค้าง"></div>
+        <button class="btn ghost attach-btn" id="discPick" title="แนบรูป/วีดีโอ">📎 แนบ</button>
+        <button class="btn" id="addDisc">+ บันทึก</button>
+      </div>
+      <div id="discPending"></div>
+    </div>
+
+    <!-- รายงานอันตราย (Safety Report) -->
+    <div class="panel" style="margin-top:16px">
+      <h3>⚠️ รายงานอันตราย (Safety Report)
+        <button class="btn sm ghost" id="addSafety" style="margin-inline-start:auto">+ เพิ่มรายงานอันตราย</button>
+      </h3>
+      <p class="hint">ไม่บังคับ — กรอกเฉพาะเมื่อมีเหตุการณ์ · วันที่/นักบิน/เส้นทางบิน ดึงจากจัดบินอัตโนมัติ · กด "เพิ่มรายงานอันตราย" แล้วกรอกเวลาและลักษณะเหตุการณ์ · แนบรูป/วีดีโอได้</p>
+      <div class="routebox safety-meta">
+        <span><span class="lbl">วันที่</span> <b id="sfDate">-</b></span>
+        <span><span class="lbl">นักบิน</span> <b id="sfPilots">-</b></span>
+        <span><span class="lbl">เส้นทางบิน</span> <b id="sfRoute">-</b></span>
+      </div>
+      <div id="safetyBox"></div>
+    </div>
+
+    <div style="display:flex;gap:10px;align-items:center;margin-top:20px;padding-bottom:40px">
+      <button class="btn primary" id="save">บันทึกรายงาน</button>
+      <a class="btn ghost" id="back" href="dashboard.html">กลับ</a>
+      <span class="msg" id="msg"></span>
+    </div>
+  </div>
+</main>
+
+<script type="module">
+  import { requireAuth } from "./js/auth.js";
+  import { renderTopbar } from "./js/ui.js";
+  import { getMission, routeToLegs, loadLegs, replaceLegs, saveReport, getReport,
+           loadDiscrepancies, addDiscrepancy, deleteDiscrepancy,
+           loadSafety, saveSafety } from "./js/reports.js";
+  import { loadMissionMedia, uploadMany, deleteMedia, thumbsHtml, bindThumbs, pickFiles,
+           checkFile, fmtSize } from "./js/media.js";
+  import { esc } from "./js/missions.js";
+
+  const profile = await requireAuth();
+  if (profile) {
+    renderTopbar(profile);
+
+    const missionId = new URLSearchParams(location.search).get("mission");
+    const msg = document.getElementById("msg");
+    if (!missionId) {
+      document.getElementById("sub").textContent = "ไม่พบภารกิจ";
+      throw new Error("no mission");
+    }
+
+    const m = await getMission(missionId);
+    if (!m) { document.getElementById("sub").textContent = "ไม่พบภารกิจ"; throw new Error("not found"); }
+
+    const acTxt = m.aircraft ? `${m.aircraft.type || ""}/${m.aircraft.tail_number}` : "ไม่ระบุเครื่อง";
+    document.getElementById("sub").textContent =
+      `${m.mission_name || "-"} · ${m.mission_date} · ${m.callsign || ""} · ${acTxt}`;
+    document.getElementById("routeTxt").textContent = m.route || "— ยังไม่ได้ระบุเส้นทางบิน —";
+    document.getElementById("back").href = `day.html?date=${m.mission_date}`;
+
+    // ---------- state ของขาการบิน ----------
+    // ภารกิจวัง/เดโชชัย → มีช่องติ๊ก "คณะวัง" รายขา (migration_26)
+    const VIP_KINDS = { palace: "ภารกิจสำนักพระราชวัง", dechochai: "ภารกิจเดโชชัย" };
+    const vipMode = !!VIP_KINDS[m.kind];
+    if (vipMode) {
+      document.getElementById("legsWrap").classList.add("vipmode");
+      document.getElementById("vipHint").hidden = false;
+      document.getElementById("vipKind").textContent = VIP_KINDS[m.kind];
+      document.querySelector(".vip-h").hidden = false;
+    }
+    const fromRoute = routeToLegs(m.route);          // ขาที่คิดจากเส้นทางบิน
+    const saved = (await loadLegs(missionId)).map(l => ({
+      from_point: (l.from_point || "").trim(),
+      to_point:   (l.to_point   || "").trim(),
+      hours: Number(l.hours) || 0,
+      vip: !!l.vip,
+    }));
+
+    // แถวที่บันทึกไว้ว่างทั้งหมด (ไม่มีทั้งจาก/ถึง/ชม.) → ถือว่ายังไม่ได้กรอก
+    const allBlank = saved.length > 0 &&
+      saved.every(l => !l.from_point && !l.to_point && !l.hours);
+
+    let legs;
+    if (!saved.length || allBlank) {
+      legs = fromRoute;                              // ใช้ค่าจากเส้นทางบินเป็น default
+    } else {
+      // มีข้อมูลเดิมอยู่ → คง ชม. ไว้ แต่เติมช่องจาก/ถึงที่ว่างด้วยค่าจากเส้นทางบิน
+      legs = saved.map((l, i) => ({
+        from_point: l.from_point || fromRoute[i]?.from_point || "",
+        to_point:   l.to_point   || fromRoute[i]?.to_point   || "",
+        hours: l.hours,
+        vip: l.vip,
+      }));
+    }
+    if (!legs.length) legs = [{ from_point: "", to_point: "", hours: 0 }];
+
+    const box = document.getElementById("legsBox");
+    const fmt = (n) => (Math.round(n * 10) / 10).toFixed(1);
+
+    const totalInput = document.getElementById("totalInput");
+    let manualTotal = "";                               // ยอดรวมที่กรอกเอง (คืนค่าเมื่อล้าง ชม.รายขา)
+    totalInput.addEventListener("input", () => { if (!totalInput.readOnly) manualTotal = totalInput.value; });
+    function recalcTotal() {
+      const t = legs.reduce((s, l) => s + (Number(l.hours) || 0), 0);
+      document.getElementById("totalVal").textContent = fmt(t);
+      if (vipMode) {                                   // แสดงการแยก ชม. ที่จะไปหน้าสถิติ
+        const vh = legs.reduce((s, l) => s + (l.vip ? Number(l.hours) || 0 : 0), 0);
+        const any = legs.some(l => l.vip);
+        const split = document.getElementById("vipSplit");
+        split.hidden = false;
+        split.innerHTML = any
+          ? `<span>👑 ${VIP_KINDS[m.kind]} <b>${fmt(vh)}</b> ชม.</span><span>ฝึกบิน <b>${fmt(Math.max(t - vh, 0))}</b> ชม.</span>`
+          : `<span>ยังไม่ได้ติ๊กขาที่มีคณะวัง — ตอนนี้นับทั้งหมดเป็น${VIP_KINDS[m.kind]}</span>`;
+      }
+      if (t > 0) {                                     // มี ชม.รายขา → ใช้ผลรวมรายขา
+        totalInput.value = fmt(t);
+        totalInput.readOnly = true;
+        document.getElementById("totalHint").textContent = "ชม.บินรวมคิดจากผลรวม ชม.รายขา — ถ้าจะกรอกยอดรวมเอง ให้ลบ ชม.รายขาเป็น 0";
+      } else {
+        if (totalInput.readOnly) totalInput.value = manualTotal;   // เพิ่งล้างรายขา → กลับเป็นยอดที่กรอกเอง
+        totalInput.readOnly = false;
+        document.getElementById("totalHint").textContent = "กรอก ชม.บินรวมได้เลย หรือกรอก ชม.รายขาด้านล่าง ระบบจะรวมให้";
+      }
+      return t;
+    }
+
+    function render() {
+      box.innerHTML = legs.map((l, i) => `
+        <div class="leg${vipMode && l.vip ? " is-vip" : ""}" data-i="${i}">
+          <span class="no">${i + 1}</span>
+          <input data-f="from_point" value="${esc(l.from_point)}" placeholder="จาก">
+          <span class="arrow">→</span>
+          <input data-f="to_point" value="${esc(l.to_point)}" placeholder="ถึง">
+          <input class="hrs" data-f="hours" type="number" step="0.1" min="0" value="${l.hours ?? 0}">
+          ${vipMode ? `<label class="vip" title="ขานี้มีคณะวังอยู่บนเครื่อง"><input type="checkbox" data-vip ${l.vip ? "checked" : ""}><span class="vip-lbl">คณะวัง</span></label>` : ""}
+          <span class="ops">
+            <button class="ibtn" data-up title="เลื่อนขึ้น" ${i === 0 ? "disabled" : ""}>↑</button>
+            <button class="ibtn" data-down title="เลื่อนลง" ${i === legs.length - 1 ? "disabled" : ""}>↓</button>
+            <button class="ibtn del" data-del title="ลบขานี้">×</button>
+          </span>
+        </div>`).join("");
+
+      box.querySelectorAll("[data-vip]").forEach((cb) =>
+        cb.addEventListener("change", (e) => {
+          const row = e.target.closest(".leg");
+          legs[+row.dataset.i].vip = e.target.checked;
+          row.classList.toggle("is-vip", e.target.checked);
+          recalcTotal();
+        }));
+      box.querySelectorAll("input[data-f]").forEach((inp) =>
+        inp.addEventListener("input", (e) => {
+          const i = +e.target.closest(".leg").dataset.i;
+          const f = e.target.dataset.f;
+          legs[i][f] = f === "hours" ? (parseFloat(e.target.value) || 0) : e.target.value;
+          if (f === "hours") recalcTotal();
+        }));
+
+      box.querySelectorAll("[data-up]").forEach((b) =>
+        b.addEventListener("click", (e) => {
+          const i = +e.target.closest(".leg").dataset.i;
+          [legs[i - 1], legs[i]] = [legs[i], legs[i - 1]];
+          render();
+        }));
+      box.querySelectorAll("[data-down]").forEach((b) =>
+        b.addEventListener("click", (e) => {
+          const i = +e.target.closest(".leg").dataset.i;
+          [legs[i + 1], legs[i]] = [legs[i], legs[i + 1]];
+          render();
+        }));
+      box.querySelectorAll("[data-del]").forEach((b) =>
+        b.addEventListener("click", (e) => {
+          const i = +e.target.closest(".leg").dataset.i;
+          legs.splice(i, 1);
+          if (!legs.length) legs = [{ from_point: "", to_point: "", hours: 0 }];
+          render();
+        }));
+
+      recalcTotal();
+    }
+    render();
+
+    document.getElementById("addLeg").addEventListener("click", () => {
+      const last = legs[legs.length - 1];
+      legs.push({ from_point: last ? last.to_point : "", to_point: "", hours: 0, vip: false });
+      render();
+    });
+
+    document.getElementById("regen").addEventListener("click", () => {
+      const fresh = routeToLegs(m.route);
+      if (!fresh.length) { alert("ภารกิจนี้ยังไม่ได้ระบุเส้นทางบิน"); return; }
+      if (!confirm("สร้างขาใหม่จากเส้นทางบิน? ชม.ที่กรอกไว้จะถูกล้าง")) return;
+      legs = fresh; render();
+    });
+
+    // ---------- รายงานเดิม ----------
+    const existing = await getReport(missionId);
+    const resultSel = document.getElementById("resultSel");
+    const paintResult = () => {
+      resultSel.classList.toggle("mcp", resultSel.value === "MCP");
+      resultSel.classList.toggle("bad", resultSel.value === "INCOMPLETE" || resultSel.value === "CANCELLED");
+    };
+    resultSel.addEventListener("change", paintResult);
+    document.getElementById("parkPlan").textContent = m.parking_in ? `ตามแผน: ${m.parking_in}` : "";
+    document.getElementById("parkRet").value = existing?.parking_return || m.parking_in || "";
+    if (existing) {
+      document.getElementById("remarks").value = existing.remarks || "";
+      resultSel.value = existing.result || "";
+      if (!legs.some(l => Number(l.hours)) && Number(existing.total_hours)) totalInput.value = manualTotal = fmt(Number(existing.total_hours));
+    }
+    paintResult();
+
+    // ---------- รูป/วีดีโอแนบ (ข้อขัดข้อง + รายงานอันตราย) ----------
+    let media = await loadMissionMedia(missionId);
+    const mediaOf = (key, id) => id ? media.filter(x => x[key] === id) : [];
+    const reloadMedia = async () => { media = await loadMissionMedia(missionId); };
+    // พรีวิวไฟล์ที่เลือกไว้แต่ยังไม่อัปโหลด
+    const previewOf = (files) => files.map(f => ({ url: URL.createObjectURL(f), mime_type: f.type, file_name: f.name, size_bytes: f.size }));
+    // คัดไฟล์ที่ใช้ไม่ได้ออก พร้อมแจ้งเตือน
+    const validFiles = (files) => {
+      const bad = files.map(checkFile).filter(Boolean);
+      if (bad.length) alert(bad.join("\n"));
+      return files.filter(f => !checkFile(f));
+    };
+    async function removeMedia(row) {
+      if (!confirm(`ลบไฟล์ ${row.file_name || ""}?`)) return false;
+      const err = await deleteMedia(row);
+      if (err) { alert("ลบไฟล์ไม่สำเร็จ: " + err.message); return false; }
+      await reloadMedia(); return true;
+    }
+    async function uploadWithNote(noteEl, parent, files) {
+      if (!files.length) return;
+      noteEl.className = "upl-note";
+      const errs = await uploadMany(missionId, parent, files,
+        (i, n) => { noteEl.textContent = `กำลังอัปโหลด ${i}/${n}…`; });
+      noteEl.className = errs.length ? "upl-note err" : "upl-note";
+      noteEl.textContent = errs.length ? "อัปโหลดไม่สำเร็จ: " + errs.join(" · ") : "";
+      await reloadMedia();
+    }
+
+    // ---------- ข้อขัดข้อง ----------
+    let discFiles = [];                                 // ไฟล์ที่เลือกไว้กับรายการใหม่ (อัปโหลดหลังกดบันทึก)
+    function renderDiscPending() {
+      const box = document.getElementById("discPending");
+      const pv = previewOf(discFiles);
+      box.innerHTML = discFiles.length
+        ? thumbsHtml(pv, { canDelete: true }) + `<div class="upl-note">${discFiles.length} ไฟล์ · ${fmtSize(discFiles.reduce((t, f) => t + f.size, 0))} — จะอัปโหลดเมื่อกด "+ บันทึก"</div>`
+        : "";
+      box.querySelectorAll(".mthumb").forEach(t => t.classList.add("pending"));
+      bindThumbs(box, pv, (row) => { discFiles.splice(pv.indexOf(row), 1); renderDiscPending(); });
+    }
+    document.getElementById("discPick").addEventListener("click", async () => {
+      discFiles.push(...validFiles(await pickFiles())); renderDiscPending();
+    });
+
+    async function refreshDisc() {
+      const list = await loadDiscrepancies(missionId);
+      const listBox = document.getElementById("discList");
+      listBox.innerHTML = list.length
+        ? list.map(d => `<div class="disc-item" data-id="${d.id}">
+             <span class="txt">${esc(d.description)}</span>
+             <button class="btn sm ghost attach-btn" data-attdisc title="แนบรูป/วีดีโอ">📎</button>
+             <button class="ibtn del" data-deldisc title="ลบ">×</button>
+             <div class="d-media"></div><div class="upl-note"></div></div>`).join("")
+        : `<div class="muted" style="font-size:13px">— ยังไม่มีข้อขัดข้อง —</div>`;
+      listBox.querySelectorAll(".disc-item").forEach(el => {
+        const id = el.dataset.id, mbox = el.querySelector(".d-media"), items = mediaOf("discrepancy_id", id);
+        mbox.innerHTML = thumbsHtml(items, { canDelete: true });
+        bindThumbs(mbox, items, async (row) => { if (await removeMedia(row)) refreshDisc(); });
+        el.querySelector("[data-attdisc]").addEventListener("click", async () => {
+          const files = validFiles(await pickFiles());
+          await uploadWithNote(el.querySelector(".upl-note"), { discrepancy_id: id }, files);
+          if (!el.querySelector(".upl-note").textContent) refreshDisc();
+        });
+        el.querySelector("[data-deldisc]").addEventListener("click", async () => {
+          if (!confirm("ลบข้อขัดข้องนี้? (ไฟล์แนบจะถูกลบด้วย)")) return;
+          const err = await deleteDiscrepancy(id);
+          if (err) { alert("ลบไม่สำเร็จ: " + err.message); return; }
+          await reloadMedia(); refreshDisc();
+        });
+      });
+    }
+    refreshDisc();
+
+    document.getElementById("addDisc").addEventListener("click", async () => {
+      const t = document.getElementById("discText");
+      const text = t.value.trim(); if (!text) return;
+      const btn = document.getElementById("addDisc"); btn.disabled = true;
+      const { error, id } = await addDiscrepancy(missionId, m.aircraft_id, text);
+      if (error) { btn.disabled = false; alert("บันทึกไม่สำเร็จ: " + error.message); return; }
+      t.value = "";
+      const files = discFiles; discFiles = []; renderDiscPending();
+      const note = document.createElement("div"); note.className = "upl-note";
+      document.getElementById("discPending").appendChild(note);
+      await uploadWithNote(note, { discrepancy_id: id }, files);
+      btn.disabled = false;
+      refreshDisc();
+    });
+
+    // ---------- รายงานอันตราย (safety) ----------
+    document.getElementById("sfDate").textContent = m.mission_date || "-";
+    const pilotNames = (m.mission_crew || [])
+      .filter(c => ["AC","IP","P","CP","N"].includes((c.position||"").toUpperCase()))
+      .sort((a,b) => (a.sort_order||0) - (b.sort_order||0))
+      .map(c => (c.crew_name||"").trim()).filter(Boolean);
+    document.getElementById("sfPilots").textContent = pilotNames.join(", ") || "-";
+    document.getElementById("sfRoute").textContent = m.route || "-";
+
+    let safety = (await loadSafety(missionId)).map(s => ({
+      id: s.id, occurred_time: s.occurred_time || "", description: s.description || "", pending: [] }));
+    const safetyBox = document.getElementById("safetyBox");
+    function renderSafety() {
+      safetyBox.innerHTML = safety.map((s, i) => `
+        <div class="safety-item" data-i="${i}">
+          <input class="sf-time" data-sf="occurred_time" value="${esc(s.occurred_time)}" placeholder="เวลา เช่น 1015">
+          <textarea data-sf="description" rows="2" placeholder="ลักษณะเหตุการณ์…">${esc(s.description)}</textarea>
+          <button class="ibtn del" data-sfdel title="ลบรายงานนี้">×</button>
+          <div class="sf-media">
+            <div class="sf-saved"></div><div class="sf-pend"></div>
+            <div class="att-row">
+              <button class="btn sm ghost attach-btn" data-sfatt>📎 แนบรูป/วีดีโอ</button>
+              <span class="upl-note"></span>
+            </div>
+          </div>
+        </div>`).join("");
+      safetyBox.querySelectorAll(".safety-item").forEach(el => {
+        const i = +el.dataset.i, s = safety[i];
+        const saved = mediaOf("safety_report_id", s.id);
+        const sBox = el.querySelector(".sf-saved");
+        sBox.innerHTML = thumbsHtml(saved, { canDelete: true });
+        bindThumbs(sBox, saved, async (row) => { if (await removeMedia(row)) renderSafety(); });
+        const pBox = el.querySelector(".sf-pend"), pv = previewOf(s.pending);
+        pBox.innerHTML = thumbsHtml(pv, { canDelete: true });
+        pBox.querySelectorAll(".mthumb").forEach(t => t.classList.add("pending"));
+        bindThumbs(pBox, pv, (row) => { s.pending.splice(pv.indexOf(row), 1); renderSafety(); });
+        const note = el.querySelector(".upl-note");
+        if (s.pending.length) note.textContent = `${s.pending.length} ไฟล์รออัปโหลด — กด "บันทึกรายงาน"`;
+        el.querySelector("[data-sfatt]").addEventListener("click", async () => {
+          const files = validFiles(await pickFiles());
+          if (!files.length) return;
+          if (s.id) {                                    // รายการที่บันทึกแล้ว → อัปโหลดทันที
+            await uploadWithNote(note, { safety_report_id: s.id }, files);
+            if (!note.textContent) renderSafety();
+          } else { s.pending.push(...files); renderSafety(); }
+        });
+      });
+      safetyBox.querySelectorAll("[data-sf]").forEach(inp =>
+        inp.addEventListener("input", (e) => {
+          const i = +e.target.closest(".safety-item").dataset.i;
+          safety[i][e.target.dataset.sf] = e.target.value;
+        }));
+      safetyBox.querySelectorAll("[data-sfdel]").forEach(b =>
+        b.addEventListener("click", (e) => {
+          const s = safety[+e.target.closest(".safety-item").dataset.i];
+          const n = mediaOf("safety_report_id", s.id).length;
+          if (n && !confirm(`รายการนี้มีไฟล์แนบ ${n} ไฟล์ — จะถูกลบเมื่อกด "บันทึกรายงาน" ดำเนินการต่อ?`)) return;
+          safety.splice(safety.indexOf(s), 1); renderSafety();
+        }));
+    }
+    renderSafety();
+    document.getElementById("addSafety").addEventListener("click", () => {
+      safety.push({ occurred_time: "", description: "", pending: [] }); renderSafety();
+      const last = safetyBox.querySelector(".safety-item:last-child textarea"); if (last) last.focus();
+    });
+
+    // ---------- บันทึกทั้งหมด ----------
+    document.getElementById("save").addEventListener("click", async () => {
+      const btn = document.getElementById("save");
+      btn.disabled = true; btn.textContent = "กำลังบันทึก…"; msg.className = "msg"; msg.textContent = "";
+
+      const clean = legs.filter(l => (l.from_point||"").trim() || (l.to_point||"").trim() || Number(l.hours));
+      const legErr = await replaceLegs(missionId, clean);
+      if (legErr && !legErr.warning) { msg.className = "msg err"; msg.textContent = "บันทึกขาไม่สำเร็จ: " + legErr.message;
+                    btn.disabled = false; btn.textContent = "บันทึกรายงาน"; return; }
+
+      const legSum = clean.reduce((s, l) => s + (Number(l.hours) || 0), 0);
+      const total = legSum > 0 ? legSum : (parseFloat(totalInput.value) || 0);
+      const result = document.getElementById("resultSel").value;
+      const repErr = await saveReport(missionId, total, document.getElementById("remarks").value.trim(), {
+        result, parking_return: document.getElementById("parkRet").value.toUpperCase(),
+      });
+      if (repErr && !repErr.warning) { btn.disabled = false; btn.textContent = "บันทึกรายงาน";
+        msg.className = "msg err"; msg.textContent = "บันทึกรายงานไม่สำเร็จ: " + repErr.message; return; }
+
+      const { error: sfErr, ids } = await saveSafety(missionId, safety);
+      if (sfErr) { btn.disabled = false; btn.textContent = "บันทึกรายงาน";
+        msg.className = "msg err"; msg.textContent = "บันทึก ชม.แล้ว แต่รายงานอันตรายไม่สำเร็จ: " + sfErr.message; return; }
+
+      // ไฟล์ที่เลือกไว้กับรายการใหม่ → อัปโหลดหลังได้ id · รายการว่าง (ไม่ได้เก็บ) ตัดทิ้ง
+      const upErrs = [];
+      safety.forEach((s, i) => { s.id = ids[i]; });
+      const skipped = safety.filter(s => !s.id && s.pending.length).length;
+      for (const s of safety.filter(s => s.id && s.pending.length)) {
+        btn.textContent = "กำลังอัปโหลดไฟล์…";
+        upErrs.push(...await uploadMany(missionId, { safety_report_id: s.id }, s.pending,
+          (i, n) => { msg.className = "msg"; msg.textContent = `กำลังอัปโหลด ${i}/${n}…`; }));
+        s.pending = [];
+      }
+      safety = safety.filter(s => s.id);
+      await reloadMedia(); renderSafety();
+      btn.disabled = false; btn.textContent = "บันทึกรายงาน";
+      if (upErrs.length || skipped) {
+        msg.className = "msg err";
+        msg.textContent = "บันทึกรายงานแล้ว แต่" + [upErrs.length ? " อัปโหลดไม่สำเร็จ: " + upErrs.join(" · ") : "",
+          skipped ? ` ไฟล์ของรายงานอันตรายที่ไม่ได้กรอกลักษณะเหตุการณ์ (${skipped} รายการ) ไม่ถูกเก็บ` : ""].join("");
+        return;
+      }
+
+      const sfN = safety.filter(s => (s.description||"").trim()).length;
+      msg.className = repErr?.warning || legErr?.warning ? "msg err" : "msg ok";
+      msg.textContent = repErr?.warning || legErr?.warning ||
+        `✓ บันทึกแล้ว · ${result || "ยังไม่ระบุผล"} · ${fmt(total)} ชม.${sfN ? ` · รายงานอันตราย ${sfN} รายการ` : ""} — กระจายไปลูกเรือและเครื่องอัตโนมัติ`;
+    });
+  }
+</script>
+</body>
+</html>

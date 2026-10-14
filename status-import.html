@@ -1,0 +1,300 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<!-- CSP: อนุญาตเฉพาะโดเมนที่ใช้จริง · เพิ่มโดเมนใหม่ (CDN/API) ต้องแก้ทุกหน้า -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' https://esm.sh https://cdnjs.cloudflare.com https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob: https://iljapjszrjuzjjbtxctu.supabase.co; media-src 'self' blob: https://iljapjszrjuzjjbtxctu.supabase.co; connect-src 'self' data: https://iljapjszrjuzjjbtxctu.supabase.co wss://iljapjszrjuzjjbtxctu.supabase.co https://esm.sh https://cdn.jsdelivr.net https://tessdata.projectnaptha.com; worker-src 'self' blob: https://cdn.jsdelivr.net; object-src 'none'; base-uri 'self'; form-action 'self'">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Flight Operation · นำเข้าใบสถานภาพ บ.</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bai+Jamjuree:wght@600;700&family=IBM+Plex+Sans+Thai:wght@400;500;600&family=IBM+Plex+Mono:wght@500;600&display=swap">
+<link rel="stylesheet" href="css/style.css">
+<!-- OCR (ไทย+อังกฤษ) ทำงานในเบราว์เซอร์ทั้งหมด — ไฟล์ไม่ถูกส่งออกไปที่ไหน -->
+<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js"></script>
+<style>
+  main .wrap{max-width:1180px}
+  .panel h3{font-family:"Bai Jamjuree",sans-serif;font-weight:600;font-size:16px;margin:0 0 4px}
+  .panel .hint{font-size:12.5px;color:var(--faint);margin:0 0 12px;line-height:1.6}
+  .drop{border:2px dashed var(--line-strong);border-radius:12px;padding:26px;text-align:center;cursor:pointer;
+        background:var(--surface-2);transition:border-color .15s,background .15s}
+  .drop:hover,.drop.over{border-color:var(--primary);background:var(--primary-soft)}
+  .drop b{font-size:15px}
+  .prog{height:8px;border-radius:99px;background:var(--surface-2);overflow:hidden;margin-top:12px;display:none}
+  .prog > i{display:block;height:100%;width:0;background:var(--primary);transition:width .25s}
+  .pmsg{font-size:13px;color:var(--muted);margin-top:8px;min-height:18px}
+  .bar{display:flex;gap:12px;align-items:end;flex-wrap:wrap;margin-bottom:14px}
+  .bar label{margin:0 0 4px;font-size:12.5px}
+  .bar .chk{display:flex;align-items:center;gap:7px;font-size:13px;font-weight:600;padding:8px 12px;
+            border:1px solid var(--line-strong);border-radius:9px;background:var(--surface-2);cursor:pointer}
+  .bar .chk input{width:17px;height:17px;margin:0}
+  .legend2{display:flex;gap:14px;flex-wrap:wrap;font-size:12px;color:var(--muted);margin:-4px 0 12px}
+  .legend2 i{display:inline-block;width:12px;height:12px;border-radius:3px;margin-inline-end:5px;vertical-align:-1px}
+  .grid2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
+  @media(max-width:860px){ .grid2{grid-template-columns:1fr} }
+  .ic{background:var(--surface);border:1px solid var(--line-strong);border-radius:12px;overflow:hidden;box-shadow:var(--shadow);
+      border-top:5px solid var(--line-strong)}
+  .ic.s-FMC{border-top-color:#2E7D5B} .ic.s-PMC{border-top-color:#E0A32B}
+  .ic.s-NMC,.ic.s-NMCS{border-top-color:#C0392B}
+  .ic-head{display:flex;align-items:center;gap:10px;padding:11px 14px;border-bottom:1px solid var(--line);flex-wrap:wrap}
+  .ic-head .tail{font-family:"Bai Jamjuree",sans-serif;font-weight:700;font-size:20px}
+  .ic-head .type{font-size:12px;color:var(--muted)}
+  .ic-head select{width:auto;margin-inline-start:auto;font-weight:700;font-family:"IBM Plex Mono",monospace}
+  .ic-head .read{flex-basis:100%;font-size:11.5px;color:var(--faint)}
+  .ic-body{padding:10px 14px 14px}
+  .ic-body h4{margin:10px 0 6px;font-size:11.5px;color:var(--faint);font-weight:600;text-transform:uppercase;letter-spacing:.04em;
+              font-family:"IBM Plex Mono",monospace}
+  .row{display:flex;gap:6px;align-items:center;margin-bottom:6px}
+  .row input{margin:0;font-size:13px;padding:6px 8px}
+  .row input.nm{flex:none;width:118px;font-family:"IBM Plex Mono",monospace}
+  .row input.warn{background:#FFF4CC;border-color:#E0A32B}
+  :root[data-theme="dark"] .row input.warn{background:#3a2f0d}
+  .rm{flex:none;width:30px;height:32px;border:1px solid var(--line-strong);border-radius:8px;background:var(--surface);
+      color:var(--crit);cursor:pointer;font-weight:700}
+  .nomatch{font-size:12px;color:var(--crit);font-weight:600}
+  .pv img{max-width:100%;border:1px solid var(--line);border-radius:8px;margin-top:10px}
+  .result{font-size:13.5px;margin-top:10px;line-height:1.7}
+  .result .ok{color:var(--good)} .result .err{color:var(--crit)}
+</style>
+</head>
+<body>
+<main>
+  <div class="wrap">
+    <div class="page-head">
+      <h1>นำเข้าใบสถานภาพ บ. ประจำวัน</h1>
+      <div class="sub">อ่าน "รายงานสภาพ บ." (แบบพิมพ์ ทอ.36) จากไฟล์ PDF/ภาพสแกน → ตรวจทาน → นำเข้าสถานภาพเครื่อง</div>
+    </div>
+
+    <div class="panel" id="noAccess" hidden><b>เฉพาะผู้วางแผน / admin</b> เท่านั้นที่นำเข้าสถานภาพได้</div>
+
+    <div class="panel" id="step1" hidden>
+      <h3>1 · เลือกไฟล์ใบสถานภาพ</h3>
+      <p class="hint">รองรับ PDF (หน้าแรก) และภาพ JPG/PNG · ระบบอ่านข้อความด้วย OCR ในเบราว์เซอร์ (ไฟล์ไม่ถูกอัปโหลดไปที่ไหน)
+        ใช้เวลาประมาณ 20–60 วินาที · ข้อมูลที่อ่านผิด ผู้วางแผนแก้ได้ในขั้นตอนตรวจทาน</p>
+      <label class="drop" id="drop">
+        <input type="file" id="file" accept="application/pdf,image/*" hidden>
+        <b>📄 กดเพื่อเลือกไฟล์</b> หรือลากไฟล์มาวางที่นี่
+      </label>
+      <div class="prog" id="prog"><i></i></div>
+      <div class="pmsg" id="pmsg"></div>
+    </div>
+
+    <div class="panel" id="step2" hidden style="margin-top:16px">
+      <h3>2 · ตรวจทานข้อมูลที่อ่านได้</h3>
+      <p class="hint">ช่อง <b style="background:#FFF4CC;color:#7a5600;padding:0 4px;border-radius:4px">สีเหลือง</b> = ข้อความใหม่/ไม่ตรงกับข้อมูลเดิมในระบบ ควรตรวจ ·
+        ช่องปกติ = ตรงกับข้อมูลเดิม (ระบบใช้ข้อความเดิมที่ถูกต้องให้) · แก้ได้ทุกช่องก่อนกดนำเข้า</p>
+      <div class="bar">
+        <div><label for="sheetDate">วันที่ของใบสถานภาพ</label><input type="date" id="sheetDate" style="width:auto"></div>
+        <label class="chk" title="อัปเดตสถานภาพ + รายการข้อขัดข้อง + รายการเช็ค ปัจจุบันของเครื่อง (ไม่ติ๊ก = บันทึกแค่ประวัติสถานภาพของวันนั้น)">
+          <input type="checkbox" id="updCur"> อัปเดตสถานภาพปัจจุบัน + ข้อขัดข้อง + รายการเช็ค</label>
+        <button class="btn ghost" id="again">เลือกไฟล์ใหม่</button>
+      </div>
+      <div class="legend2">
+        <span><i style="background:#2E7D5B"></i>FMC</span><span><i style="background:#E0A32B"></i>PMC</span>
+        <span><i style="background:#C0392B"></i>NMC / NMCS</span>
+        <span>NMCS จะเก็บเป็น NMC + หมายเหตุ "สถานภาพเดิม: NMCS" (ตามแบบเดิมของระบบ)</span>
+      </div>
+      <div class="grid2" id="cards"></div>
+      <details class="pv" style="margin-top:14px"><summary style="cursor:pointer;font-size:13px;font-weight:600">🖼️ ดูภาพใบสถานภาพต้นฉบับ (เทียบตอนตรวจ)</summary>
+        <img id="pvImg" alt="ใบสถานภาพ"></details>
+      <div style="display:flex;gap:10px;align-items:center;margin-top:18px;flex-wrap:wrap">
+        <button class="btn primary" id="importBtn">3 · นำเข้าสถานภาพ</button>
+        <a class="btn ghost" id="viewLink" href="status.html" hidden>ดูหน้าสถานภาพเครื่อง →</a>
+      </div>
+      <div class="result" id="result"></div>
+    </div>
+  </div>
+</main>
+
+<script type="module">
+  import { requireAuth, canPlan } from "./js/auth.js";
+  import { renderTopbar } from "./js/ui.js";
+  import { loadAircraft, setAircraftStatus, setAircraftStatusOn, loadDefects, saveDefects,
+           loadChecks, saveChecks } from "./js/status.js";
+  import { extractSheet, reconcile } from "./js/status-pdf.js";
+  import * as pdfjsLib from "https://cdn.jsdelivr.net/npm/pdfjs-dist@4.10.38/build/pdf.min.mjs";
+  pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dist@4.10.38/build/pdf.worker.min.mjs";
+
+  const profile = await requireAuth();
+  if (profile) {
+    renderTopbar(profile);
+    if (!canPlan(profile)) { document.getElementById("noAccess").hidden = false; throw new Error("planner only"); }
+    document.getElementById("step1").hidden = false;
+
+    const esc = (s) => String(s ?? "").replace(/[&<>"]/g, c => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;" }[c]));
+    const todayISO = (() => { const n = new Date(); return `${n.getFullYear()}-${String(n.getMonth()+1).padStart(2,"0")}-${String(n.getDate()).padStart(2,"0")}`; })();
+    const prog = document.getElementById("prog"), pmsg = document.getElementById("pmsg");
+    const setProg = (f, msg) => { prog.style.display = "block"; prog.firstElementChild.style.width = Math.round(f * 100) + "%"; if (msg) pmsg.textContent = msg; };
+
+    // ---------- 1) ไฟล์ → canvas (~300dpi กว้าง 2480px) ----------
+    const TARGET_W = 2480;
+    async function fileToCanvas(file) {
+      const c = document.createElement("canvas"), g = c.getContext("2d");
+      if (file.type === "application/pdf" || /\.pdf$/i.test(file.name)) {
+        const pdf = await pdfjsLib.getDocument({ data: await file.arrayBuffer() }).promise;
+        const page = await pdf.getPage(1);
+        const vp = page.getViewport({ scale: TARGET_W / page.getViewport({ scale: 1 }).width });
+        c.width = Math.round(vp.width); c.height = Math.round(vp.height);
+        g.fillStyle = "#fff"; g.fillRect(0, 0, c.width, c.height);
+        await page.render({ canvasContext: g, viewport: vp }).promise;
+        return { canvas: c, pages: pdf.numPages };
+      }
+      const bmp = await createImageBitmap(file), s = TARGET_W / bmp.width;
+      c.width = TARGET_W; c.height = Math.round(bmp.height * s);
+      g.fillStyle = "#fff"; g.fillRect(0, 0, c.width, c.height); g.drawImage(bmp, 0, 0, c.width, c.height);
+      return { canvas: c, pages: 1 };
+    }
+
+    // ---------- 2) OCR ----------
+    let wTE = null, wEN = null, wTH = null;
+    async function workers(onFull) {
+      if (!wTE) wTE = await Tesseract.createWorker(["tha", "eng"], 1, { logger: (m) => {
+        if (m.status === "recognizing text") onFull?.(m.progress);
+        else if (/loading|initializ/.test(m.status)) pmsg.textContent = "กำลังเตรียมตัวอ่านภาษาไทย/อังกฤษ… (ครั้งแรกจะโหลดนานหน่อย)"; } });
+      if (!wEN) wEN = await Tesseract.createWorker("eng");
+      if (!wTH) wTH = await Tesseract.createWorker("tha");
+    }
+    const SCALE = { status: 3, defect: 2, checkName: 2, checkDate: 2 };
+    function makeOcrCrop(src) {
+      return async (r, kind) => {
+        const s = SCALE[kind], c = document.createElement("canvas");
+        c.width = Math.max(1, Math.round(r.w * s)); c.height = Math.max(1, Math.round(r.h * s));
+        const g = c.getContext("2d"); g.fillStyle = "#fff"; g.fillRect(0, 0, c.width, c.height);
+        g.drawImage(src, r.x, r.y, r.w, r.h, 0, 0, c.width, c.height);
+        const wk = kind === "status" || kind === "checkName" ? wEN : kind === "checkDate" ? wTH : wTE;
+        await wk.setParameters({ tessedit_pageseg_mode: kind === "status" ? Tesseract.PSM.SINGLE_WORD : Tesseract.PSM.SINGLE_LINE });
+        const { data } = await wk.recognize(c);
+        return (data.text || "").trim();
+      };
+    }
+
+    // ---------- ข้อมูลเดิมในระบบ (ไว้เทียบ/แก้ OCR) ----------
+    let aircraft = [], acByTail3 = new Map();
+    async function loadExisting() {
+      const [list, defMap, chkMap] = await Promise.all([loadAircraft(), loadDefects(), loadChecks()]);
+      aircraft = list; acByTail3 = new Map(list.map(a => [String(a.tail_number).slice(-3), a]));
+      const ex = {};
+      list.forEach(a => {
+        const nmcs = /NMCS/.test(a.status_note || "");
+        ex[String(a.tail_number).slice(-3)] = { status: nmcs ? "NMCS" : a.status,
+          defects: defMap.get(a.id) || [], checks: chkMap.get(a.id) || [] };
+      });
+      return ex;
+    }
+
+    let rows = [];
+    async function run(file) {
+      document.getElementById("step2").hidden = true;
+      document.getElementById("result").innerHTML = ""; document.getElementById("viewLink").hidden = true;
+      try {
+        setProg(0.03, "กำลังเปิดไฟล์…");
+        const { canvas, pages } = await fileToCanvas(file);
+        document.getElementById("pvImg").src = canvas.toDataURL("image/jpeg", 0.7);
+        await workers((p) => setProg(0.08 + 0.42 * p, "กำลังอ่านข้อความทั้งหน้า…"));
+        setProg(0.08, "กำลังอ่านข้อความทั้งหน้า…");
+        await wTE.setParameters({ tessedit_pageseg_mode: Tesseract.PSM.AUTO, preserve_interword_spaces: "1" });
+        const { data } = await wTE.recognize(canvas, {}, { blocks: true });
+        const words = [];
+        for (const b of data.blocks || []) for (const p of b.paragraphs) for (const l of p.lines) for (const w of l.words)
+          words.push({ t: w.text, x0: w.bbox.x0, y0: w.bbox.y0, x1: w.bbox.x1, y1: w.bbox.y1 });
+        setProg(0.5, "กำลังแยกข้อมูลรายเครื่อง…");
+        const sheet = await extractSheet({ words, W: canvas.width, H: canvas.height, ocrCrop: makeOcrCrop(canvas),
+          fileName: file.name, onProgress: (f) => setProg(0.5 + 0.45 * f, "กำลังอ่านละเอียดทีละช่อง…") });
+        if (!sheet.rows.length) throw new Error("ไม่พบแถวเครื่องในเอกสาร (หาเลข (313) (315) … ไม่เจอ) — ตรวจว่าเป็นใบสถานภาพ ทอ.36 และภาพไม่เอียง/ไม่มืดเกินไป");
+        setProg(0.97, "กำลังเทียบกับข้อมูลเดิมในระบบ…");
+        rows = reconcile(sheet.rows, await loadExisting());
+        const d = sheet.date || todayISO;
+        document.getElementById("sheetDate").value = d;
+        document.getElementById("updCur").checked = d >= todayISO;
+        render();
+        setProg(1, `✓ อ่านได้ ${rows.length} ลำ${pages > 1 ? ` (ใช้เฉพาะหน้าแรกจาก ${pages} หน้า)` : ""}` +
+          `${sheet.date ? "" : " · หาวันที่ในเอกสารไม่เจอ — ตั้งเป็นวันนี้ โปรดตรวจ"} — ตรวจทานด้านล่างแล้วกดนำเข้า`);
+        document.getElementById("step2").hidden = false;
+        document.getElementById("step2").scrollIntoView({ behavior: "smooth" });
+      } catch (err) {
+        console.error(err); setProg(0, ""); pmsg.innerHTML = `<span style="color:var(--crit)">อ่านไม่สำเร็จ: ${esc(err.message)}</span>`;
+      }
+    }
+
+    // ---------- 3) ตรวจทาน ----------
+    const ST = ["FMC", "PMC", "NMC", "NMCS"];
+    const defRow = (d) => `<div class="row"><input data-def value="${esc(d.text)}" class="${d.matched ? "" : "warn"}"
+        ${d.matched ? "" : `title="OCR: ${esc(d.ocr)}"`}><button type="button" class="rm" data-rm>−</button></div>`;
+    const chkRow = (c) => `<div class="row"><input class="nm${c.matched ? "" : " warn"}" data-cname value="${esc(c.name)}">
+        <input data-cdue value="${esc(c.due_text || "")}" class="${c.matched ? "" : "warn"}" ${c.dueRaw ? `title="OCR: ${esc(c.dueRaw)}"` : ""}>
+        <button type="button" class="rm" data-rm>−</button></div>`;
+    function render() {
+      const box = document.getElementById("cards");
+      box.innerHTML = rows.map((r, i) => {
+        const ac = acByTail3.get(r.tail3);
+        return `<div class="ic s-${r.status}" data-i="${i}">
+          <div class="ic-head">
+            <div><div class="type">${esc(ac?.type || "")}</div><div class="tail">${esc(ac?.tail_number || r.tail3)}</div></div>
+            ${ac ? "" : `<span class="nomatch">ไม่พบเครื่องนี้ในระบบ — จะข้าม</span>`}
+            <select data-st>${ST.map(s => `<option ${s === r.status ? "selected" : ""}>${s}</option>`).join("")}</select>
+            <div class="read">อ่านได้: ${esc(r.statusRead || "-")} · เครื่องหมาย ${esc(r.mark || "?")}${r.prevStatus ? ` · เดิมในระบบ: ${esc(r.prevStatus)}` : ""}${r.hoursAF ? ` · เวลา บ. ${esc(r.hoursAF)}` : ""}</div>
+          </div>
+          <div class="ic-body">
+            <h4>รายการข้อขัดข้อง (${r.defects.length})</h4>
+            <div data-defs>${r.defects.map(defRow).join("")}</div>
+            <button type="button" class="btn sm ghost" data-adddef>+ เพิ่มข้อขัดข้อง</button>
+            <h4>รายการเช็คตามวงรอบ</h4>
+            <div data-chks>${r.checks.map(chkRow).join("")}</div>
+            <button type="button" class="btn sm ghost" data-addchk>+ เพิ่มรายการเช็ค</button>
+          </div></div>`;
+      }).join("");
+      box.querySelectorAll(".ic").forEach((el) => {
+        el.querySelector("[data-st]").addEventListener("change", (e) => { el.className = "ic s-" + e.target.value; });
+        el.querySelector("[data-adddef]").addEventListener("click", () =>
+          el.querySelector("[data-defs]").insertAdjacentHTML("beforeend", defRow({ text: "", matched: false, ocr: "" })));
+        el.querySelector("[data-addchk]").addEventListener("click", () =>
+          el.querySelector("[data-chks]").insertAdjacentHTML("beforeend", chkRow({ name: "", due_text: "", matched: false })));
+        el.addEventListener("click", (e) => { if (e.target.matches("[data-rm]")) e.target.closest(".row").remove(); });
+        el.addEventListener("input", (e) => e.target.classList.remove("warn"));   // แก้แล้ว = ตรวจแล้ว
+      });
+    }
+
+    // ---------- 4) นำเข้า ----------
+    document.getElementById("importBtn").addEventListener("click", async (e) => {
+      const date = document.getElementById("sheetDate").value;
+      const upd = document.getElementById("updCur").checked;
+      if (!date) { alert("กรุณาระบุวันที่ของใบสถานภาพ"); return; }
+      const cards = [...document.querySelectorAll("#cards .ic")];
+      const n = cards.filter(el => acByTail3.get(rows[+el.dataset.i].tail3)).length;
+      if (!confirm(`นำเข้าสถานภาพวันที่ ${date} จำนวน ${n} ลำ?\n` +
+        (upd ? "• อัปเดตสถานภาพปัจจุบัน + แทนที่รายการข้อขัดข้อง/รายการเช็คของแต่ละเครื่อง\n" : "• บันทึกเฉพาะประวัติสถานภาพของวันนั้น (ไม่แตะข้อมูลปัจจุบัน)\n") +
+        "• บันทึกประวัติสถานภาพของวันนั้นด้วย")) return;
+      const btn = e.target; btn.disabled = true; btn.textContent = "กำลังนำเข้า…";
+      const lines = [];
+      for (const el of cards) {
+        const r = rows[+el.dataset.i], ac = acByTail3.get(r.tail3);
+        if (!ac) { lines.push(`<span class="err">✗ ${esc(r.tail3)}: ไม่พบในระบบ — ข้าม</span>`); continue; }
+        const st = el.querySelector("[data-st]").value;
+        const dbSt = st === "NMCS" ? "NMC" : st;
+        const keepNote = /^สถานภาพเดิม/.test(ac.status_note || "") ? null : (ac.status_note || null);
+        const note = st === "NMCS" ? "สถานภาพเดิม: NMCS" : keepNote;
+        const defs = [...el.querySelectorAll("[data-def]")].map(i => i.value.trim()).filter(Boolean);
+        const chks = [...el.querySelectorAll("[data-chks] .row")].map(rw => ({
+          name: rw.querySelector("[data-cname]").value.trim(), due_text: rw.querySelector("[data-cdue]").value.trim() })).filter(c => c.name);
+        let err = null;
+        if (upd) err = await setAircraftStatus(ac.id, dbSt, note) || await saveDefects(ac.id, defs) || await saveChecks(ac.id, chks);
+        if (!err) err = await setAircraftStatusOn(ac.id, date, dbSt, note);   // ประวัติของวันนั้น (เขียนหลังสุด ให้เป็นค่าของวันนั้นแน่นอน)
+        lines.push(err ? `<span class="err">✗ ${esc(ac.tail_number)}: ${esc(err.message)}</span>`
+                       : `<span class="ok">✓ ${esc(ac.tail_number)} · ${st}${upd ? ` · ข้อขัดข้อง ${defs.length} · เช็ค ${chks.length}` : ""}</span>`);
+      }
+      btn.disabled = false; btn.textContent = "3 · นำเข้าสถานภาพ";
+      document.getElementById("result").innerHTML = lines.join("<br>");
+      const v = document.getElementById("viewLink"); v.href = `status.html?date=${date}`; v.hidden = false;
+    });
+
+    // ---------- เลือกไฟล์ / ลากวาง ----------
+    const fileInp = document.getElementById("file"), drop = document.getElementById("drop");
+    fileInp.addEventListener("change", () => fileInp.files[0] && run(fileInp.files[0]));
+    ["dragover", "dragenter"].forEach(ev => drop.addEventListener(ev, (e) => { e.preventDefault(); drop.classList.add("over"); }));
+    ["dragleave", "drop"].forEach(ev => drop.addEventListener(ev, () => drop.classList.remove("over")));
+    drop.addEventListener("drop", (e) => { e.preventDefault(); const f = e.dataTransfer.files[0]; if (f) run(f); });
+    document.getElementById("again").addEventListener("click", () => { fileInp.value = ""; fileInp.click(); });
+  }
+</script>
+</body>
+</html>
