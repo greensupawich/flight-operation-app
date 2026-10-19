@@ -185,6 +185,8 @@ export async function exportBoardXlsx({ day, missions, aircraft, defMap, chkMap,
   const wb = new ExcelJS.Workbook();
   await wb.xlsx.load(await res.arrayBuffer());
   const ws = wb.worksheets[0];
+  // ExcelJS เขียน <pageSetUpPr> ก่อน <outlinePr> (ผิด schema) → Excel ฟ้อง "XML error" · ไม่ใช้ outline อยู่แล้ว
+  if (ws.properties) delete ws.properties.outlineProperties;
   const next = new Date(day.getFullYear(), day.getMonth(), day.getDate() + 1);
 
   ws.name = shortTH(day);
