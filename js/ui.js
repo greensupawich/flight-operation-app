@@ -11,6 +11,7 @@ const LINKS = [
   { href: "dashboard.html", label: "ภารกิจ" },
   { href: "queue.html",     label: "คิวบิน" },
   { href: "crew.html",      label: "ทะเบียนนักบิน" },
+  { href: "pilot-month.html", label: "พ." },
   { href: "status.html",    label: "สถานภาพเครื่อง" },
   { href: "stats.html",     label: "สถิติ" },
   { href: "archive.html",   label: "ย้อนหลัง" },

@@ -28,7 +28,7 @@ const STATUS_FILL = { FMC: "FF00B050", PMC: "FFFFFF00", NMC: "FFFF0000" };
 const MED = { style: "medium" };
 
 let libPromise;
-function loadExcelJS() {
+export function loadExcelJS() {
   if (window.ExcelJS) return Promise.resolve(window.ExcelJS);
   libPromise ||= new Promise((resolve, reject) => {
     const s = document.createElement("script");
