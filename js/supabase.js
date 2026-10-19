@@ -1,7 +1,7 @@
 // =====================================================================
 //  supabase.js — ตั้งค่าการเชื่อมต่อ Supabase
 //  • เปิดจากเว็บจริง (*.github.io)  → ฐานจริง (PROD)
-//  • เปิดจากที่อื่น (localhost ฯลฯ) → ฐานทดสอบ (DEV) — กันนักพัฒนาเผลอแก้ข้อมูลจริง
+//  • เปิดจากเครื่อง (localhost) → DEV ถ้าตั้งค่าไว้ · ไม่งั้นใช้ฐานจริง + ป้ายแดง "ฐานจริง" ที่แถบเมนู
 //  anon key เปิดเผยได้ปลอดภัย เพราะ RLS คุมสิทธิ์อยู่ที่ฐานข้อมูล
 //  ห้ามใส่ service_role key ในไฟล์นี้เด็ดขาด
 //  เพิ่ม/เปลี่ยนโปรเจกต์ → แก้ CSP (connect-src / img-src / media-src) ในทุกหน้า .html ด้วย
@@ -17,15 +17,10 @@ const DEV = {
   key: "",
 };
 
-export const IS_PROD = /\.github\.io$/.test(location.hostname);
-const CFG = IS_PROD ? PROD : DEV;
-if (!CFG.url || !CFG.key) {
-  document.body.innerHTML = `<div style="font:16px/1.7 sans-serif;max-width:640px;margin:60px auto;padding:0 16px">
-    <h2>ยังไม่ได้ตั้งค่าโปรเจกต์ DEV</h2>
-    <p>หน้านี้เปิดจาก <b>${location.host}</b> จึงต้องต่อฐานทดสอบ (ไม่ใช่ฐานจริง)
-    — ใส่ url / key ของโปรเจกต์ DEV ใน <code>js/supabase.js</code> ตาม <code>CONTRIBUTING.md</code></p></div>`;
-  throw new Error("DEV Supabase project is not configured in js/supabase.js");
-}
+export const IS_PROD = /\.github\.io$/.test(location.hostname);   // เปิดจากเว็บจริง
+// เปิดจากเครื่อง (localhost): ใช้ DEV ถ้าตั้งไว้ · ยังไม่ตั้ง → ใช้ฐานจริง (แถบเมนูขึ้นป้ายแดงเตือน)
+export const DB_ENV = IS_PROD ? "prod" : (DEV.url && DEV.key ? "dev" : "prod-local");
+const CFG = DB_ENV === "dev" ? DEV : PROD;
 const SUPABASE_URL = CFG.url;
 const SUPABASE_ANON_KEY = CFG.key;
 
