@@ -2,6 +2,9 @@
 //  ui.js — ส่วนประกอบหน้าจอที่ใช้ร่วมกัน (แถบเมนูด้านบน)
 // =====================================================================
 import { signOut, canPlan, isAdmin } from "./auth.js";
+import { IS_PROD } from "./supabase.js";
+
+const escHtml = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 
 const LINKS = [
   { href: "home.html",      label: "หน้าหลัก" },
@@ -29,14 +32,14 @@ export function renderTopbar(profile) {
   bar.className = "topbar";
   bar.innerHTML = `
     <div class="wrap">
-      <div class="brand"><span class="mk">🛩️</span> Flight Operation</div>
+      <div class="brand"><span class="mk">🛩️</span> Flight Operation${IS_PROD ? "" : `<span title="ต่อฐานทดสอบ (DEV) — ไม่ใช่ข้อมูลจริง" style="margin-inline-start:8px;font-size:11px;font-weight:700;background:#f59e0b;color:#111;border-radius:5px;padding:2px 7px">DEV</span>`}</div>
       <button class="nav-toggle" id="__navToggle" aria-label="เมนู" aria-expanded="false">
         <span></span><span></span><span></span>
       </button>
       <nav class="nav" id="__nav">${links}</nav>
       <div class="userchip">
-        <span class="role">${profile.role}</span>
-        <span class="uname">${profile.full_name || profile.email}</span>
+        <span class="role">${escHtml(profile.role)}</span>
+        <span class="uname">${escHtml(profile.full_name || profile.email)}</span>
         <button class="btn sm ghost" id="__signout">ออก</button>
       </div>
     </div>`;
