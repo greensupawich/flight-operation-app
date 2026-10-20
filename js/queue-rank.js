@@ -83,22 +83,26 @@ export function rankQueue({ crew, monthDates, target, isOff, itemsFor, isUnavail
 //     เช่น B บินซ้ำทั้งที่ยังมีคนที่ยังไม่ได้บินในรอบนี้ → tag 1
 //  นับ "บินวันหยุด" = วันหยุด/เสาร์-อาทิตย์ที่มีเที่ยวบินจริง (ไม่นับ ST / ภารกิจที่ยกเลิก) · 1 วัน = 1 ครั้ง
 // =====================================================================
+// เริ่มนับคิววันหยุดตั้งแต่ ต.ค. 2569 (ผู้ใช้กำหนด) — เปลี่ยนวันเริ่มรอบใหม่ได้ที่นี่
+export const HOLIDAY_QUEUE_START = "2026-10-01";
+
 /**
  * @param crew      [{id, position, in_queue}] เรียงตามลำดับในตาราง
  * @param target    วันหยุดที่จะแสดงคิว (นับเฉพาะเที่ยวก่อนวันนี้)
+ * @param since     วันแรกที่เริ่มนับ (เที่ยวก่อนหน้านี้ไม่นับ)
  * @param isOff     (date) => วันหยุด?
  * @param flownDays Map(crewId -> Set(date))  วันที่มีเที่ยวบินจริง (ไม่รวม ST / ยกเลิก)
  * @param hasItemOn (crewId, date) => มีรายการในวันนั้นแล้ว
  * @param isUnavailable (crewId, date) => boolean
  * @returns Map(crewId -> { group, rank|null, count, last|null, tag, reason|null, off })
  */
-export function rankHolidayQueue({ crew, target, isOff, flownDays, hasItemOn, isUnavailable }) {
+export function rankHolidayQueue({ crew, target, since = HOLIDAY_QUEUE_START, isOff, flownDays, hasItemOn, isUnavailable }) {
   const result = new Map();
   const groups = { IPP: [], CP: [] };
   crew.forEach((p, idx) => {
     const group = queueGroup(p.position);
     if (!group) return;
-    const days = [...(flownDays.get(p.id) || [])].filter((d) => d < target && isOff(d)).sort();
+    const days = [...(flownDays.get(p.id) || [])].filter((d) => d >= since && d < target && isOff(d)).sort();
     let reason = null;
     if (p.in_queue === false) reason = "ไม่ได้ติ๊กนับคิว";
     else if (hasItemOn(p.id, target)) reason = "มีรายการในวันนั้นแล้ว";

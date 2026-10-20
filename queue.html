@@ -160,7 +160,7 @@
   import { loadQueueMonth, loadEntries, saveEntry, deleteEntry, monthRange, secondPoint, airfieldKey,
            PILOT_POSITIONS, setHoliday, clearHoliday, saveAirfield,
            setInQueue, loadHistory, loadHolidaysBetween, loadUnavailableOn } from "./js/queue.js";
-  import { rankQueue, rankHolidayQueue, nextWorkingDay, isWeekend, addDays } from "./js/queue-rank.js";
+  import { rankQueue, rankHolidayQueue, HOLIDAY_QUEUE_START, nextWorkingDay, isWeekend, addDays } from "./js/queue-rank.js";
 
   const profile = await requireAuth();
   if (profile) {
@@ -228,7 +228,7 @@
       // คิววันหยุด: วันหยุดถัดไป (ตั้งแต่พรุ่งนี้) · นับจากประวัติทั้งหมดในระบบ
       holTarget = nextWorkingDay(todayStr, d => !(isWeekend(d) || aheadHol.has(d)));
       const [allHist, allHol, holOff] = await Promise.all([
-        loadHistory("2000-01-01", holTarget), loadHolidaysBetween("2000-01-01", holTarget), loadUnavailableOn(holTarget),
+        loadHistory(HOLIDAY_QUEUE_START, holTarget), loadHolidaysBetween(HOLIDAY_QUEUE_START, holTarget), loadUnavailableOn(holTarget),
       ]);
       holData = { hist: allHist, holidays: new Set([...allHol.map(h => h.holiday_date), ...aheadHol]),
                   off: new Map(holOff.map(u => [u.crew_member_id, u.note || ""])) };
@@ -474,7 +474,7 @@
       const holName = holData.holidays.has(holTarget) ? (data.holidays.find(h => h.holiday_date === holTarget)?.name || "") : "";
       box.innerHTML = `<h3>คิววันหยุด · ${thaiLong(holTarget)}${holName ? ` <span class="muted" style="font-weight:400">(${esc(holName)})</span>` : ""}</h3>
         <p class="rule">วนตามรายชื่อ (เฉพาะที่ติ๊ก) — บินวันหยุดแล้วไปต่อท้าย · คนที่ไม่ว่างแล้วถูกข้ามยังอยู่หน้า และจะกลับไปอยู่หน้าคนที่บินแทนตามลำดับเดิม ·
-          ตัวเลข <span class="xtag">1</span> = บินวันหยุดเกินรอบ (ยังมีคนในรอบนี้ที่ยังไม่ได้บิน) · นับเฉพาะเที่ยวจริงในวันหยุด/เสาร์-อาทิตย์ (ไม่นับ ST) · 1 วัน = 1 ครั้ง</p>
+          ตัวเลข <span class="xtag">1</span> = บินวันหยุดเกินรอบ (ยังมีคนในรอบนี้ที่ยังไม่ได้บิน) · นับเฉพาะเที่ยวจริงในวันหยุด/เสาร์-อาทิตย์ (ไม่นับ ST) · 1 วัน = 1 ครั้ง · เริ่มนับ ${thaiShort(HOLIDAY_QUEUE_START)} ${Number(HOLIDAY_QUEUE_START.slice(0, 4)) + 543}</p>
         <div class="qcols">${col("IPP", "IP / P")}${col("CP", "CP")}</div>`;
     }
 
