@@ -48,6 +48,14 @@ export async function loadHistory(first, last) {
   return { entries: e.data || [], missions: m.data || [] };
 }
 
+// คิววันหยุด: ใครไม่ว่างในวันนั้น (วันอาจอยู่นอกเดือนที่เปิดดู)
+export async function loadUnavailableOn(date) {
+  const { data, error } = await supabase.from("crew_unavailable")
+    .select("crew_member_id,off_date,note").eq("off_date", date);
+  if (error) console.error(error);
+  return data || [];
+}
+
 export async function loadHolidaysBetween(first, last) {
   const { data } = await supabase.from("holidays").select("holiday_date,name")
     .gte("holiday_date", first).lte("holiday_date", last);

@@ -72,3 +72,49 @@ export function rankQueue({ crew, monthDates, target, isOff, itemsFor, isUnavail
   }
   return result;
 }
+
+// =====================================================================
+//  คิววันหยุด — วนตามรายชื่อ (เฉพาะที่ติ๊ก) แยกกลุ่ม IP+P / CP เหมือนคิวปกติ
+//  กติกา: ทุกคนบินวันหยุดคนละครั้งต่อรอบ
+//   • ลำดับ = จำนวนวันหยุดที่บินแล้ว (น้อยก่อน) → ชื่ออยู่บนก่อน
+//     A B C … Z: A บิน → B C … Z A
+//     A ไม่ว่าง B บินแทน → A C … Z B · รอบถัดไป A บิน → C … Z A B (A กลับไปอยู่หน้า B ตามลำดับเดิม)
+//   • tag = บินเกินรอบกี่ครั้ง = จำนวนครั้ง − (รอบที่ทุกคนบินครบแล้ว) − 1  (ไม่ติดลบ)
+//     เช่น B บินซ้ำทั้งที่ยังมีคนที่ยังไม่ได้บินในรอบนี้ → tag 1
+//  นับ "บินวันหยุด" = วันหยุด/เสาร์-อาทิตย์ที่มีเที่ยวบินจริง (ไม่นับ ST / ภารกิจที่ยกเลิก) · 1 วัน = 1 ครั้ง
+// =====================================================================
+/**
+ * @param crew      [{id, position, in_queue}] เรียงตามลำดับในตาราง
+ * @param target    วันหยุดที่จะแสดงคิว (นับเฉพาะเที่ยวก่อนวันนี้)
+ * @param isOff     (date) => วันหยุด?
+ * @param flownDays Map(crewId -> Set(date))  วันที่มีเที่ยวบินจริง (ไม่รวม ST / ยกเลิก)
+ * @param hasItemOn (crewId, date) => มีรายการในวันนั้นแล้ว
+ * @param isUnavailable (crewId, date) => boolean
+ * @returns Map(crewId -> { group, rank|null, count, last|null, tag, reason|null, off })
+ */
+export function rankHolidayQueue({ crew, target, isOff, flownDays, hasItemOn, isUnavailable }) {
+  const result = new Map();
+  const groups = { IPP: [], CP: [] };
+  crew.forEach((p, idx) => {
+    const group = queueGroup(p.position);
+    if (!group) return;
+    const days = [...(flownDays.get(p.id) || [])].filter((d) => d < target && isOff(d)).sort();
+    let reason = null;
+    if (p.in_queue === false) reason = "ไม่ได้ติ๊กนับคิว";
+    else if (hasItemOn(p.id, target)) reason = "มีรายการในวันนั้นแล้ว";
+    const off = !reason && isUnavailable(p.id, target);
+    const row = { id: p.id, idx, group, count: days.length, last: days[days.length - 1] || null,
+                  reason, off, rank: null, tag: 0 };
+    groups[group].push(row);
+    result.set(p.id, row);
+  });
+  for (const g of Object.values(groups)) {
+    const live = g.filter((r) => r.reason !== "ไม่ได้ติ๊กนับคิว");
+    const loop = live.length ? Math.min(...live.map((r) => r.count)) : 0;   // รอบที่ทุกคนบินครบแล้ว
+    live.forEach((r) => { r.tag = Math.max(0, r.count - loop - 1); });
+    g.filter((r) => !r.reason)
+     .sort((a, b) => a.count - b.count || a.idx - b.idx)
+     .forEach((r, i) => { r.rank = i + 1; });
+  }
+  return result;
+}

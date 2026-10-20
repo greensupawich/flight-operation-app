@@ -103,6 +103,8 @@
   .qlist .offtag{font-size:10.5px;font-weight:700;color:#fff;background:var(--crit);border-radius:5px;padding:1px 6px;
                  white-space:nowrap;max-width:45%;overflow:hidden;text-overflow:ellipsis}
   .qlist .nm{font-weight:600;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;border-radius:4px;padding:0 5px}
+  .qlist .xtag{font-size:10.5px;font-weight:700;color:#fff;background:var(--warn);border-radius:5px;padding:1px 6px;white-space:nowrap}
+  .qpanel.hol{border-color:var(--accent)}
   .qlist .meta{font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--muted);white-space:nowrap}
   .qskip{font-size:11.5px;color:var(--faint);margin-top:6px;line-height:1.5}
 
@@ -141,6 +143,7 @@
     <div class="missing" id="missing" hidden></div>
 
     <div class="qpanel" id="qpanel" hidden></div>
+    <div class="qpanel hol" id="hpanel" hidden></div>
     <div class="qwrap" id="qwrap"><table class="q" id="q"><tbody><tr><td class="empty">กำลังโหลด…</td></tr></tbody></table></div>
 
     <details class="af" id="afBox">
@@ -156,8 +159,8 @@
   import { KINDS, KIND_COLORS, qualStyle, esc, isStby } from "./js/missions.js";
   import { loadQueueMonth, loadEntries, saveEntry, deleteEntry, monthRange, secondPoint, airfieldKey,
            PILOT_POSITIONS, setHoliday, clearHoliday, saveAirfield,
-           setInQueue, loadHistory, loadHolidaysBetween } from "./js/queue.js";
-  import { rankQueue, nextWorkingDay, isWeekend, addDays } from "./js/queue-rank.js";
+           setInQueue, loadHistory, loadHolidaysBetween, loadUnavailableOn } from "./js/queue.js";
+  import { rankQueue, rankHolidayQueue, nextWorkingDay, isWeekend, addDays } from "./js/queue-rank.js";
 
   const profile = await requireAuth();
   if (profile) {
@@ -177,6 +180,7 @@
     let sel = null;                       // { crew, date }
     let lastKind = "rtaf", lastAc = "600";
     let target = null, aheadHol = new Set(), ranks = null;
+    let holTarget = null, holData = null, holRanks = null;      // คิววันหยุด
 
     const table = document.getElementById("q");
     if (planner) {
@@ -221,6 +225,13 @@
       const hist = target.slice(0, 7) === first.slice(0, 7)
         ? await loadHistory(addDays(target, -120), addDays(first, -1)) : { entries: [], missions: [] };
       data = { ...base, entries, hist };
+      // คิววันหยุด: วันหยุดถัดไป (ตั้งแต่พรุ่งนี้) · นับจากประวัติทั้งหมดในระบบ
+      holTarget = nextWorkingDay(todayStr, d => !(isWeekend(d) || aheadHol.has(d)));
+      const [allHist, allHol, holOff] = await Promise.all([
+        loadHistory("2000-01-01", holTarget), loadHolidaysBetween("2000-01-01", holTarget), loadUnavailableOn(holTarget),
+      ]);
+      holData = { hist: allHist, holidays: new Set([...allHol.map(h => h.holiday_date), ...aheadHol]),
+                  off: new Map(holOff.map(u => [u.crew_member_id, u.note || ""])) };
       render();
     }
 
@@ -315,6 +326,8 @@
           })
         : null;
 
+      holRanks = holData ? computeHolidayRanks() : null;
+
       let html = `<thead><tr><th class="name">NAME / DATE</th>` +
         dates.map((d, i) => {
           const w = new Date(d + "T00:00:00").getDay();
@@ -347,6 +360,7 @@
       });
       table.innerHTML = html + `</tbody>`;
       renderQueuePanel();
+      renderHolidayPanel();
 
       const miss = document.getElementById("missing");
       if (maps.missingCodes.size) {
@@ -397,6 +411,70 @@
       };
       box.innerHTML = `<h3>คิวบิน · ${thaiLong(target)}</h3>
         <p class="rule">บินจริงน้อยสุดก่อน (ไม่นับ ST และเที่ยวที่บินในวันหยุด ในเดือนนี้) → บินล่าสุดนานกว่าก่อน → ชื่ออยู่บนก่อน · ติ๊กหน้าชื่อเพื่อนับคิว</p>
+        <div class="qcols">${col("IPP", "IP / P")}${col("CP", "CP")}</div>`;
+    }
+
+    // ---------- คิววันหยุด ----------
+    // ช่องที่พิมพ์เอง (queue_entries) > ภารกิจ — กติกาเดียวกับตาราง · นับเฉพาะเที่ยวจริง (ไม่ใช่ ST / ไม่ยกเลิก)
+    function computeHolidayRanks() {
+      const { hist, holidays, off } = holData;
+      // ช่องที่แก้ในเดือนที่เปิดอยู่ใช้ data.entries (อัปเดตทันทีเมื่อพิมพ์/ลบ) แทนข้อมูลที่โหลดไว้
+      const ym = dates[0]?.slice(0, 7);
+      const entries = [...hist.entries.filter(e => e.entry_date.slice(0, 7) !== ym), ...data.entries];
+      const entryByKey = new Map(entries.map(e => [`${e.crew_member_id}|${e.entry_date}`, e]));
+      const real = new Map();          // "crew|date" → มีเที่ยวจริง
+      const any = new Set();           // "crew|date" → มีรายการ (รวม ST) ไม่นับที่ยกเลิก
+      hist.missions.forEach(ms => (ms.mission_crew || []).forEach(mc => {
+        if (!mc.crew_member_id || !PILOT_POSITIONS.includes(String(mc.position || "").trim().toUpperCase())) return;
+        const k = `${mc.crew_member_id}|${ms.mission_date}`;
+        if (entryByKey.has(k) || ms.status === "cancelled") return;
+        any.add(k);
+        if (!isStby(ms.kind)) real.set(k, true);
+      }));
+      entryByKey.forEach((e, k) => {
+        any.add(k);
+        const st = String(e.code || "").trim().toUpperCase() === "ST" || (isStby(e.kind) && !e.code);
+        if (!st) real.set(k, true);
+      });
+      const flownDays = new Map();
+      real.forEach((_, k) => {
+        const [id, d] = k.split("|");
+        if (!flownDays.has(id)) flownDays.set(id, new Set());
+        flownDays.get(id).add(d);
+      });
+      return rankHolidayQueue({
+        crew: data.crew, target: holTarget,
+        isOff: d => isWeekend(d) || holidays.has(d),
+        flownDays,
+        hasItemOn: (id, d) => any.has(`${id}|${d}`),
+        isUnavailable: (id) => off.has(id),
+      });
+    }
+
+    function renderHolidayPanel() {
+      const box = document.getElementById("hpanel");
+      if (!holRanks) { box.hidden = true; return; }
+      box.hidden = false;
+      const byId = new Map(data.crew.map(c => [c.id, c]));
+      const col = (group, title) => {
+        const ranked = [...holRanks.values()].filter(r => r.group === group && r.rank).sort((a, b) => a.rank - b.rank);
+        const nextId = ranked.find(r => !r.off)?.id;
+        const offN = ranked.filter(r => r.off).length;
+        return `<div class="qcol"><h4>${title} <span class="muted" style="font-weight:400">(${ranked.length} คน${offN ? ` · ไม่ว่าง ${offN}` : ""})</span></h4>
+          <ol class="qlist">${ranked.map(r => {
+            const c = byId.get(r.id);
+            const note = r.off ? (holData.off.get(r.id) || "") : "";
+            return `<li class="${r.off ? "off" : r.id === nextId ? "next" : ""}"${r.off ? ` title="ไม่ว่าง${note ? ": " + esc(note) : ""}"` : ""}>
+              <span class="qno">${r.rank}</span><span class="nm" style="${r.off ? "" : qualStyle(c.position)}">${esc(c.full_name)}</span>
+              ${r.tag ? `<span class="xtag" title="บินวันหยุดเกินรอบ ${r.tag} ครั้ง (ยังมีคนในรอบนี้ที่ยังไม่ได้บิน)">${r.tag}</span>` : ""}
+              ${r.off ? `<span class="offtag">ไม่ว่าง${note ? " · " + esc(note) : ""}</span>` : ""}
+              <span class="meta">วันหยุด ${r.count} · ล่าสุด ${r.last ? thaiShort(r.last) : "—"}</span></li>`;
+          }).join("") || `<li class="muted">ไม่มีผู้ที่นับคิวได้</li>`}</ol></div>`;
+      };
+      const holName = holData.holidays.has(holTarget) ? (data.holidays.find(h => h.holiday_date === holTarget)?.name || "") : "";
+      box.innerHTML = `<h3>คิววันหยุด · ${thaiLong(holTarget)}${holName ? ` <span class="muted" style="font-weight:400">(${esc(holName)})</span>` : ""}</h3>
+        <p class="rule">วนตามรายชื่อ (เฉพาะที่ติ๊ก) — บินวันหยุดแล้วไปต่อท้าย · คนที่ไม่ว่างแล้วถูกข้ามยังอยู่หน้า และจะกลับไปอยู่หน้าคนที่บินแทนตามลำดับเดิม ·
+          ตัวเลข <span class="xtag">1</span> = บินวันหยุดเกินรอบ (ยังมีคนในรอบนี้ที่ยังไม่ได้บิน) · นับเฉพาะเที่ยวจริงในวันหยุด/เสาร์-อาทิตย์ (ไม่นับ ST) · 1 วัน = 1 ครั้ง</p>
         <div class="qcols">${col("IPP", "IP / P")}${col("CP", "CP")}</div>`;
     }
 
