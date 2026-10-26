@@ -74,14 +74,11 @@ export function rankQueue({ crew, monthDates, target, isOff, itemsFor, isUnavail
 }
 
 // =====================================================================
-//  คิววันหยุด — วนตามรายชื่อ (เฉพาะที่ติ๊ก) แยกกลุ่ม IP+P / CP เหมือนคิวปกติ
-//  กติกา: ทุกคนบินวันหยุดคนละครั้งต่อรอบ
-//   • ลำดับ = จำนวนวันหยุดที่บินแล้ว (น้อยก่อน) → ชื่ออยู่บนก่อน
-//     A B C … Z: A บิน → B C … Z A
-//     A ไม่ว่าง B บินแทน → A C … Z B · รอบถัดไป A บิน → C … Z A B (A กลับไปอยู่หน้า B ตามลำดับเดิม)
-//   • tag = บินเกินรอบกี่ครั้ง = จำนวนครั้ง − (รอบที่ทุกคนบินครบแล้ว) − 1  (ไม่ติดลบ)
-//     เช่น B บินซ้ำทั้งที่ยังมีคนที่ยังไม่ได้บินในรอบนี้ → tag 1
-//  นับ "บินวันหยุด" = วันหยุด/เสาร์-อาทิตย์ที่มีเที่ยวบินจริง (ไม่นับ ST / ภารกิจที่ยกเลิก) · 1 วัน = 1 ครั้ง
+//  คิววันหยุด — แยกกลุ่ม IP+P / CP เหมือนคิวปกติ (เฉพาะที่ติ๊กนับคิว)
+//  กติกา (ผู้ใช้กำหนด 26 ต.ค. 69): เรียงตาม "วันหยุดล่าสุดที่บิน" — บินมานานที่สุดอยู่คิวแรก · บินล่าสุดอยู่คิวสุดท้าย
+//   • ไม่เคยบินวันหยุดเลย = นานที่สุด (อยู่หน้าสุด) · วันเท่ากัน → ชื่ออยู่บนก่อน
+//   • วันล่าสุด = ค่าที่ใหม่กว่า ระหว่าง ข้อมูลตั้งต้นจากไฟล์ "นจบ." ชีตวันหยุด (crew_duty_log category 'holiday')
+//     กับ เที่ยวบินจริงในวันหยุด/เสาร์-อาทิตย์ในระบบ (ไม่นับ ST / ภารกิจที่ยกเลิก) ตั้งแต่ HOLIDAY_QUEUE_START
 // =====================================================================
 // เริ่มนับคิววันหยุดตั้งแต่ ต.ค. 2569 (ผู้ใช้กำหนด) — เปลี่ยนวันเริ่มรอบใหม่ได้ที่นี่
 export const HOLIDAY_QUEUE_START = "2026-10-01";
@@ -94,15 +91,19 @@ export const HOLIDAY_QUEUE_START = "2026-10-01";
  * @param flownDays Map(crewId -> Set(date))  วันที่มีเที่ยวบินจริง (ไม่รวม ST / ยกเลิก)
  * @param hasItemOn (crewId, date) => มีรายการในวันนั้นแล้ว
  * @param isUnavailable (crewId, date) => boolean
+ * @param baselineDays  Map(crewId -> Iterable(date))  วันหยุดที่บินจากไฟล์ "นจบ." (ไม่กรองวันหยุดซ้ำ)
  * @returns Map(crewId -> { group, rank|null, count, last|null, tag, reason|null, off })
  */
-export function rankHolidayQueue({ crew, target, since = HOLIDAY_QUEUE_START, isOff, flownDays, hasItemOn, isUnavailable }) {
+export function rankHolidayQueue({ crew, target, since = HOLIDAY_QUEUE_START, isOff, flownDays, hasItemOn, isUnavailable,
+                                   baselineDays = new Map() }) {
   const result = new Map();
   const groups = { IPP: [], CP: [] };
   crew.forEach((p, idx) => {
     const group = queueGroup(p.position);
     if (!group) return;
-    const days = [...(flownDays.get(p.id) || [])].filter((d) => d >= since && d < target && isOff(d)).sort();
+    const app = [...(flownDays.get(p.id) || [])].filter((d) => d >= since && d < target && isOff(d));
+    const base = [...(baselineDays.get(p.id) || [])].filter((d) => d < target);
+    const days = [...new Set([...base, ...app])].sort();
     let reason = null;
     if (p.in_queue === false) reason = "ไม่ได้ติ๊กนับคิว";
     else if (hasItemOn(p.id, target)) reason = "มีรายการในวันนั้นแล้ว";
@@ -113,11 +114,8 @@ export function rankHolidayQueue({ crew, target, since = HOLIDAY_QUEUE_START, is
     result.set(p.id, row);
   });
   for (const g of Object.values(groups)) {
-    const live = g.filter((r) => r.reason !== "ไม่ได้ติ๊กนับคิว");
-    const loop = live.length ? Math.min(...live.map((r) => r.count)) : 0;   // รอบที่ทุกคนบินครบแล้ว
-    live.forEach((r) => { r.tag = Math.max(0, r.count - loop - 1); });
     g.filter((r) => !r.reason)
-     .sort((a, b) => a.count - b.count || a.idx - b.idx)
+     .sort((a, b) => (a.last || "").localeCompare(b.last || "") || a.idx - b.idx)   // ไม่เคยบิน ("") มาก่อน
      .forEach((r, i) => { r.rank = i + 1; });
   }
   return result;

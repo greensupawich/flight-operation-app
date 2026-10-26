@@ -161,6 +161,7 @@
            PILOT_POSITIONS, setHoliday, clearHoliday, saveAirfield,
            setInQueue, loadHistory, loadHolidaysBetween, loadUnavailableOn } from "./js/queue.js";
   import { rankQueue, rankHolidayQueue, HOLIDAY_QUEUE_START, nextWorkingDay, isWeekend, addDays } from "./js/queue-rank.js";
+  import { loadDuty } from "./js/duty.js";
 
   const profile = await requireAuth();
   if (profile) {
@@ -227,11 +228,12 @@
       data = { ...base, entries, hist };
       // คิววันหยุด: วันหยุดถัดไป (ตั้งแต่พรุ่งนี้) · นับจากประวัติทั้งหมดในระบบ
       holTarget = nextWorkingDay(todayStr, d => !(isWeekend(d) || aheadHol.has(d)));
-      const [allHist, allHol, holOff] = await Promise.all([
+      const [allHist, allHol, holOff, holBase] = await Promise.all([
         loadHistory(HOLIDAY_QUEUE_START, holTarget), loadHolidaysBetween(HOLIDAY_QUEUE_START, holTarget), loadUnavailableOn(holTarget),
+        loadDuty("holiday"),                         // ข้อมูลตั้งต้นจากไฟล์ "นจบ." ชีตวันหยุด (migration_34)
       ]);
       holData = { hist: allHist, holidays: new Set([...allHol.map(h => h.holiday_date), ...aheadHol]),
-                  off: new Map(holOff.map(u => [u.crew_member_id, u.note || ""])) };
+                  off: new Map(holOff.map(u => [u.crew_member_id, u.note || ""])), base: holBase.days };
       render();
     }
 
@@ -448,6 +450,7 @@
         flownDays,
         hasItemOn: (id, d) => any.has(`${id}|${d}`),
         isUnavailable: (id) => off.has(id),
+        baselineDays: holData.base,
       });
     }
 
@@ -468,13 +471,13 @@
               <span class="qno">${r.rank}</span><span class="nm" style="${r.off ? "" : qualStyle(c.position)}">${esc(c.full_name)}</span>
               ${r.tag ? `<span class="xtag" title="บินวันหยุดเกินรอบ ${r.tag} ครั้ง (ยังมีคนในรอบนี้ที่ยังไม่ได้บิน)">${r.tag}</span>` : ""}
               ${r.off ? `<span class="offtag">ไม่ว่าง${note ? " · " + esc(note) : ""}</span>` : ""}
-              <span class="meta">วันหยุด ${r.count} · ล่าสุด ${r.last ? thaiShort(r.last) : "—"}</span></li>`;
+              <span class="meta">วันหยุด ${r.count} · ล่าสุด ${r.last ? thaiShort(r.last) + String(Number(r.last.slice(0, 4)) + 543).slice(-2) : "—"}</span></li>`;
           }).join("") || `<li class="muted">ไม่มีผู้ที่นับคิวได้</li>`}</ol></div>`;
       };
       const holName = holData.holidays.has(holTarget) ? (data.holidays.find(h => h.holiday_date === holTarget)?.name || "") : "";
       box.innerHTML = `<h3>คิววันหยุด · ${thaiLong(holTarget)}${holName ? ` <span class="muted" style="font-weight:400">(${esc(holName)})</span>` : ""}</h3>
-        <p class="rule">วนตามรายชื่อ (เฉพาะที่ติ๊ก) — บินวันหยุดแล้วไปต่อท้าย · คนที่ไม่ว่างแล้วถูกข้ามยังอยู่หน้า และจะกลับไปอยู่หน้าคนที่บินแทนตามลำดับเดิม ·
-          ตัวเลข <span class="xtag">1</span> = บินวันหยุดเกินรอบ (ยังมีคนในรอบนี้ที่ยังไม่ได้บิน) · นับเฉพาะเที่ยวจริงในวันหยุด/เสาร์-อาทิตย์ (ไม่นับ ST) · 1 วัน = 1 ครั้ง · เริ่มนับ ${thaiShort(HOLIDAY_QUEUE_START)} ${Number(HOLIDAY_QUEUE_START.slice(0, 4)) + 543}</p>
+        <p class="rule">เรียงตามวันหยุดล่าสุดที่บิน — บินมานานที่สุดอยู่คิวแรก · บินล่าสุดอยู่คิวสุดท้าย · ไม่เคยบินวันหยุด = อยู่หน้าสุด (เฉพาะที่ติ๊ก) ·
+          วันล่าสุดคิดจากข้อมูลไฟล์ "นจบ." (ชีตวันหยุด) รวมกับเที่ยวจริงในวันหยุด/เสาร์-อาทิตย์ในระบบตั้งแต่ ${thaiShort(HOLIDAY_QUEUE_START)} ${Number(HOLIDAY_QUEUE_START.slice(0, 4)) + 543} (ไม่นับ ST)</p>
         <div class="qcols">${col("IPP", "IP / P")}${col("CP", "CP")}</div>`;
     }
 
