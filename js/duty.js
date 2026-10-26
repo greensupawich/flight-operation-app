@@ -101,6 +101,17 @@ export async function uploadSharedFile(slot, file, uploader) {
   if (old?.path && old.path !== path) await supabase.storage.from(BUCKET).remove([old.path]);
   return null;
 }
+// ดาวน์โหลดเป็น blob แล้วบันทึกด้วยชื่อไฟล์เดิม (ชื่อไทยถูกต้อง — signed URL ทำให้ชื่อกลายเป็น %E0%B8…)
+export async function downloadSharedFile(rec) {
+  const { data, error } = await supabase.storage.from(BUCKET).download(rec.path);
+  if (error || !data) return friendly(error) || { message: "ไม่พบไฟล์" };
+  const url = URL.createObjectURL(data);
+  const a = document.createElement("a");
+  a.href = url; a.download = rec.file_name || "file";
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 30000);
+  return null;
+}
 export async function sharedFileUrl(rec) {
   const { data, error } = await supabase.storage.from(BUCKET).createSignedUrl(rec.path, 120, { download: rec.file_name });
   return { url: data?.signedUrl || null, error: friendly(error) };

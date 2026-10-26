@@ -98,7 +98,7 @@
   import { requireAuth, canPlan } from "./js/auth.js";
   import { renderTopbar } from "./js/ui.js";
   import { loadMonthCounts, isoLocal, esc } from "./js/missions.js";
-  import { getSharedFile, uploadSharedFile, sharedFileUrl } from "./js/duty.js";
+  import { getSharedFile, uploadSharedFile, downloadSharedFile } from "./js/duty.js";
   import { loadCrew } from "./js/crew.js";
   import { addUnavailable, removeUnavailable } from "./js/queue.js";
 
@@ -219,11 +219,10 @@
     }
     document.getElementById("fbDown").addEventListener("click", async (e) => {
       if (!curFile) return;
-      e.target.disabled = true;
-      const { url, error } = await sharedFileUrl(curFile);
-      e.target.disabled = false;
-      if (error || !url) { alert("ดาวน์โหลดไม่สำเร็จ: " + (error?.message || "")); return; }
-      const a = document.createElement("a"); a.href = url; a.rel = "noopener"; document.body.appendChild(a); a.click(); a.remove();
+      const btn = e.currentTarget; btn.disabled = true; const t = btn.textContent; btn.textContent = "กำลังดาวน์โหลด…";
+      const err = await downloadSharedFile(curFile);
+      btn.disabled = false; btn.textContent = t;
+      if (err) alert("ดาวน์โหลดไม่สำเร็จ: " + err.message);
     });
     document.getElementById("fbFile").addEventListener("change", async (e) => {
       const f = e.target.files[0]; e.target.value = "";
