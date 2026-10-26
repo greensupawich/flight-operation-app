@@ -5,7 +5,8 @@
 //   • mainEl = เนื้อหาเดิมของหน้า (แท็บแรก) — ซ่อนเมื่อเปิดแท็บอื่น
 //  ข้อมูล: js/duty.js (migration_34) · แท็บจำใน URL hash เช่น queue.html#overnight
 // =====================================================================
-import { esc, qualStyle } from "./missions.js";
+import { esc, qualStyle, QUAL_COLORS } from "./missions.js";
+import { loadExcelJS } from "./board-excel.js";
 import { DUTY_CATS, loadDuty, addDuty, removeDuty, saveDutyNote, loadRtaf, saveRtaf, deleteRtaf } from "./duty.js";
 
 const TABS = [["overnight", "🌙 ค้างคืน"], ["dechochai", "🔥 เดโชชัย"], ["stby_dechochai", "⏳ STBY เดโชชัย"], ["rtaf", "🌏 RTAF"]];
@@ -81,20 +82,44 @@ const HTML = (mainLabel) => `
     <p class="muted" style="font-size:12px">พิมพ์แก้ได้ทันที (บันทึกอัตโนมัติเมื่อออกจากช่อง) · ตารางนี้ไม่เชื่อมกับหน้าอื่น</p>
   </section>`;
 
-// SheetJS (ตัวเดียวกับหน้าย้อนหลัง) — โหลดเมื่อกด Export เท่านั้น
-function loadXlsx() {
-  if (window.XLSX) return Promise.resolve(window.XLSX);
-  return new Promise((res, rej) => {
-    const sc = document.createElement("script");
-    sc.src = "https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js";
-    sc.onload = () => res(window.XLSX); sc.onerror = () => rej(new Error("โหลดไลบรารี Excel ไม่สำเร็จ"));
-    document.head.appendChild(sc);
-  });
+// ---------- สร้างไฟล์ Excel ด้วย ExcelJS (ใส่สี/ขนาดช่องได้ — ตัวเดียวกับ Export กระดานหน้าหลัก) ----------
+//  sheet = { name, rows: [[cell]], widths: [ความกว้างต่อคอลัมน์], freeze: {x, y}, heights: {แถว: สูง} }
+//  cell  = ค่า หรือ { v, bg, fg, bold, strike, mono, wrap, align, note }   (สี = "#RRGGBB")
+const GRID = { style: "thin", color: { argb: "FFD5DBE3" } };
+const argb = (hex) => "FF" + String(hex).replace("#", "").toUpperCase();
+export async function buildWorkbook(sheets) {
+  const ExcelJS = await loadExcelJS();
+  const wb = new ExcelJS.Workbook();
+  for (const sh of sheets) {
+    const ws = wb.addWorksheet(sh.name.replace(/[\[\]:*?/\\]/g, " ").slice(0, 31), {
+      views: [{ state: "frozen", xSplit: sh.freeze?.x ?? 1, ySplit: sh.freeze?.y ?? 1 }] });
+    (sh.widths || []).forEach((w, i) => { ws.getColumn(i + 1).width = w; });
+    sh.rows.forEach((row, ri) => {
+      const r = ws.getRow(ri + 1);
+      r.height = sh.heights?.[ri] ?? sh.rowHeight ?? 20;
+      row.forEach((cell, ci) => {
+        const c = r.getCell(ci + 1), o = cell !== null && typeof cell === "object" ? cell : { v: cell };
+        c.value = o.v ?? "";
+        c.border = { top: GRID, left: GRID, bottom: GRID, right: GRID };
+        c.alignment = { horizontal: o.align || "center", vertical: "middle", wrapText: !!o.wrap };
+        c.font = { name: o.mono ? "Consolas" : "Tahoma", size: 10, bold: !!o.bold, strike: !!o.strike, color: o.fg ? { argb: argb(o.fg) } : undefined };
+        if (o.bg) c.fill = { type: "pattern", pattern: "solid", fgColor: { argb: argb(o.bg) } };
+        if (o.note) c.note = o.note;
+      });
+    });
+  }
+  return wb;
 }
-const colW = (aoa) => (aoa[0] || []).map((_, c) =>
-  ({ wch: Math.min(60, Math.max(6, ...aoa.map((r) => String(r[c] ?? "").length + 2))) }));
+async function saveWorkbook(wb, fileName) {
+  const buf = await wb.xlsx.writeBuffer();
+  const url = URL.createObjectURL(new Blob([buf], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }));
+  const a = document.createElement("a"); a.href = url; a.download = fileName;
+  document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(url), 30000);
+}
+const HEAD = (v, extra = {}) => ({ v, bg: "#F6F8FB", fg: "#5B6675", bold: true, ...extra });
+const nameCell = (c) => { const q = QUAL_COLORS[c.position]; return { v: c.full_name, bg: q?.bg, fg: q?.fg, bold: true, align: "left" }; };
 
-//  exportSheets: async () => ({ name: "ชื่อไฟล์", sheets: [{ name, aoa }] }) — ชีตของแท็บแรก (จากหน้าที่ติดตั้ง)
+//  exportSheets: async () => ({ name: "ชื่อไฟล์", sheets: [sheet] }) — ชีตของแท็บแรก (จากหน้าที่ติดตั้ง · รูปแบบดู buildWorkbook)
 export function mountDutyTabs({ host, mainEl, mainLabel = "หน้าหลัก", planner, loadCrew, exportSheets }) {
   if (!document.getElementById("duty-ui-css")) {
     const st = document.createElement("style"); st.id = "duty-ui-css"; st.textContent = CSS; document.head.appendChild(st);
@@ -259,32 +284,29 @@ export function mountDutyTabs({ host, mainEl, mainLabel = "หน้าหลั
     const btn = e.currentTarget, label = btn.textContent;
     btn.disabled = true; btn.textContent = "กำลังเตรียมไฟล์…";
     try {
-      const [XLSX, crew, extra, rt, ...cats] = await Promise.all([
-        loadXlsx(), getCrew(), exportSheets ? exportSheets() : { name: "export", sheets: [] }, loadRtaf(),
+      const [crew, extra, rt, ...cats] = await Promise.all([
+        getCrew(), exportSheets ? exportSheets() : { name: "export", sheets: [] }, loadRtaf(),
         ...Object.keys(DUTY_CATS).filter((k) => k !== "holiday").map((k) => loadDuty(k).then((d) => [k, d])),
       ]);
-      const wb = XLSX.utils.book_new();
-      const add = (name, aoa) => {
-        const ws = XLSX.utils.aoa_to_sheet(aoa); ws["!cols"] = colW(aoa);
-        ws["!freeze"] = { xSplit: 1, ySplit: 1 };
-        XLSX.utils.book_append_sheet(wb, ws, name.replace(/[\[\]:*?/\\]/g, " ").slice(0, 31));
-      };
-      extra.sheets.forEach((sh) => add(sh.name, sh.aoa));
+      const sheets = [...extra.sheets];
       for (const [cat, d] of cats) {                              // ค้างคืน / เดโชชัย / STBY เดโชชัย — แบบตารางบนหน้าเว็บ
         if (d.error) throw d.error;
         const n = Math.max(20, ...crew.map((c) => (d.days.get(c.id) || []).length));
-        const aoa = [["NAME", ...Array.from({ length: n }, (_, i) => i + 1), "จำนวนครั้ง", "วันล่าสุด", "หมายเหตุ"]];
+        const rows = [[HEAD("NAME", { align: "left" }), ...Array.from({ length: n }, (_, i) => HEAD(i + 1)), HEAD("จำนวนครั้ง"), HEAD("วันล่าสุด"), HEAD("หมายเหตุ")]];
         crew.forEach((c) => {
           const ds = d.days.get(c.id) || [];
-          aoa.push([c.full_name, ...Array.from({ length: n }, (_, i) => ds[i] ? thShort(ds[i]) : ""),
-                    ds.length, ds.length ? thShort(ds[ds.length - 1]) : "", d.notes.get(c.id) || ""]);
+          rows.push([nameCell(c), ...Array.from({ length: n }, (_, i) => ({ v: ds[i] ? thShort(ds[i]) : "", mono: true })),
+                     { v: ds.length, bold: true, bg: "#F6F8FB" }, { v: ds.length ? thShort(ds[ds.length - 1]) : "", bold: true, bg: "#F6F8FB", fg: "#2F6AE0", mono: true },
+                     { v: d.notes.get(c.id) || "", align: "left" }]);
         });
-        add(DUTY_CATS[cat], aoa);
+        sheets.push({ name: DUTY_CATS[cat], rows, widths: [22, ...Array(n).fill(10), 11, 11, 22] });
       }
       if (rt.error) throw rt.error;
-      add("RTAF", [["ปีงบประมาณ", "CALL SIGN", "DATE", "MISSION", "ROUTE", "หมายเหตุ"],
-        ...rt.rows.map((r) => [r.fiscal_year, r.callsign || "", r.date_text || "", r.mission || "", r.route || "", r.remark || ""])]);
-      XLSX.writeFile(wb, `${extra.name}.xlsx`);
+      sheets.push({ name: "RTAF", widths: [11, 12, 16, 48, 40, 18], rowHeight: 22, rows: [
+        ["ปีงบประมาณ", "CALL SIGN", "DATE", "MISSION", "ROUTE", "หมายเหตุ"].map((h) => HEAD(h)),
+        ...rt.rows.map((r) => [r.fiscal_year, { v: r.callsign || "", mono: true, bold: true }, r.date_text || "",
+          { v: r.mission || "", align: "left", wrap: true }, { v: r.route || "", align: "left", wrap: true }, { v: r.remark || "", align: "left" }])] });
+      await saveWorkbook(await buildWorkbook(sheets), `${extra.name}.xlsx`);
     } catch (err) {
       alert("Export ไม่สำเร็จ: " + (err.message || err));
     } finally { btn.disabled = false; btn.textContent = label; }

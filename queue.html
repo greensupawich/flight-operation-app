@@ -159,7 +159,7 @@
 <script type="module">
   import { requireAuth, canPlan } from "./js/auth.js";
   import { renderTopbar } from "./js/ui.js";
-  import { KINDS, KIND_COLORS, qualStyle, esc, isStby } from "./js/missions.js";
+  import { KINDS, KIND_COLORS, QUAL_COLORS, qualStyle, esc, isStby } from "./js/missions.js";
   import { loadQueueMonth, loadEntries, saveEntry, deleteEntry, monthRange, secondPoint, airfieldKey,
            PILOT_POSITIONS, setHoliday, clearHoliday, saveAirfield,
            setInQueue, loadHistory, loadHolidaysBetween, loadUnavailableOn } from "./js/queue.js";
@@ -175,23 +175,36 @@
     // แท็บ ค้างคืน / เดโชชัย / STBY เดโชชัย / RTAF (แท็บแรก = คิวบินเดิม)
     mountDutyTabs({ host: document.getElementById("dutyHost"), mainEl: document.getElementById("queueMain"),
                      mainLabel: "📊 คิวบิน", planner, loadCrew: () => loadCrew(false), exportSheets: exportQueueSheet });
-    // ชีต "คิวบิน" = ตารางของเดือนที่เปิดดูอยู่ (รหัสในช่อง · ไม่ว่าง · บินจริง/ST) — ไม่รวมเลขคิว/แผงลำดับคิว
+    // ชีต "คิวบิน" = ตารางของเดือนที่เปิดดูอยู่ สี/ขนาดช่องตามหน้าเว็บ — ไม่รวมเลขคิว/แผงลำดับคิว
+    //  ช่องภารกิจ = สีชนิดภารกิจ + สีตัวอักษรตามแบบเครื่อง · ไม่ว่าง = แดงอ่อน (เหตุผลอยู่ในหมายเหตุของช่อง) · วันหยุด = เทา
     async function exportQueueSheet() {
       if (!data || !dates.length) throw new Error("ตารางคิวบินยังโหลดไม่เสร็จ");
-      const head = ["NAME / DATE", ...dates.map((d, i) => {
-        const w = new Date(d + "T00:00:00").getDay();
-        return `${i + 1} ${TH_DOW[w]}` + (maps.holidayMap.has(d) ? ` (${maps.holidayMap.get(d)})` : (w === 0 || w === 6) ? " (หยุด)" : "");
-      }), "บินจริง", "ST"];
+      const HOL = "#C9CCD1", OFF = "#E8A7A2", S2 = "#F6F8FB";
+      const isHol = (d) => { const w = new Date(d + "T00:00:00").getDay(); return w === 0 || w === 6 || maps.holidayMap.has(d); };
+      const head = [{ v: "NAME / DATE", bg: S2, bold: true, align: "left" },
+        ...dates.map((d, i) => ({ v: `${i + 1}\n${TH_DOW[new Date(d + "T00:00:00").getDay()]}`, wrap: true, bold: true, mono: true,
+                                  bg: isHol(d) ? HOL : S2, note: maps.holidayMap.get(d) })),
+        { v: "บินจริง", bg: S2, bold: true }, { v: "ST", bg: S2, bold: true }];
       const rows = data.crew.map((p) => {
+        const q = QUAL_COLORS[p.position] || {};
         const cells = dates.map((d) => {
-          const t = cellItems(p.id, d).items.map((it) => it.text + (it.cancelled ? " (ยกเลิก)" : "")).filter(Boolean).join(" / ");
-          const k = `${p.id}|${d}`;
-          return t || (maps.offMap.has(k) ? "ไม่ว่าง" + (maps.offMap.get(k) ? ": " + maps.offMap.get(k) : "") : "");
+          const k = `${p.id}|${d}`, its = cellItems(p.id, d).items, it = its[0];
+          const cell = { v: its.map((x) => x.text).filter(Boolean).join(" / "), mono: true, bold: true,
+                         bg: maps.offMap.has(k) ? OFF : isHol(d) ? HOL : undefined };
+          if (it) Object.assign(cell, { bg: (KIND_COLORS[it.kind] || KIND_COLORS.rtaf).bg,
+            fg: textColor(it.kind, it.ac).replace("var(--q-500)", "#C00000").replace("var(--q-600)", "#111418"),
+            strike: its.every((x) => x.cancelled) });
+          const notes = [maps.offMap.has(k) ? "ไม่ว่าง" + (maps.offMap.get(k) ? ": " + maps.offMap.get(k) : "") : "",
+                         ...its.map((x) => x.tip + (x.cancelled ? " (ยกเลิก)" : ""))].filter(Boolean);
+          if (notes.length) cell.note = notes.join("\n");
+          return cell;
         });
         const c = rowCounts(p.id);
-        return [p.full_name, ...cells, c.fly, c.st];
+        return [{ v: p.full_name, bg: q.bg, fg: q.fg, bold: true, align: "left" }, ...cells,
+                { v: c.fly, bold: true, bg: S2 }, { v: c.st, bold: true, bg: S2 }];
       });
-      return { name: `คิวบิน ${document.getElementById("title").textContent}`, sheets: [{ name: "คิวบิน", aoa: [head, ...rows] }] };
+      return { name: `คิวบิน ${document.getElementById("title").textContent}`, sheets: [{
+        name: "คิวบิน", rows: [head, ...rows], widths: [22, ...dates.map(() => 6), 8, 8], heights: { 0: 30 } }] };
     }
 
     const TH_MONTH = ["มกราคม","กุมภาพันธ์","มีนาคม","เมษายน","พฤษภาคม","มิถุนายน",
