@@ -27,14 +27,6 @@ const CSS = `
   table.duty td.nm{white-space:nowrap;font-weight:600}
   table.duty td.nm span{border-radius:5px;padding:1px 6px}
   table.duty td.num{text-align:center;font-variant-numeric:tabular-nums;white-space:nowrap}
-  .chips{display:flex;flex-wrap:wrap;gap:4px}
-  .chip{display:inline-flex;align-items:center;gap:3px;background:var(--surface-2);border:1px solid var(--line);
-        border-radius:6px;padding:1px 7px;font-size:12px;font-family:"IBM Plex Mono",monospace;white-space:nowrap}
-  .chip.last{background:var(--primary-soft);border-color:var(--primary);color:var(--primary);font-weight:700}
-  .chip button{border:0;background:none;color:var(--crit);cursor:pointer;padding:0 0 0 2px;font-weight:700}
-  .addd{display:flex;gap:4px;margin-top:5px}
-  .addd input{width:auto;font-size:12px;padding:3px 6px}
-  .noteIn{width:100%;font-size:12.5px;padding:4px 6px}
   .rtaf input{width:100%;font-size:12.5px;padding:4px 6px;margin:0}
   .rtaf td{padding:4px 5px}
   .rtaf .cs{width:110px} .rtaf .dt{width:150px}
@@ -44,18 +36,18 @@ const CSS = `
   table.dgrid th,table.dgrid td{border-right:1px solid var(--line);border-bottom:1px solid var(--line);padding:0;
        text-align:center;white-space:nowrap;height:30px}
   table.dgrid th{background:var(--surface-2);color:var(--muted);font-weight:600;position:sticky;top:0;z-index:2;padding:0 6px}
-  table.dgrid .nm{position:sticky;inset-inline-start:0;background:var(--surface);z-index:1;text-align:start;padding:0 8px;
+  table.dgrid .dg-nm{position:sticky;inset-inline-start:0;background:var(--surface);z-index:1;text-align:start;padding:0 8px;
        font-weight:600;min-width:150px;border-right:2px solid var(--line-strong)}
-  table.dgrid th.nm{z-index:3;background:var(--surface-2)}
-  table.dgrid .nm span{border-radius:5px;padding:1px 6px}
-  table.dgrid td.c{min-width:66px;font-family:"IBM Plex Mono",monospace;font-size:11.5px}
-  table.dgrid td.c.ed{cursor:pointer}
-  table.dgrid td.c.ed:hover{background:var(--primary-soft)}
-  table.dgrid td.c input{width:118px;font-size:11.5px;padding:2px 3px;margin:0;border-radius:4px}
-  table.dgrid td.sum{min-width:70px;font-weight:700;background:var(--surface-2)}
-  table.dgrid td.sum.last{min-width:84px;font-family:"IBM Plex Mono",monospace;font-size:11.5px;color:var(--primary)}
-  table.dgrid td.note{min-width:150px;padding:0 4px}
-  table.dgrid td.note input{width:100%;font-size:12px;padding:3px 5px;margin:0}`;
+  table.dgrid th.dg-nm{z-index:3;background:var(--surface-2)}
+  table.dgrid .dg-nm span{border-radius:5px;padding:1px 6px}
+  table.dgrid td.dg-c{min-width:66px;font-family:"IBM Plex Mono",monospace;font-size:11.5px}
+  table.dgrid td.dg-c.dg-ed{cursor:pointer}
+  table.dgrid td.dg-c.dg-ed:hover{background:var(--primary-soft)}
+  table.dgrid td.dg-c input{width:118px;font-size:11.5px;padding:2px 3px;margin:0;border-radius:4px}
+  table.dgrid td.dg-sum{min-width:70px;font-weight:700;background:var(--surface-2)}
+  table.dgrid td.dg-sum.dg-last{min-width:84px;font-family:"IBM Plex Mono",monospace;font-size:11.5px;color:var(--primary)}
+  table.dgrid td.dg-note{min-width:150px;padding:0 4px}
+  table.dgrid td.dg-note input{width:100%;font-size:12px;padding:3px 5px;margin:0}`;
 
 const HTML = (mainLabel) => `
   <nav class="dtabs" id="dtabs">
@@ -133,18 +125,18 @@ export function mountDutyTabs({ host, mainEl, mainLabel = "หน้าหลั
     const cells = Array.from({ length: ncol }, (_, k) => {
       const d = ds[k] || "";
       const editable = planner && k <= ds.length;              // แก้ช่องที่มีค่า หรือช่องว่างช่องแรก (เพิ่มใหม่)
-      return `<td class="c${editable ? " ed" : ""}" data-k="${k}" data-d="${d}"${editable ? ` title="${d ? "คลิกเพื่อแก้/ลบ" : "คลิกเพื่อเพิ่มวันที่"}"` : ""}>${d ? thShort(d) : ""}</td>`;
+      return `<td class="dg-c${editable ? " dg-ed" : ""}" data-k="${k}" data-d="${d}"${editable ? ` title="${d ? "คลิกเพื่อแก้/ลบ" : "คลิกเพื่อเพิ่มวันที่"}"` : ""}>${d ? thShort(d) : ""}</td>`;
     }).join("");
-    return `<tr data-id="${c.id}"><td class="nm"><span style="${qualStyle(c.position) || ""}">${esc(c.full_name)}</span></td>${cells}
-      <td class="sum">${ds.length}</td><td class="sum last">${ds.length ? thShort(ds[ds.length - 1]) : ""}</td>
-      <td class="note">${planner ? `<input data-note value="${esc(duty.notes.get(c.id) || "")}">` : esc(duty.notes.get(c.id) || "")}</td></tr>`;
+    return `<tr data-id="${c.id}"><td class="dg-nm"><span style="${qualStyle(c.position) || ""}">${esc(c.full_name)}</span></td>${cells}
+      <td class="dg-sum">${ds.length}</td><td class="dg-sum dg-last">${ds.length ? thShort(ds[ds.length - 1]) : ""}</td>
+      <td class="dg-note">${planner ? `<input data-note value="${esc(duty.notes.get(c.id) || "")}">` : esc(duty.notes.get(c.id) || "")}</td></tr>`;
   }
   function renderDuty() {
     const q = $("dutyFind").value.trim();
     const crew = (crewList || []).filter((c) => !q || c.full_name.includes(q));
     const most = Math.max(0, ...crew.map((c) => (duty.days.get(c.id) || []).length));
     const ncol = Math.max(COLS, most + (planner ? 1 : 0));
-    $("dutyHead").innerHTML = `<tr><th class="nm">NAME</th>${Array.from({ length: ncol }, (_, k) => `<th>${k + 1}</th>`).join("")}
+    $("dutyHead").innerHTML = `<tr><th class="dg-nm">NAME</th>${Array.from({ length: ncol }, (_, k) => `<th>${k + 1}</th>`).join("")}
       <th>จำนวนครั้ง</th><th>วันล่าสุด</th><th>หมายเหตุ</th></tr>`;
     $("dutySub").textContent = `${crew.length} คน · รวม ${crew.reduce((n, c) => n + (duty.days.get(c.id) || []).length, 0)} ครั้ง`;
     $("dutyRows").innerHTML = crew.length ? crew.map((c, i) => rowHTML(c, i, ncol)).join("")
@@ -154,7 +146,7 @@ export function mountDutyTabs({ host, mainEl, mainLabel = "หน้าหลั
 
   // คลิกช่อง → ช่องกรอกวันที่ · เปลี่ยนค่า = บันทึก · ลบค่าว่าง = ลบวันที่นั้น · Esc = ยกเลิก
   $("dutyRows").addEventListener("click", (e) => {
-    const td = e.target.closest("td.c.ed"); if (!td || td.querySelector("input")) return;
+    const td = e.target.closest("td.dg-c.dg-ed"); if (!td || td.querySelector("input")) return;
     const old = td.dataset.d;
     td.innerHTML = `<input type="date" value="${old}">`;
     const inp = td.firstElementChild; inp.focus(); try { inp.showPicker?.(); } catch {}
