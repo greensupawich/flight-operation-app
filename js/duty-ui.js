@@ -38,7 +38,24 @@ const CSS = `
   .rtaf input{width:100%;font-size:12.5px;padding:4px 6px;margin:0}
   .rtaf td{padding:4px 5px}
   .rtaf .cs{width:110px} .rtaf .dt{width:150px}
-  .msgline{font-size:12.5px;min-height:16px;margin-top:6px}`;
+  .msgline{font-size:12.5px;min-height:16px;margin-top:6px}
+  .gridwrap{max-height:72vh;overflow:auto}
+  table.dgrid{border-collapse:separate;border-spacing:0;font-size:12px;min-width:100%}
+  table.dgrid th,table.dgrid td{border-right:1px solid var(--line);border-bottom:1px solid var(--line);padding:0;
+       text-align:center;white-space:nowrap;height:30px}
+  table.dgrid th{background:var(--surface-2);color:var(--muted);font-weight:600;position:sticky;top:0;z-index:2;padding:0 6px}
+  table.dgrid .nm{position:sticky;inset-inline-start:0;background:var(--surface);z-index:1;text-align:start;padding:0 8px;
+       font-weight:600;min-width:150px;border-right:2px solid var(--line-strong)}
+  table.dgrid th.nm{z-index:3;background:var(--surface-2)}
+  table.dgrid .nm span{border-radius:5px;padding:1px 6px}
+  table.dgrid td.c{min-width:66px;font-family:"IBM Plex Mono",monospace;font-size:11.5px}
+  table.dgrid td.c.ed{cursor:pointer}
+  table.dgrid td.c.ed:hover{background:var(--primary-soft)}
+  table.dgrid td.c input{width:118px;font-size:11.5px;padding:2px 3px;margin:0;border-radius:4px}
+  table.dgrid td.sum{min-width:70px;font-weight:700;background:var(--surface-2)}
+  table.dgrid td.sum.last{min-width:84px;font-family:"IBM Plex Mono",monospace;font-size:11.5px;color:var(--primary)}
+  table.dgrid td.note{min-width:150px;padding:0 4px}
+  table.dgrid td.note input{width:100%;font-size:12px;padding:3px 5px;margin:0}`;
 
 const HTML = (mainLabel) => `
   <nav class="dtabs" id="dtabs">
@@ -48,17 +65,14 @@ const HTML = (mainLabel) => `
   <section id="dt-duty" hidden>
     <div class="dbar">
       <b id="dutyTitle"></b><span class="muted" id="dutySub"></span>
-      <span style="margin-inline-start:auto">เรียง:</span>
-      <select id="dutySort"><option value="roster">ตามทะเบียน</option><option value="last">วันล่าสุด (นานสุดก่อน)</option>
-        <option value="count">จำนวนครั้ง (น้อยก่อน)</option></select>
-      <input id="dutyFind" placeholder="ค้นหาชื่อ" style="width:140px">
+      <input id="dutyFind" placeholder="ค้นหาชื่อ" style="width:140px;margin-inline-start:auto">
     </div>
-    <div class="tablewrap"><table class="duty">
-      <thead><tr><th style="width:36px">#</th><th style="width:170px">ชื่อ</th><th>วันที่</th>
-        <th style="width:80px;text-align:center">จำนวนครั้ง</th><th style="width:110px;text-align:center">วันล่าสุด</th><th style="width:170px">หมายเหตุ</th></tr></thead>
-      <tbody id="dutyRows"><tr><td colspan="6" class="empty">กำลังโหลด…</td></tr></tbody></table></div>
+    <div class="tablewrap gridwrap"><table class="dgrid">
+      <thead id="dutyHead"></thead>
+      <tbody id="dutyRows"><tr><td class="empty">กำลังโหลด…</td></tr></tbody></table></div>
     <div class="msgline" id="dutyMsg"></div>
-    <p class="muted" style="font-size:12px">แสดงเฉพาะนักบินที่อยู่ในทะเบียน (ใช้งาน) · ข้อมูลตั้งต้นจากไฟล์ "นจบ." · ผู้วางแผนเพิ่ม/ลบวันที่และแก้หมายเหตุได้</p>
+    <p class="muted" style="font-size:12px">บอร์ดไว้ทด — แถวเป็นนักบินในทะเบียน (ใช้งาน) · ข้อมูลตั้งต้นจากไฟล์ "นจบ." ·
+      ผู้วางแผน<b>คลิกช่องเพื่อใส่/แก้วันที่</b> (ลบวันที่ในช่อง = ลบ) · จำนวนครั้ง/วันล่าสุดนับจากช่องที่กรอก</p>
   </section>
   <section id="dt-rtaf" hidden>
     <div class="dbar">
@@ -100,57 +114,79 @@ export function mountDutyTabs({ host, mainEl, mainLabel = "หน้าหลั
   });
   addEventListener("hashchange", showTab);
 
-  // ---------- ค้างคืน / เดโชชัย / STBY เดโชชัย ----------
+  // ---------- ค้างคืน / เดโชชัย / STBY เดโชชัย — ตารางแบบไฟล์ Excel (บอร์ดไว้ทด ไม่มีการเรียงคิว) ----------
+  //  NAME | 1 … N | จำนวนครั้ง | วันล่าสุด | หมายเหตุ · ช่องที่ i = วันที่ลำดับที่ i (เรียงเก่า → ใหม่)
   let dutyCat = null, duty = null;
+  const COLS = 20;
   async function openDuty(cat) {
     dutyCat = cat;
     $("dutyTitle").textContent = DUTY_CATS[cat];
-    $("dutyRows").innerHTML = `<tr><td colspan="6" class="empty">กำลังโหลด…</td></tr>`;
+    $("dutyRows").innerHTML = `<tr><td class="empty">กำลังโหลด…</td></tr>`;
     const [, d] = await Promise.all([getCrew(), loadDuty(cat)]);
     if (cat !== dutyCat) return;
     duty = d;
     if (d.error) say($("dutyMsg"), d.error.message, false); else $("dutyMsg").textContent = "";
     renderDuty();
   }
-  function renderDuty() {
-    const q = $("dutyFind").value.trim(), sort = $("dutySort").value;
-    const rows = (crewList || []).filter((c) => !q || c.full_name.includes(q)).map((c, idx) => {
-      const ds = duty.days.get(c.id) || [];
-      return { c, idx, ds, last: ds[ds.length - 1] || null };
-    });
-    if (sort === "last") rows.sort((a, b) => (a.last || "").localeCompare(b.last || "") || a.idx - b.idx);
-    if (sort === "count") rows.sort((a, b) => a.ds.length - b.ds.length || (a.last || "").localeCompare(b.last || "") || a.idx - b.idx);
-    $("dutySub").textContent = `${rows.length} คน · รวม ${rows.reduce((n, r) => n + r.ds.length, 0)} ครั้ง`;
-    $("dutyRows").innerHTML = rows.length ? rows.map((r, i) => `
-      <tr data-id="${r.c.id}">
-        <td class="num">${i + 1}</td>
-        <td class="nm"><span style="${qualStyle(r.c.position) || ""}">${esc(r.c.full_name)}</span></td>
-        <td><div class="chips">${r.ds.map((d) => `<span class="chip${d === r.last ? " last" : ""}">${thShort(d)}${planner ? `<button title="ลบวันที่นี้" data-rm="${d}">×</button>` : ""}</span>`).join("") || `<span class="muted">—</span>`}</div>
-          ${planner ? `<div class="addd"><input type="date" data-newd><button class="btn sm ghost" data-add>+ เพิ่ม</button></div>` : ""}</td>
-        <td class="num">${r.ds.length}</td>
-        <td class="num">${r.last ? thShort(r.last) : "—"}</td>
-        <td>${planner ? `<input class="noteIn" data-note value="${esc(duty.notes.get(r.c.id) || "")}">` : esc(duty.notes.get(r.c.id) || "")}</td>
-      </tr>`).join("") : `<tr><td colspan="6" class="empty">ไม่พบนักบิน</td></tr>`;
+  function rowHTML(c, i, ncol) {
+    const ds = duty.days.get(c.id) || [];
+    const cells = Array.from({ length: ncol }, (_, k) => {
+      const d = ds[k] || "";
+      const editable = planner && k <= ds.length;              // แก้ช่องที่มีค่า หรือช่องว่างช่องแรก (เพิ่มใหม่)
+      return `<td class="c${editable ? " ed" : ""}" data-k="${k}" data-d="${d}"${editable ? ` title="${d ? "คลิกเพื่อแก้/ลบ" : "คลิกเพื่อเพิ่มวันที่"}"` : ""}>${d ? thShort(d) : ""}</td>`;
+    }).join("");
+    return `<tr data-id="${c.id}"><td class="nm"><span style="${qualStyle(c.position) || ""}">${esc(c.full_name)}</span></td>${cells}
+      <td class="sum">${ds.length}</td><td class="sum last">${ds.length ? thShort(ds[ds.length - 1]) : ""}</td>
+      <td class="note">${planner ? `<input data-note value="${esc(duty.notes.get(c.id) || "")}">` : esc(duty.notes.get(c.id) || "")}</td></tr>`;
   }
-  $("dutySort").addEventListener("change", renderDuty);
+  function renderDuty() {
+    const q = $("dutyFind").value.trim();
+    const crew = (crewList || []).filter((c) => !q || c.full_name.includes(q));
+    const most = Math.max(0, ...crew.map((c) => (duty.days.get(c.id) || []).length));
+    const ncol = Math.max(COLS, most + (planner ? 1 : 0));
+    $("dutyHead").innerHTML = `<tr><th class="nm">NAME</th>${Array.from({ length: ncol }, (_, k) => `<th>${k + 1}</th>`).join("")}
+      <th>จำนวนครั้ง</th><th>วันล่าสุด</th><th>หมายเหตุ</th></tr>`;
+    $("dutySub").textContent = `${crew.length} คน · รวม ${crew.reduce((n, c) => n + (duty.days.get(c.id) || []).length, 0)} ครั้ง`;
+    $("dutyRows").innerHTML = crew.length ? crew.map((c, i) => rowHTML(c, i, ncol)).join("")
+      : `<tr><td class="empty" colspan="${ncol + 4}">ไม่พบนักบิน</td></tr>`;
+  }
   $("dutyFind").addEventListener("input", renderDuty);
-  $("dutyRows").addEventListener("click", async (e) => {
-    const tr = e.target.closest("tr[data-id]"); if (!tr || !planner) return;
-    const id = tr.dataset.id, msg = $("dutyMsg");
-    if (e.target.matches("[data-rm]")) {
-      const d = e.target.dataset.rm;
-      if (!confirm(`ลบวันที่ ${thShort(d)} ออกจาก ${DUTY_CATS[dutyCat]}?`)) return;
-      const err = await removeDuty(id, dutyCat, d);
-      if (err) return say(msg, "ลบไม่สำเร็จ: " + err.message, false);
-      duty.days.set(id, (duty.days.get(id) || []).filter((x) => x !== d)); renderDuty(); say(msg, "ลบแล้ว", true);
-    }
-    if (e.target.matches("[data-add]")) {
-      const d = tr.querySelector("[data-newd]").value;
-      if (!d) return say(msg, "เลือกวันที่ก่อน", false);
-      const err = await addDuty(id, dutyCat, d);
-      if (err) return say(msg, "เพิ่มไม่สำเร็จ: " + err.message, false);
-      duty.days.set(id, [...new Set([...(duty.days.get(id) || []), d])].sort()); renderDuty(); say(msg, `เพิ่ม ${thShort(d)} แล้ว`, true);
-    }
+
+  // คลิกช่อง → ช่องกรอกวันที่ · เปลี่ยนค่า = บันทึก · ลบค่าว่าง = ลบวันที่นั้น · Esc = ยกเลิก
+  $("dutyRows").addEventListener("click", (e) => {
+    const td = e.target.closest("td.c.ed"); if (!td || td.querySelector("input")) return;
+    const old = td.dataset.d;
+    td.innerHTML = `<input type="date" value="${old}">`;
+    const inp = td.firstElementChild; inp.focus(); try { inp.showPicker?.(); } catch {}
+    let done = false;
+    // ปีต้องเป็น ค.ศ. ที่สมเหตุสมผล (กันพิมพ์ปียังไม่ครบ หรือพิมพ์ปี พ.ศ. ลงช่องวันที่)
+    const yOk = (v) => { const y = +v.slice(0, 4); return y >= 2000 && y <= new Date().getFullYear() + 2; };
+    const finish = async (save, fromChange = false) => {
+      if (done) return;
+      const v = inp.value, id = td.closest("tr").dataset.id, msg = $("dutyMsg");
+      if (save && v && !yOk(v)) {
+        if (fromChange) return;                                   // ยังพิมพ์ไม่เสร็จ — รอต่อ
+        done = true; say(msg, "ปีไม่ถูกต้อง — ช่องวันที่ใช้ปี ค.ศ. (เช่น 2026)", false); renderDuty(); return;
+      }
+      done = true;
+      if (!save || v === old) { renderDuty(); return; }
+      if (v && (duty.days.get(id) || []).includes(v)) { say(msg, `มีวันที่ ${thShort(v)} อยู่แล้ว`, false); renderDuty(); return; }
+      let err = null;
+      if (old) err = await removeDuty(id, dutyCat, old);
+      if (!err && v) err = await addDuty(id, dutyCat, v);
+      if (err) { say(msg, "บันทึกไม่สำเร็จ: " + err.message, false); return openDuty(dutyCat); }
+      const list = (duty.days.get(id) || []).filter((x) => x !== old);
+      if (v) list.push(v);
+      duty.days.set(id, list.sort());
+      say(msg, v ? (old ? `แก้เป็น ${thShort(v)} แล้ว` : `เพิ่ม ${thShort(v)} แล้ว`) : `ลบ ${thShort(old)} แล้ว`, true);
+      renderDuty();
+    };
+    inp.addEventListener("change", () => finish(true, true));
+    inp.addEventListener("blur", () => finish(true));
+    inp.addEventListener("keydown", (k) => {
+      if (k.key === "Escape") finish(false);
+      if (k.key === "Enter") finish(true);
+    });
   });
   $("dutyRows").addEventListener("change", async (e) => {
     if (!e.target.matches("[data-note]")) return;
