@@ -131,6 +131,8 @@
       <div class="sub">ตารางการบินรายเดือนของนักบิน · นับบินจริงและ Standby แยกกัน</div>
     </div>
 
+    <div id="dutyHost"></div>
+    <div id="queueMain">
     <div class="q-head">
       <button class="btn sm" id="prev">←</button>
       <div class="q-title" id="title">—</div>
@@ -150,6 +152,7 @@
       <summary>รหัสสนามบิน (ชื่อจุดในเส้นทางบิน → รหัสที่แสดงในคิวบิน)</summary>
       <div class="af-grid" id="afGrid"></div>
     </details>
+    </div>
   </div>
 </main>
 
@@ -162,11 +165,16 @@
            setInQueue, loadHistory, loadHolidaysBetween, loadUnavailableOn } from "./js/queue.js";
   import { rankQueue, rankHolidayQueue, HOLIDAY_QUEUE_START, nextWorkingDay, isWeekend, addDays } from "./js/queue-rank.js";
   import { loadDuty } from "./js/duty.js";
+  import { mountDutyTabs } from "./js/duty-ui.js";
+  import { loadCrew } from "./js/crew.js";
 
   const profile = await requireAuth();
   if (profile) {
     renderTopbar(profile);
     const planner = canPlan(profile);
+    // แท็บ ค้างคืน / เดโชชัย / STBY เดโชชัย / RTAF (แท็บแรก = คิวบินเดิม)
+    mountDutyTabs({ host: document.getElementById("dutyHost"), mainEl: document.getElementById("queueMain"),
+                     mainLabel: "📊 คิวบิน", planner, loadCrew: () => loadCrew(false) });
 
     const TH_MONTH = ["มกราคม","กุมภาพันธ์","มีนาคม","เมษายน","พฤษภาคม","มิถุนายน",
                       "กรกฎาคม","สิงหาคม","กันยายน","ตุลาคม","พฤศจิกายน","ธันวาคม"];
