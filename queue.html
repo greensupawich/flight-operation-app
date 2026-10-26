@@ -174,7 +174,25 @@
     const planner = canPlan(profile);
     // แท็บ ค้างคืน / เดโชชัย / STBY เดโชชัย / RTAF (แท็บแรก = คิวบินเดิม)
     mountDutyTabs({ host: document.getElementById("dutyHost"), mainEl: document.getElementById("queueMain"),
-                     mainLabel: "📊 คิวบิน", planner, loadCrew: () => loadCrew(false) });
+                     mainLabel: "📊 คิวบิน", planner, loadCrew: () => loadCrew(false), exportSheets: exportQueueSheet });
+    // ชีต "คิวบิน" = ตารางของเดือนที่เปิดดูอยู่ (รหัสในช่อง · ไม่ว่าง · บินจริง/ST) — ไม่รวมเลขคิว/แผงลำดับคิว
+    async function exportQueueSheet() {
+      if (!data || !dates.length) throw new Error("ตารางคิวบินยังโหลดไม่เสร็จ");
+      const head = ["NAME / DATE", ...dates.map((d, i) => {
+        const w = new Date(d + "T00:00:00").getDay();
+        return `${i + 1} ${TH_DOW[w]}` + (maps.holidayMap.has(d) ? ` (${maps.holidayMap.get(d)})` : (w === 0 || w === 6) ? " (หยุด)" : "");
+      }), "บินจริง", "ST"];
+      const rows = data.crew.map((p) => {
+        const cells = dates.map((d) => {
+          const t = cellItems(p.id, d).items.map((it) => it.text + (it.cancelled ? " (ยกเลิก)" : "")).filter(Boolean).join(" / ");
+          const k = `${p.id}|${d}`;
+          return t || (maps.offMap.has(k) ? "ไม่ว่าง" + (maps.offMap.get(k) ? ": " + maps.offMap.get(k) : "") : "");
+        });
+        const c = rowCounts(p.id);
+        return [p.full_name, ...cells, c.fly, c.st];
+      });
+      return { name: `คิวบิน ${document.getElementById("title").textContent}`, sheets: [{ name: "คิวบิน", aoa: [head, ...rows] }] };
+    }
 
     const TH_MONTH = ["มกราคม","กุมภาพันธ์","มีนาคม","เมษายน","พฤษภาคม","มิถุนายน",
                       "กรกฎาคม","สิงหาคม","กันยายน","ตุลาคม","พฤศจิกายน","ธันวาคม"];

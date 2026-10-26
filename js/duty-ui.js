@@ -53,6 +53,8 @@ const HTML = (mainLabel) => `
   <nav class="dtabs" id="dtabs">
     <a href="#" data-tab="">${mainLabel}</a>
     ${TABS.map(([k, l]) => `<a href="#${k}" data-tab="${k}">${l}</a>`).join("")}
+    <button class="btn sm ghost" id="dtExport" style="margin-inline-start:auto;align-self:center;white-space:nowrap"
+      title="ดาวน์โหลดตารางทุกแท็บเป็นไฟล์ Excel (แยกชีต) — ไม่รวมลำดับคิว">⬇️ Export Excel</button>
   </nav>
   <section id="dt-duty" hidden>
     <div class="dbar">
@@ -79,7 +81,21 @@ const HTML = (mainLabel) => `
     <p class="muted" style="font-size:12px">พิมพ์แก้ได้ทันที (บันทึกอัตโนมัติเมื่อออกจากช่อง) · ตารางนี้ไม่เชื่อมกับหน้าอื่น</p>
   </section>`;
 
-export function mountDutyTabs({ host, mainEl, mainLabel = "หน้าหลัก", planner, loadCrew }) {
+// SheetJS (ตัวเดียวกับหน้าย้อนหลัง) — โหลดเมื่อกด Export เท่านั้น
+function loadXlsx() {
+  if (window.XLSX) return Promise.resolve(window.XLSX);
+  return new Promise((res, rej) => {
+    const sc = document.createElement("script");
+    sc.src = "https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js";
+    sc.onload = () => res(window.XLSX); sc.onerror = () => rej(new Error("โหลดไลบรารี Excel ไม่สำเร็จ"));
+    document.head.appendChild(sc);
+  });
+}
+const colW = (aoa) => (aoa[0] || []).map((_, c) =>
+  ({ wch: Math.min(60, Math.max(6, ...aoa.map((r) => String(r[c] ?? "").length + 2))) }));
+
+//  exportSheets: async () => ({ name: "ชื่อไฟล์", sheets: [{ name, aoa }] }) — ชีตของแท็บแรก (จากหน้าที่ติดตั้ง)
+export function mountDutyTabs({ host, mainEl, mainLabel = "หน้าหลัก", planner, loadCrew, exportSheets }) {
   if (!document.getElementById("duty-ui-css")) {
     const st = document.createElement("style"); st.id = "duty-ui-css"; st.textContent = CSS; document.head.appendChild(st);
   }
@@ -236,6 +252,42 @@ export function mountDutyTabs({ host, mainEl, mainLabel = "หน้าหลั
     const err = await deleteRtaf(id);
     if (err) return say($("rtafMsg"), "ลบไม่สำเร็จ: " + err.message, false);
     rtaf = rtaf.filter((x) => x.id !== id); renderRtaf();
+  });
+
+  // ---------- Export Excel: ตารางทุกแท็บ → 1 ไฟล์ แยกชีต (ไม่รวมลำดับคิว) ----------
+  $("dtExport").addEventListener("click", async (e) => {
+    const btn = e.currentTarget, label = btn.textContent;
+    btn.disabled = true; btn.textContent = "กำลังเตรียมไฟล์…";
+    try {
+      const [XLSX, crew, extra, rt, ...cats] = await Promise.all([
+        loadXlsx(), getCrew(), exportSheets ? exportSheets() : { name: "export", sheets: [] }, loadRtaf(),
+        ...Object.keys(DUTY_CATS).filter((k) => k !== "holiday").map((k) => loadDuty(k).then((d) => [k, d])),
+      ]);
+      const wb = XLSX.utils.book_new();
+      const add = (name, aoa) => {
+        const ws = XLSX.utils.aoa_to_sheet(aoa); ws["!cols"] = colW(aoa);
+        ws["!freeze"] = { xSplit: 1, ySplit: 1 };
+        XLSX.utils.book_append_sheet(wb, ws, name.replace(/[\[\]:*?/\\]/g, " ").slice(0, 31));
+      };
+      extra.sheets.forEach((sh) => add(sh.name, sh.aoa));
+      for (const [cat, d] of cats) {                              // ค้างคืน / เดโชชัย / STBY เดโชชัย — แบบตารางบนหน้าเว็บ
+        if (d.error) throw d.error;
+        const n = Math.max(20, ...crew.map((c) => (d.days.get(c.id) || []).length));
+        const aoa = [["NAME", ...Array.from({ length: n }, (_, i) => i + 1), "จำนวนครั้ง", "วันล่าสุด", "หมายเหตุ"]];
+        crew.forEach((c) => {
+          const ds = d.days.get(c.id) || [];
+          aoa.push([c.full_name, ...Array.from({ length: n }, (_, i) => ds[i] ? thShort(ds[i]) : ""),
+                    ds.length, ds.length ? thShort(ds[ds.length - 1]) : "", d.notes.get(c.id) || ""]);
+        });
+        add(DUTY_CATS[cat], aoa);
+      }
+      if (rt.error) throw rt.error;
+      add("RTAF", [["ปีงบประมาณ", "CALL SIGN", "DATE", "MISSION", "ROUTE", "หมายเหตุ"],
+        ...rt.rows.map((r) => [r.fiscal_year, r.callsign || "", r.date_text || "", r.mission || "", r.route || "", r.remark || ""])]);
+      XLSX.writeFile(wb, `${extra.name}.xlsx`);
+    } catch (err) {
+      alert("Export ไม่สำเร็จ: " + (err.message || err));
+    } finally { btn.disabled = false; btn.textContent = label; }
   });
 
   showTab();
