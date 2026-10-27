@@ -125,6 +125,7 @@
   import { requireAuth, canPlan } from "./js/auth.js";
   import { renderTopbar } from "./js/ui.js";
   import { supabase } from "./js/supabase.js";
+  import { loadExcelJS } from "./js/board-excel.js";
   import { KINDS, KIND_COLORS, DEFAULT_KIND, isStby } from "./js/missions.js";
 
   const profile = await requireAuth();
@@ -279,7 +280,9 @@
       `<span class="sp"></span>
        <span class="lg"><i style="border-color:var(--primary)"></i>ชม.สะสมจริง</span>
        <span class="lg"><i style="border-color:#D32F2F"></i>เป้า</span>
-       <span class="lg"><i style="border-color:#2E9E44;border-top-style:dashed"></i>95% ของเป้า</span>`;
+       <span class="lg"><i style="border-color:#2E9E44;border-top-style:dashed"></i>95% ของเป้า</span>
+       <button class="btn sm" id="fyExport" title="ไฟล์ Excel ที่มีเฉพาะกราฟนี้">⬇ Export Excel</button>`;
+    document.getElementById("fyExport").addEventListener("click",(e)=>exportFyChart(e.currentTarget));
     if(planner && !tgErr){
       const inp=document.getElementById("tgIn"), btn=document.getElementById("tgSave");
       const save=async()=>{
@@ -309,45 +312,101 @@
       (pace ? `<div class="card fyk"><div class="n" style="color:${actual>=pace*0.95?"#2E9E44":"#D32F2F"}">${actual-pace>=0?"+":""}${r1(actual-pace)}</div>
         <div class="l">เทียบเส้นเป้า ณ ${last===nD-1?"สิ้นปีงบ":"วันนี้"} (${r1(pace)} ชม.)</div></div>` : ""));
 
+    // วาด SVG (ใช้ทั้งบนหน้าเว็บ และตอน Export — exp=true: ใส่หัวข้อ/คำอธิบายเส้นในภาพ)
+    const fySvg=(W,H,exp=false)=>{
+      const padL=48,padR=56,padT=exp?40:14,padB=24;
+      const X=(i)=>padL+(W-padL-padR)*i/(nD-1);
+      const yMax=Math.max(target, actual, 1)*1.05;
+      const Y=(v)=>padT+(H-padT-padB)*(1-v/yMax);
+      const f=(v)=>v.toFixed(1);
+      let grid="";
+      for(let i=0;i<=4;i++){ const v=yMax*i/4, yy=Y(v);
+        grid+=`<line class="grid" x1="${padL}" y1="${f(yy)}" x2="${f(W-padR)}" y2="${f(yy)}"/>`
+             +`<text class="axt" x="${padL-6}" y="${f(yy+3)}" text-anchor="end">${Math.round(v)}</text>`; }
+      // แกน X = ต้นเดือน · แถบจาง = เดือนที่เลือก
+      let xl="", band="";
+      days.forEach((d,i)=>{ if(d.endsWith("-01")){
+        const mm=Number(d.slice(5,7));
+        xl+=`<line class="grid" x1="${f(X(i))}" y1="${padT}" x2="${f(X(i))}" y2="${H-padB}" opacity=".5"/>`
+           +`<text class="axt" x="${f(X(i)+3)}" y="${H-8}">${TH_MON[mm-1]}${mm===1||i===0?String(Number(d.slice(0,4))+543).slice(2):""}</text>`;
+        if(d.slice(0,7)===ym){ const e=days.findIndex((x,j)=>j>i && x.endsWith("-01")); const ei=e<0?nD-1:e;
+          band=`<rect class="mband" x="${f(X(i))}" y="${padT}" width="${f(X(ei)-X(i))}" height="${H-padT-padB}"/>`; }
+      }});
+      // เส้นเป้า (ตรงจาก 0 ที่ 1 ต.ค. ถึงเป้าที่ 30 ก.ย.)
+      let tg="";
+      if(target){
+        tg=`<path class="tg" d="M${f(X(0))},${f(Y(0))} L${f(X(nD-1))},${f(Y(target))}"><title>เป้า ${r1(target)} ชม.</title></path>`
+          +`<path class="tg95" d="M${f(X(0))},${f(Y(0))} L${f(X(nD-1))},${f(Y(target*0.95))}"><title>95% = ${r1(target*0.95)} ชม.</title></path>`
+          +`<text class="tgl" x="${f(X(nD-1)+4)}" y="${f(Y(target)+3)}" fill="#D32F2F">${Math.round(target)}</text>`
+          +`<text class="tgl" x="${f(X(nD-1)+4)}" y="${f(Y(target*0.95)+12)}" fill="#2E9E44">${Math.round(target*0.95)}</text>`;
+      }
+      // เส้นจริง
+      let ln="", area="", dots="";
+      if(last>=0){
+        for(let i=0;i<=last;i++) ln+=(i?"L":"M")+f(X(i))+","+f(Y(cum[i]))+" ";
+        area=`<path class="ar" d="M${f(X(0))},${f(Y(0))} ${ln.replace(/^M/,"L")} L${f(X(last))},${f(Y(0))} Z"/>`;
+        for(let i=0;i<=last;i++){ const endM = i===last || days[i+1]?.endsWith("-01");
+          if(endM) dots+=`<circle class="dot" cx="${f(X(i))}" cy="${f(Y(cum[i]))}" r="3.5"><title>${Number(days[i].slice(8))} ${TH_MON[Number(days[i].slice(5,7))-1]} · สะสม ${r1(cum[i])} ชม.${target?` · เป้า ณ วันนั้น ${r1(target*(i+1)/nD)}`:""}</title></circle>`; }
+      }
+      let lg="";
+      if(exp){
+        const items=[["#245073","ชม.สะสมจริง",""],["#D32F2F","เป้า "+r1(target)+" ชม.",""],["#2E9E44","95% = "+r1(target*0.95)+" ชม.","6 4"]].slice(0,target?3:1);
+        lg=`<text class="tt" x="${padL}" y="18">ชม.บินรวมทุกเครื่อง สะสมรายวัน · ปีงบประมาณ ${fy} (สะสมถึงวันนี้ ${r1(actual)} ชม.)</text>`;
+        let x=W-padR;
+        for(const [c,t,da] of items.reverse()){ const w=t.length*6.2+30; x-=w;
+          lg+=`<line x1="${f(x)}" y1="14" x2="${f(x+20)}" y2="14" stroke="${c}" stroke-width="2.5"${da?` stroke-dasharray="${da}"`:""}/>`
+             +`<text class="lgt" x="${f(x+25)}" y="18">${esc(t)}</text>`; }
+      }
+      return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}">
+        ${exp?`<style>${EXPORT_CSS}</style><rect width="${W}" height="${H}" fill="#fff"/>`:""}${lg}
+        ${band}${grid}${xl}${tg}${area}<path class="ln" d="${ln.trim()}"/>${dots}</svg>`;
+    };
+    lastFy={ fy, actual, target, svg:fySvg };
     const chart=document.getElementById("chart");
     if(!actual && !target){ chart.innerHTML=`<div class="chart-empty">ยังไม่มีข้อมูลชั่วโมงบินในปีงบ ${fy}</div>`; return; }
-    const padL=48,padR=56,padT=14,padB=24,H=230;
-    const W=Math.max(640,(chart.clientWidth||900)-24);
-    const X=(i)=>padL+(W-padL-padR)*i/(nD-1);
-    const yMax=Math.max(target, actual, 1)*1.05;
-    const Y=(v)=>padT+(H-padT-padB)*(1-v/yMax);
-    const f=(v)=>v.toFixed(1);
-    let grid="";
-    for(let i=0;i<=4;i++){ const v=yMax*i/4, yy=Y(v);
-      grid+=`<line class="grid" x1="${padL}" y1="${f(yy)}" x2="${f(W-padR)}" y2="${f(yy)}"/>`
-           +`<text class="axt" x="${padL-6}" y="${f(yy+3)}" text-anchor="end">${Math.round(v)}</text>`; }
-    // แกน X = ต้นเดือน · แถบจาง = เดือนที่เลือก
-    let xl="", band="";
-    days.forEach((d,i)=>{ if(d.endsWith("-01")){
-      const mm=Number(d.slice(5,7));
-      xl+=`<line class="grid" x1="${f(X(i))}" y1="${padT}" x2="${f(X(i))}" y2="${H-padB}" opacity=".5"/>`
-         +`<text class="axt" x="${f(X(i)+3)}" y="${H-8}">${TH_MON[mm-1]}${mm===1||i===0?String(Number(d.slice(0,4))+543).slice(2):""}</text>`;
-      if(d.slice(0,7)===ym){ const e=days.findIndex((x,j)=>j>i && x.endsWith("-01")); const ei=e<0?nD-1:e;
-        band=`<rect class="mband" x="${f(X(i))}" y="${padT}" width="${f(X(ei)-X(i))}" height="${H-padT-padB}"/>`; }
-    }});
-    // เส้นเป้า (ตรงจาก 0 ที่ 1 ต.ค. ถึงเป้าที่ 30 ก.ย.)
-    let tg="";
-    if(target){
-      tg=`<path class="tg" d="M${f(X(0))},${f(Y(0))} L${f(X(nD-1))},${f(Y(target))}"><title>เป้า ${r1(target)} ชม.</title></path>`
-        +`<path class="tg95" d="M${f(X(0))},${f(Y(0))} L${f(X(nD-1))},${f(Y(target*0.95))}"><title>95% = ${r1(target*0.95)} ชม.</title></path>`
-        +`<text class="tgl" x="${f(X(nD-1)+4)}" y="${f(Y(target)+3)}" fill="#D32F2F">${Math.round(target)}</text>`
-        +`<text class="tgl" x="${f(X(nD-1)+4)}" y="${f(Y(target*0.95)+12)}" fill="#2E9E44">${Math.round(target*0.95)}</text>`;
-    }
-    // เส้นจริง
-    let ln="", area="", dots="";
-    if(last>=0){
-      for(let i=0;i<=last;i++) ln+=(i?"L":"M")+f(X(i))+","+f(Y(cum[i]))+" ";
-      area=`<path class="ar" d="M${f(X(0))},${f(Y(0))} ${ln.replace(/^M/,"L")} L${f(X(last))},${f(Y(0))} Z"/>`;
-      for(let i=0;i<=last;i++){ const endM = i===last || days[i+1]?.endsWith("-01");
-        if(endM) dots+=`<circle class="dot" cx="${f(X(i))}" cy="${f(Y(cum[i]))}" r="3.5"><title>${Number(days[i].slice(8))} ${TH_MON[Number(days[i].slice(5,7))-1]} · สะสม ${r1(cum[i])} ชม.${target?` · เป้า ณ วันนั้น ${r1(target*(i+1)/nD)}`:""}</title></circle>`; }
-    }
-    chart.innerHTML=`<svg viewBox="0 0 ${W} ${H}" style="width:${W}px">
-      ${band}${grid}${xl}${tg}${area}<path class="ln" d="${ln.trim()}"/>${dots}</svg>`;
+    chart.innerHTML=fySvg(Math.max(640,(chart.clientWidth||900)-24),230);
+    chart.querySelector("svg").style.width=chart.querySelector("svg").getAttribute("width")+"px";
+  }
+
+  // ---------- Export กราฟ → Excel (ไฟล์มีแค่กราฟนี้ เป็นภาพคมชัด) ----------
+  const EXPORT_CSS=`text{font-family:Tahoma,"Leelawadee UI","Thonburi",sans-serif}
+    .ln{fill:none;stroke:#245073;stroke-width:2.5;stroke-linejoin:round;stroke-linecap:round}
+    .ar{fill:#245073;opacity:.12} .dot{fill:#245073} .grid{stroke:#dce2ea;stroke-width:1}
+    .axt{fill:#5d6b7e;font-size:10px} .tg{fill:none;stroke:#D32F2F;stroke-width:2}
+    .tg95{fill:none;stroke:#2E9E44;stroke-width:2;stroke-dasharray:6 4} .mband{fill:#245073;opacity:.06}
+    .tgl{font-size:10px;font-weight:700} .tt{font-size:13px;font-weight:700;fill:#16202e} .lgt{font-size:11px;fill:#16202e}`;
+  let lastFy=null;
+  async function svgToPng(svg, W, H, scale=2){
+    const url=URL.createObjectURL(new Blob([svg],{type:"image/svg+xml"}));
+    try{
+      const img=new Image();
+      await new Promise((ok,bad)=>{ img.onload=ok; img.onerror=()=>bad(new Error("แปลงกราฟเป็นภาพไม่สำเร็จ")); img.src=url; });
+      const cv=document.createElement("canvas"); cv.width=W*scale; cv.height=H*scale;
+      const cx=cv.getContext("2d"); cx.scale(scale,scale); cx.drawImage(img,0,0,W,H);
+      return cv.toDataURL("image/png");
+    } finally { URL.revokeObjectURL(url); }
+  }
+  async function exportFyChart(btn){
+    if(!lastFy) return;
+    const { fy, actual, target, svg } = lastFy;
+    btn.disabled=true; const t0=btn.textContent; btn.textContent="กำลังสร้าง…";
+    try{
+      const W=1000, H=380;
+      const [ExcelJS, png]=await Promise.all([loadExcelJS(), svgToPng(svg(W,H,true),W,H)]);
+      const wb=new ExcelJS.Workbook();
+      const ws=wb.addWorksheet(`กราฟ ปีงบ ${fy}`,{ views:[{ showGridLines:false }] });
+      ws.getCell("A1").value=`ชั่วโมงบินรวมทุกเครื่อง — สะสมรายวัน ปีงบประมาณ ${fy}`;
+      ws.getCell("A1").font={ name:"Tahoma", size:14, bold:true };
+      ws.getCell("A2").value=`สะสมถึงวันนี้ ${r1(actual)} ชม.`+(target?` · เป้า ${r1(target)} ชม. · 95% = ${r1(target*0.95)} ชม. · ${Math.round(actual/target*100)}% ของเป้า`:"")
+        +` · ข้อมูล ณ ${new Date().toLocaleString("th-TH")}`;
+      ws.getCell("A2").font={ name:"Tahoma", size:10, color:{ argb:"FF5D6B7E" } };
+      ws.addImage(wb.addImage({ base64:png, extension:"png" }),{ tl:{ col:0, row:3 }, ext:{ width:W, height:H } });
+      const buf=await wb.xlsx.writeBuffer();
+      const url=URL.createObjectURL(new Blob([buf],{type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"}));
+      const a=document.createElement("a"); a.href=url; a.download=`กราฟชั่วโมงบิน ปีงบ ${fy}.xlsx`;
+      document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(url),30000);
+    }catch(e){ alert("Export ไม่สำเร็จ: "+(e.message||e)); }
+    finally{ btn.disabled=false; btn.textContent=t0; }
   }
 
   const mon=document.getElementById("mon");
