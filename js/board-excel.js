@@ -9,7 +9,7 @@
 import { isStby } from "./missions.js";
 import { orderMissions } from "./mission-sheet.js";
 
-const EXCELJS_URL = "https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js";
+const EXCELJS_URL = new URL("../vendor/exceljs-4.4.0.min.js", import.meta.url).href;   // เก็บในระบบเอง (vendor/README.md)
 const EXCELJS_SRI = "sha384-Pqp51FUN2/qzfxZxBCtF0stpc9ONI6MYZpVqmo8m20SoaQCzf+arZvACkLkirlPz";
 const TEMPLATE_URL = "assets/board-template.xlsx";
 

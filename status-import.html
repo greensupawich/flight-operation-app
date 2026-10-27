@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <!-- CSP: อนุญาตเฉพาะโดเมนที่ใช้จริง · เพิ่มโดเมนใหม่ (CDN/API) ต้องแก้ทุกหน้า -->
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' https://esm.sh https://cdnjs.cloudflare.com https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob: https://iljapjszrjuzjjbtxctu.supabase.co; media-src 'self' blob: https://iljapjszrjuzjjbtxctu.supabase.co; connect-src 'self' data: https://iljapjszrjuzjjbtxctu.supabase.co wss://iljapjszrjuzjjbtxctu.supabase.co https://esm.sh https://cdn.jsdelivr.net https://tessdata.projectnaptha.com; worker-src 'self' blob: https://cdn.jsdelivr.net; object-src 'none'; base-uri 'self'; form-action 'self'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob: https://iljapjszrjuzjjbtxctu.supabase.co; media-src 'self' blob: https://iljapjszrjuzjjbtxctu.supabase.co; connect-src 'self' data: https://iljapjszrjuzjjbtxctu.supabase.co wss://iljapjszrjuzjjbtxctu.supabase.co; worker-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Flight Operation · นำเข้าใบสถานภาพ บ.</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -11,7 +11,7 @@
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bai+Jamjuree:wght@600;700&family=IBM+Plex+Sans+Thai:wght@400;500;600&family=IBM+Plex+Mono:wght@500;600&display=swap">
 <link rel="stylesheet" href="css/style.css">
 <!-- OCR (ไทย+อังกฤษ) ทำงานในเบราว์เซอร์ทั้งหมด — ไฟล์ไม่ถูกส่งออกไปที่ไหน -->
-<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js"></script>
+<script src="vendor/tesseract-5.1.1/tesseract.min.js"></script>
 <style>
   main .wrap{max-width:1180px}
   .panel h3{font-family:"Bai Jamjuree",sans-serif;font-weight:600;font-size:16px;margin:0 0 4px}
@@ -112,8 +112,14 @@
   import { loadAircraft, setAircraftStatus, setAircraftStatusOn, loadDefects, saveDefects,
            loadChecks, saveChecks } from "./js/status.js";
   import { extractSheet, reconcile } from "./js/status-pdf.js";
-  import * as pdfjsLib from "https://cdn.jsdelivr.net/npm/pdfjs-dist@4.10.38/build/pdf.min.mjs";
-  pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dist@4.10.38/build/pdf.worker.min.mjs";
+  import * as pdfjsLib from "./vendor/pdfjs-4.10.38/pdf.min.mjs";
+  pdfjsLib.GlobalWorkerOptions.workerSrc = new URL("vendor/pdfjs-4.10.38/pdf.worker.min.mjs", location.href).href;
+  // OCR: ตัว worker / core (wasm) / ภาษา tha+eng เก็บในระบบเอง (vendor/README.md) — ไม่ดึงจาก CDN
+  const TESS = {
+    workerPath: new URL("vendor/tesseract-5.1.1/worker.min.js", location.href).href,
+    corePath:   new URL("vendor/tesseract-core-5.1.1/", location.href).href,
+    langPath:   new URL("vendor/tessdata/4.0.0_best_int", location.href).href,
+  };
 
   const profile = await requireAuth();
   if (profile) {
@@ -148,11 +154,11 @@
     // ---------- 2) OCR ----------
     let wTE = null, wEN = null, wTH = null;
     async function workers(onFull) {
-      if (!wTE) wTE = await Tesseract.createWorker(["tha", "eng"], 1, { logger: (m) => {
+      if (!wTE) wTE = await Tesseract.createWorker(["tha", "eng"], 1, { ...TESS, logger: (m) => {
         if (m.status === "recognizing text") onFull?.(m.progress);
         else if (/loading|initializ/.test(m.status)) pmsg.textContent = "กำลังเตรียมตัวอ่านภาษาไทย/อังกฤษ… (ครั้งแรกจะโหลดนานหน่อย)"; } });
-      if (!wEN) wEN = await Tesseract.createWorker("eng");
-      if (!wTH) wTH = await Tesseract.createWorker("tha");
+      if (!wEN) wEN = await Tesseract.createWorker("eng", 1, TESS);
+      if (!wTH) wTH = await Tesseract.createWorker("tha", 1, TESS);
     }
     const SCALE = { status: 3, defect: 2, checkName: 2, checkDate: 2 };
     function makeOcrCrop(src) {

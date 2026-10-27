@@ -26,7 +26,8 @@ const SUPABASE_ANON_KEY = CFG.key;
 
 // โหลด SDK จาก CDN แบบ ESM แล้ว export client ให้ไฟล์อื่นใช้
 // pin เวอร์ชันแน่นอน (กัน CDN ส่งโค้ดใหม่ที่ไม่ได้ตรวจมาแทน) — อัปเดตเมื่อจำเป็นเท่านั้น
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.117.2";
+// ไลบรารีเก็บในระบบเอง (vendor/) — ไม่โหลดจาก CDN ภายนอก (ดู vendor/README.md)
+import { createClient } from "../vendor/supabase-js-2.117.2.mjs";
 
 export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
   auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true },
