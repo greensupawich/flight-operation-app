@@ -1,9 +1,11 @@
 // =====================================================================
 //  pilot-month.js — หน้า "พ.": ตารางนักบิน × วันในเดือน
-//  แต่ละคน 3 แถว: (1) จำนวนเที่ยว (2) ชม.บินแต่ละเที่ยว เช่น "1.5, 2.0" (3) ข้อความที่กรอกเอง (crew_day_notes)
+//  แต่ละคน 4 แถว: (1) จำนวนเที่ยว (2) เลขเครื่องแต่ละเที่ยว เช่น "301, 313" (3) ชม.บินแต่ละเที่ยว เช่น "1.5, 2.0"
+//                (4) ข้อความที่กรอกเอง (crew_day_notes)
 //  • นักบิน = ทะเบียน crew_members ตำแหน่ง IP / P / CP ที่ใช้งานอยู่
 //  • เที่ยว = ภารกิจที่มีชื่อในลูกเรือตำแหน่งนักบิน (AC/IP/P/CP/N) · ไม่นับ STBY และภารกิจที่ยกเลิก
 //  • ชม. = total_hours จากรายงานหลังบินของภารกิจนั้น · ยังไม่รายงาน = "-"
+//  • เครื่อง = 3 ตัวท้ายของทะเบียน (60301 → 301) · ภารกิจที่ยังไม่ระบุเครื่อง = "-"
 // =====================================================================
 import { supabase } from "./supabase.js";
 import { isStby, PILOT_ROLES } from "./missions.js";
@@ -17,6 +19,7 @@ const pad = (n) => String(n).padStart(2, "0");
 export const ymd = (y, m0, d) => `${y}-${pad(m0 + 1)}-${pad(d)}`;
 export const daysIn = (y, m0) => new Date(y, m0 + 1, 0).getDate();
 export const fmtH = (h) => (h == null ? "-" : Number(h).toFixed(1));
+export const shortTail = (t) => { t = String(t || "").trim(); return !t ? "-" : /^\d{4,}$/.test(t) ? t.slice(-3) : t; };
 
 // ---------- โหลดข้อมูลทั้งเดือน ----------
 export async function loadMonth(y, m0) {
@@ -25,7 +28,7 @@ export async function loadMonth(y, m0) {
     supabase.from("crew_members").select("id,code,full_name,position")
       .eq("active", true).in("position", ROSTER_POSITIONS),
     supabase.from("missions")
-      .select("id,mission_date,kind,status,callsign,takeoff_time,mission_crew(crew_member_id,position),post_flight_reports(total_hours)")
+      .select("id,mission_date,kind,status,callsign,takeoff_time,aircraft(tail_number),mission_crew(crew_member_id,position),post_flight_reports(total_hours)")
       .gte("mission_date", first).lte("mission_date", last),
     supabase.from("crew_day_notes").select("crew_member_id,log_date,note")
       .gte("log_date", first).lte("log_date", last),
@@ -45,7 +48,7 @@ export function buildMonth(y, m0, { crew, missions, notes, holidays, notesMissin
   const pilots = (crew || []).sort((a, b) =>
     order(a.position) - order(b.position) || String(a.code).localeCompare(String(b.code), "th", { numeric: true }));
 
-  // flights: Map(crew_member_id → Map(day → [{hours, callsign, tot}]))
+  // flights: Map(crew_member_id → Map(day → [{hours, callsign, tot, ac}]))
   const flights = new Map();
   for (const m of missions || []) {
     if (isStby(m.kind) || m.status === "cancelled") continue;
@@ -59,7 +62,7 @@ export function buildMonth(y, m0, { crew, missions, notes, holidays, notesMissin
       if (!flights.has(id)) flights.set(id, new Map());
       const byDay = flights.get(id);
       if (!byDay.has(day)) byDay.set(day, []);
-      byDay.get(day).push({ hours, callsign: m.callsign || "", tot: m.takeoff_time || "" });
+      byDay.get(day).push({ hours, callsign: m.callsign || "", tot: m.takeoff_time || "", ac: shortTail(m.aircraft?.tail_number) });
     }
   }
   for (const byDay of flights.values())
@@ -91,9 +94,10 @@ export function cellValues(data, pilot, day) {
   const list = data.flights.get(pilot.id)?.get(day) || [];
   return {
     count: list.length || "",
+    ac: list.length ? list.map((f) => f.ac).join(", ") : "",
     hours: list.length ? list.map((f) => fmtH(f.hours)).join(", ") : "",
     note: data.noteMap.get(`${pilot.id}|${day}`) || "",
-    tip: list.map((f) => `${f.callsign} T/O ${f.tot} · ${fmtH(f.hours)} ชม.`).join("\n"),
+    tip: list.map((f) => `${f.callsign} · ${f.ac} · T/O ${f.tot} · ${fmtH(f.hours)} ชม.`).join("\n"),
   };
 }
 export function totals(data, pilot) {
@@ -128,10 +132,15 @@ export function monthTableHTML(data, { editable = false } = {}) {
     const hoursHTML = (s) => esc(s).replace(/(^|, )-(?=,|$)/g, '$1<span class="pend">-</span>');
     return `
     <tr class="r0">
-      <td class="name" rowspan="3">${esc(p.full_name)}<span class="code">${esc(p.code || "")} · ${esc(p.position || "")}</span></td>
+      <td class="name" rowspan="4">${esc(p.full_name)}<span class="code">${esc(p.code || "")} · ${esc(p.position || "")}</span></td>
       <td class="lab">เที่ยว</td>
       ${v.map((c, i) => `<td class="d cnt${offCls(i + 1)}" title="${esc(c.tip)}">${c.count}</td>`).join("")}
       <td class="tot">${t.n || ""}</td>
+    </tr>
+    <tr>
+      <td class="lab">เครื่อง</td>
+      ${v.map((c, i) => `<td class="d ac${offCls(i + 1)}" title="${esc(c.tip)}">${esc(c.ac)}</td>`).join("")}
+      <td class="tot"></td>
     </tr>
     <tr>
       <td class="lab">ชม.</td>
@@ -194,35 +203,35 @@ export async function exportMonthXlsx(data) {
   }
   ws.mergeCells(2, lastCol, 3, lastCol); head(2, lastCol, "รวม");
 
-  const LABELS = ["เที่ยว", "ชม.", "หมายเหตุ"];
+  const LABELS = ["เที่ยว", "เครื่อง", "ชม.", "หมายเหตุ"], NR = LABELS.length, LAST = NR - 1;
   pilots.forEach((p, i) => {
-    const r0 = 4 + i * 3;
-    ws.mergeCells(r0, 1, r0 + 2, 1);
+    const r0 = 4 + i * NR;
+    ws.mergeCells(r0, 1, r0 + LAST, 1);
     const nameCell = ws.getCell(r0, 1);
     nameCell.value = `${p.full_name}\n${p.code || ""} · ${p.position || ""}`;
     nameCell.style = { font: { name: FONT, size: 14, bold: true }, alignment: { vertical: "middle", wrapText: true },
                        border: { left: med, right: thin, top: med, bottom: med } };
     const t = totals(data, p);
-    for (let k = 0; k < 3; k++) {
+    for (let k = 0; k < NR; k++) {
       const r = r0 + k;
-      ws.getRow(r).height = k === 2 ? 24 : 20;
+      ws.getRow(r).height = k === LAST ? 24 : 20;
       const border = (c) => ({ left: c === 1 || c === lastCol ? med : thin, right: c === lastCol ? med : thin,
-                               top: k === 0 ? med : thin, bottom: k === 2 ? med : thin });
+                               top: k === 0 ? med : thin, bottom: k === LAST ? med : thin });
       const base = (c, extra = {}) => ({ font: { name: FONT, size: 14 }, alignment: center, border: border(c), ...extra });
       const lab = ws.getCell(r, 2); lab.value = LABELS[k]; lab.style = base(2, { font: { name: FONT, size: 13, color: { argb: "FF5D6B7E" } } });
       for (let d = 1; d <= days; d++) {
         const v = cellValues(data, p, d);
         const cell = ws.getCell(r, 2 + d);
-        cell.value = k === 0 ? (v.count || null) : k === 1 ? (v.hours || null) : (v.note || null);
+        cell.value = [v.count, v.ac, v.hours, v.note][k] || null;
         cell.style = base(2 + d, {
           ...(isOffDay(data, d) ? { fill: OFF_FILL } : {}),
-          ...(k === 1 ? { font: { name: FONT, size: 12 } } : {}),
-          ...(k === 2 ? { font: { name: FONT, size: 12 } } : {}),
+          ...(k > 0 ? { font: { name: FONT, size: 12 } } : {}),
         });
       }
       const tot = ws.getCell(r, lastCol);
-      tot.value = k === 0 ? (t.n || null) : k === 1 ? (t.n && t.pending < t.n ? Number(t.h.toFixed(1)) : t.n ? "-" : null) : (t.pending ? `รอรายงาน ${t.pending}` : null);
-      tot.style = base(lastCol, { font: { name: FONT, size: 14, bold: k < 2 }, ...(k === 1 ? { numFmt: "0.0" } : {}) });
+      tot.value = k === 0 ? (t.n || null) : k === 1 ? null
+        : k === 2 ? (t.n && t.pending < t.n ? Number(t.h.toFixed(1)) : t.n ? "-" : null) : (t.pending ? `รอรายงาน ${t.pending}` : null);
+      tot.style = base(lastCol, { font: { name: FONT, size: 14, bold: k === 0 || k === 2 }, ...(k === 2 ? { numFmt: "0.0" } : {}) });
     }
   });
 
