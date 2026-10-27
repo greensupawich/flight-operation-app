@@ -174,6 +174,9 @@ export function buildXlsx(data, kindLabel = (k) => k) {
       "วันที่": m.mission_date, "Callsign": m.callsign || "", "ภารกิจ": m.mission_name || "", "ประเภท": kindLabel(m.kind),
       "เครื่อง": ac(m.aircraft), "เส้นทาง": m.route || "", "BRIEF": m.brief_time || "", "T/O": m.takeoff_time || "",
       "สถานะ": m.status || "", "ผลภารกิจ": r.result || "", "ชม.บิน": r.total_hours != null ? Number(r.total_hours) : "",
+      // วัง/เดโชชัยที่ติ๊กคณะวัง: ชม.ขาที่ไม่มีคณะ นับเป็นประเภทนี้ (migration_37)
+      "ชม.ไม่มีคณะ นับเป็น": ["palace", "dechochai"].includes(m.kind) && (m.flight_legs || []).some((l) => l.vip)
+        ? kindLabel(r.rest_kind || "training") : "",
       "จุดจอดกลับ": r.parking_return || "", "หมายเหตุรายงาน": r.remarks || "",
       "ลูกเรือ": (m.mission_crew || []).slice().sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0))
         .map((c) => `${c.position || ""}: ${c.crew_name || ""}`).join(", "),

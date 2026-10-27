@@ -137,13 +137,17 @@
 
   // ---------- ดึงชั่วโมงบินทั้งหมด (ผูกกับวันที่ + ประเภทภารกิจ) ----------
   let { data: reps, error: repErr } = await supabase.from("post_flight_reports")
-    .select("total_hours, missions(mission_date, kind, flight_legs(hours, vip))");
+    .select("total_hours, rest_kind, missions(mission_date, kind, flight_legs(hours, vip))");
+  if (repErr) {   // ยังไม่ได้รัน migration_37 (ไม่มี rest_kind) → ที่เหลือนับเป็นฝึกบิน
+    ({ data: reps, error: repErr } = await supabase.from("post_flight_reports")
+      .select("total_hours, missions(mission_date, kind, flight_legs(hours, vip))"));
+  }
   if (repErr) {   // ยังไม่ได้รัน migration_26 (ไม่มีคอลัมน์ vip) → โหลดแบบเดิม
     ({ data: reps, error: repErr } = await supabase.from("post_flight_reports")
       .select("total_hours, missions(mission_date, kind)"));
   }
   if (repErr) console.warn("reports:", repErr.message);
-  // ภารกิจวัง/เดโชชัยที่ติ๊ก "คณะวัง" รายขา: ชม.ขาที่ติ๊ก → ประเภทภารกิจ · ส่วนที่เหลือ → ฝึกบิน
+  // ภารกิจวัง/เดโชชัยที่ติ๊ก "คณะวัง" รายขา: ชม.ขาที่ติ๊ก → ประเภทภารกิจ · ส่วนที่เหลือ → rest_kind (ค่าเริ่มต้น ฝึกบิน, migration_37)
   //  (เที่ยวนับในประเภทภารกิจ · ไม่มีขาไหนติ๊ก = นับทั้งภารกิจเป็นประเภทเดิม) — ตรงกับ archive_purge_month
   const VIP_KINDS=["palace","dechochai"];
   const rows=[];
@@ -154,7 +158,7 @@
     if(VIP_KINDS.includes(kind) && legs.some(l=>l.vip)){
       const vh=legs.reduce((t,l)=>t+(l.vip?fx(l.hours):0),0);
       rows.push({ date, kind, h:vh, f:1 });
-      if(total>vh) rows.push({ date, kind:"training", h:total-vh, f:0 });
+      if(total>vh) rows.push({ date, kind:r.rest_kind||"training", h:total-vh, f:0 });
     } else rows.push({ date, kind, h:total, f:1 });
   }
 

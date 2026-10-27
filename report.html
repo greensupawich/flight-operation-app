@@ -46,6 +46,8 @@
   .leg.is-vip{background:var(--accent-soft);border-radius:8px}
   .vip-split{display:flex;gap:16px;flex-wrap:wrap;font-size:13px;margin-top:8px;color:var(--muted)}
   .vip-split b{color:var(--ink);font-variant-numeric:tabular-nums}
+  .rest-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:13px;margin-top:8px;color:var(--muted)}
+  .rest-row select{width:auto;min-width:160px}
   .result-grid{display:grid;grid-template-columns:1.3fr 1fr 1fr;gap:12px;align-items:end}
   @media(max-width:640px){ .result-grid{grid-template-columns:1fr} }
   .result-grid label{margin:0 0 5px}
@@ -121,7 +123,7 @@
       <div class="routebox"><span class="lbl">เส้นทางบิน</span><span id="routeTxt">-</span></div>
 
       <p class="hint" id="vipHint" hidden>👑 ภารกิจนี้เป็น<b id="vipKind"></b> — ติ๊ก <b>คณะวัง</b> ในขาที่มีคณะอยู่บนเครื่อง ·
-        ชม.ขาที่ติ๊กนับเป็นภารกิจนี้ในหน้าสถิติ ขาที่เหลือนับเป็น <b>ฝึกบิน</b></p>
+        ชม.ขาที่ติ๊กนับเป็นภารกิจนี้ในหน้าสถิติ ขาที่เหลือนับเป็นประเภทที่เลือกด้านล่าง (ค่าเริ่มต้น <b>ฝึกบิน</b>)</p>
       <div id="legsWrap">
       <div class="leg-head">
         <span>#</span><span>จาก</span><span></span><span>ถึง</span><span>ชม.</span><span class="vip-h" hidden style="text-align:center">คณะวัง</span><span></span>
@@ -135,6 +137,8 @@
         <span class="val" id="totalVal">0.0</span>
       </div>
       <div class="vip-split" id="vipSplit" hidden></div>
+      <label class="rest-row" id="restRow" hidden>ชม.ขาที่ไม่มีคณะวัง นับเป็น
+        <select id="restKind"></select></label>
     </div>
 
     <!-- หมายเหตุ -->
@@ -187,7 +191,7 @@
            loadSafety, saveSafety } from "./js/reports.js";
   import { loadMissionMedia, uploadMany, deleteMedia, thumbsHtml, bindThumbs, pickFiles,
            checkFile, fmtSize } from "./js/media.js";
-  import { esc } from "./js/missions.js";
+  import { esc, KINDS } from "./js/missions.js";
 
   const profile = await requireAuth();
   if (profile) {
@@ -218,7 +222,14 @@
       document.getElementById("vipHint").hidden = false;
       document.getElementById("vipKind").textContent = VIP_KINDS[m.kind];
       document.querySelector(".vip-h").hidden = false;
+      // ชม.ที่เหลือ (ขาที่ไม่ติ๊กคณะวัง) → เลือกประเภทได้ · ค่าเริ่มต้น ฝึกบิน (migration_37)
+      const sel = document.getElementById("restKind");
+      sel.innerHTML = ["training", "rtaf", "fcf", "palace", "dechochai"].filter(k => k !== m.kind)
+        .map(k => `<option value="${k}">${esc(KINDS[k])}</option>`).join("");
+      sel.addEventListener("change", () => recalcTotal());
+      document.getElementById("restRow").hidden = false;
     }
+    const restSel = document.getElementById("restKind");
     const fromRoute = routeToLegs(m.route);          // ขาที่คิดจากเส้นทางบิน
     const saved = (await loadLegs(missionId)).map(l => ({
       from_point: (l.from_point || "").trim(),
@@ -260,7 +271,7 @@
         const split = document.getElementById("vipSplit");
         split.hidden = false;
         split.innerHTML = any
-          ? `<span>👑 ${VIP_KINDS[m.kind]} <b>${fmt(vh)}</b> ชม.</span><span>ฝึกบิน <b>${fmt(Math.max(t - vh, 0))}</b> ชม.</span>`
+          ? `<span>👑 ${VIP_KINDS[m.kind]} <b>${fmt(vh)}</b> ชม.</span><span>${esc(KINDS[restSel.value] || "ฝึกบิน")} <b>${fmt(Math.max(t - vh, 0))}</b> ชม.</span>`
           : `<span>ยังไม่ได้ติ๊กขาที่มีคณะวัง — ตอนนี้นับทั้งหมดเป็น${VIP_KINDS[m.kind]}</span>`;
       }
       if (t > 0) {                                     // มี ชม.รายขา → ใช้ผลรวมรายขา
@@ -356,6 +367,9 @@
     if (existing) {
       document.getElementById("remarks").value = existing.remarks || "";
       resultSel.value = existing.result || "";
+      if (vipMode && existing.rest_kind && restSel.querySelector(`option[value="${existing.rest_kind}"]`)) {
+        restSel.value = existing.rest_kind; recalcTotal();
+      }
       if (!legs.some(l => Number(l.hours)) && Number(existing.total_hours)) totalInput.value = manualTotal = fmt(Number(existing.total_hours));
     }
     paintResult();
@@ -528,6 +542,7 @@
       const result = document.getElementById("resultSel").value;
       const repErr = await saveReport(missionId, total, document.getElementById("remarks").value.trim(), {
         result, parking_return: document.getElementById("parkRet").value.toUpperCase(),
+        rest_kind: vipMode ? restSel.value : "training",
       });
       if (repErr && !repErr.warning) { btn.disabled = false; btn.textContent = "บันทึกรายงาน";
         msg.className = "msg err"; msg.textContent = "บันทึกรายงานไม่สำเร็จ: " + repErr.message; return; }

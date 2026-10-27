@@ -66,7 +66,14 @@ export async function saveReport(missionId, totalHours, remarks, extra = {}) {
   const { data: { session } } = await supabase.auth.getSession();
   const row = { mission_id: missionId, total_hours: totalHours, remarks, created_by: session?.user?.id,
                 result: extra.result || null, parking_return: (extra.parking_return || "").trim() || null };
+  if (extra.rest_kind) row.rest_kind = extra.rest_kind;   // วัง/เดโชชัย: ชม.ขาที่ไม่มีคณะ นับเป็นประเภทนี้ (migration_37)
   let { error } = await supabase.from("post_flight_reports").upsert(row, { onConflict: "mission_id" });
+  // ยังไม่ได้รัน migration_37 → บันทึกโดยไม่มี rest_kind (ที่เหลือนับเป็นฝึกบินตามเดิม) แล้วแจ้งเตือน
+  if (error && /rest_kind/.test(error.message)) {
+    delete row.rest_kind;
+    ({ error } = await supabase.from("post_flight_reports").upsert(row, { onConflict: "mission_id" }));
+    if (!error && extra.rest_kind !== "training") return { warning: "บันทึกแล้ว แต่ประเภทของ ชม.ที่เหลือยังไม่ถูกเก็บ (นับเป็นฝึกบิน) — ต้องรัน migration_37_vip_rest_kind.sql" };
+  }
   // ยังไม่ได้รัน migration_16 → บันทึกเฉพาะข้อมูลเดิม แล้วแจ้งเตือน
   if (error && /result|parking_return/.test(error.message)) {
     delete row.result; delete row.parking_return;
