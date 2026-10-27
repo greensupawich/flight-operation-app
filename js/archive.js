@@ -6,6 +6,7 @@
 //  ต้องโหลด JSZip / SheetJS (global JSZip, XLSX) ในหน้า archive.html
 // =====================================================================
 import { supabase } from "./supabase.js";
+import { defectLabel } from "./reports.js";
 import { BUCKET, removeFiles } from "./media.js";
 
 export const FORMAT = "flight-operation-archive";
@@ -177,6 +178,9 @@ export function buildXlsx(data, kindLabel = (k) => k) {
       // วัง/เดโชชัยที่ติ๊กคณะวัง: ชม.ขาที่ไม่มีคณะ นับเป็นประเภทนี้ (migration_37)
       "ชม.ไม่มีคณะ นับเป็น": ["palace", "dechochai"].includes(m.kind) && (m.flight_legs || []).some((l) => l.vip)
         ? kindLabel(r.rest_kind || "training") : "",
+      // ระบบที่ขัดข้อง (migration_39): ว่าง = ยังไม่ระบุ
+      "ระบบที่ขัดข้อง": Array.isArray(r.defect_systems)
+        ? (r.defect_systems.length ? r.defect_systems.map(defectLabel).join(", ") : "ไม่มีข้อขัดข้อง") : "",
       "จุดจอดกลับ": r.parking_return || "", "หมายเหตุรายงาน": r.remarks || "",
       "ลูกเรือ": (m.mission_crew || []).slice().sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0))
         .map((c) => `${c.position || ""}: ${c.crew_name || ""}`).join(", "),

@@ -75,6 +75,16 @@
   .sfitem .sf-route{font-size:12px;color:var(--faint);margin-top:3px}
   .sfitem .go{float:inline-end;font-size:12px;color:var(--primary)}
   .legend{display:flex;gap:12px;flex-wrap:wrap;margin:8px 0 0;font-size:12px;color:var(--muted)}
+  /* ---- ข้อขัดข้องแยกตามระบบ ---- */
+  .ds-range{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-inline-start:auto;font-size:13px}
+  .ds-range input{width:auto}
+  .ds-range .btn{white-space:nowrap}
+  table.ds td.n,table.ds th.n{text-align:end;font-variant-numeric:tabular-nums;white-space:nowrap}
+  table.ds td.bar{width:40%;min-width:120px}
+  table.ds .bar i{display:block;height:10px;border-radius:5px;background:var(--crit);min-width:2px}
+  table.ds tr.zero td{color:var(--faint)}
+  table.ds tr.zero .bar i{display:none}
+  .kpi .card.muted .n{color:var(--faint)}
   .legend .sw{display:inline-block;width:14px;height:14px;border-radius:4px;margin-inline-end:5px;vertical-align:-2px;border:1px solid var(--line)}
 </style>
 </head>
@@ -115,6 +125,20 @@
     </div>
     <div class="pager" id="discPager"></div>
 
+    <div class="stat-head" style="margin:26px 0 8px">
+      <h3 class="sec" style="margin:0">ข้อขัดข้อง — แยกตามระบบ</h3>
+      <div class="ds-range">
+        <label for="dsFrom" style="margin:0">ตั้งแต่</label><input type="date" id="dsFrom">
+        <label for="dsTo" style="margin:0">ถึง</label><input type="date" id="dsTo">
+        <button class="btn sm ghost" id="dsMonth" title="ใช้เดือนที่เลือกด้านบน">เดือนที่เลือก</button>
+        <button class="btn sm ghost" id="dsFy" title="1 ต.ค. – วันนี้">ปีงบนี้</button>
+      </div>
+    </div>
+    <div class="kpi" id="dsKpi"></div>
+    <div class="tablewrap">
+      <table class="ds"><thead><tr><th>ระบบ</th><th class="n">เที่ยวที่ขัดข้อง</th><th class="n">% ของเที่ยวที่รายงาน</th><th></th></tr></thead>
+      <tbody id="dsBody"><tr><td colspan="4" class="empty">กำลังโหลด…</td></tr></tbody></table>
+    </div>
     <h3 class="sec">⚠️ รายงานอันตราย (Safety Report)</h3>
     <div id="safetyList"><div class="empty">กำลังโหลด…</div></div>
     <div class="pager" id="safetyPager"></div>
@@ -127,6 +151,7 @@
   import { supabase } from "./js/supabase.js";
   import { loadExcelJS } from "./js/board-excel.js";
   import { KINDS, KIND_COLORS, DEFAULT_KIND, isStby } from "./js/missions.js";
+  import { DEFECT_SYSTEMS, defectLabel } from "./js/reports.js";
 
   const profile = await requireAuth();
   if (!profile) throw new Error("no auth");
@@ -532,6 +557,68 @@
     }
   }
   renderSafety();
+
+  // ---------- ข้อขัดข้องแยกตามระบบ (migration_39) — เลือกช่วงวันที่ ----------
+  //  ข้อมูลดิบ: post_flight_reports.defect_systems (null = ยังไม่ระบุ · [] = ไม่มีข้อขัดข้อง)
+  //  เดือนที่เคลียร์แล้ว: stats_defect_daily ('_reported' / '_any' / รหัสระบบ) — ใช้เฉพาะวันที่ไม่มีข้อมูลดิบ
+  const dsRaw=[]; let dsErr=null;
+  { const { data, error } = await supabase.from("post_flight_reports").select("defect_systems, missions(mission_date)");
+    if (error) dsErr=/defect_systems/.test(error.message||"") ? "ยังไม่มีช่องระบบที่ขัดข้อง — ต้องรัน db/migration_39_defect_systems.sql ก่อน" : error.message;
+    for (const r of data||[]) { const d=r.missions?.mission_date; if (d) dsRaw.push({ date:String(d).slice(0,10), sys:r.defect_systems }); } }
+  const dsArch=[];
+  { const { data, error } = await supabase.from("stats_defect_daily").select("stat_date,system,flights");
+    if (error) console.warn("stats_defect_daily:", error.message);
+    for (const x of data||[]) { const date=String(x.stat_date).slice(0,10); if (!rawDates.has(date)) dsArch.push({ date, system:x.system, n:Number(x.flights)||0 }); } }
+
+  const dsFrom=document.getElementById("dsFrom"), dsTo=document.getElementById("dsTo");
+  const fyStart=()=>{ const t=new Date(), y=t.getMonth()>=9 ? t.getFullYear() : t.getFullYear()-1; return `${y}-10-01`; };
+  dsFrom.value=fyStart(); dsTo.value=ymd(new Date());
+
+  function renderDefects(){
+    let a=dsFrom.value, b=dsTo.value;
+    if (a && b && a>b) { [a,b]=[b,a]; dsFrom.value=a; dsTo.value=b; }
+    const inR=(d)=>(!a||d>=a)&&(!b||d<=b);
+    let total=0, reported=0, any=0;
+    const per=new Map(DEFECT_SYSTEMS.map(([c])=>[c,0]));
+    for (const r of dsRaw) {
+      if (!inR(r.date)) continue;
+      total++;
+      if (!Array.isArray(r.sys)) continue;
+      reported++;
+      const set=new Set(r.sys);
+      if (set.size) any++;
+      set.forEach(c=>per.set(c,(per.get(c)||0)+1));
+    }
+    for (const x of dsArch) {
+      if (!inR(x.date)) continue;
+      if (x.system==="_reported") { reported+=x.n; total+=x.n; }
+      else if (x.system==="_any") any+=x.n;
+      else per.set(x.system,(per.get(x.system)||0)+x.n);
+    }
+    const pct=(n)=>reported ? Math.round(n/reported*1000)/10 : 0;
+    const none=reported-any, unspec=total-reported;
+    document.getElementById("dsKpi").innerHTML=`
+      <div class="card"><div class="n">${reported}</div><div class="l">เที่ยวที่รายงาน</div></div>
+      <div class="card"><div class="n" style="color:var(--crit)">${any}</div><div class="l">เที่ยวที่เกิดข้อขัดข้อง${reported?` · ${pct(any)}%`:""}</div></div>
+      <div class="card"><div class="n" style="color:var(--good)">${none}</div><div class="l">ไม่มีข้อขัดข้อง</div></div>
+      ${unspec?`<div class="card muted" title="รายงานหลังบินที่ยังไม่ได้เลือกระบบ (เช่น รายงานก่อนมีช่องนี้) — ไม่นับใน %"><div class="n">${unspec}</div><div class="l">ยังไม่ระบุระบบ</div></div>`:""}`;
+    const body=document.getElementById("dsBody");
+    if (dsErr) { body.innerHTML=`<tr><td colspan="4" class="empty">${esc(dsErr)}</td></tr>`; return; }
+    const max=Math.max(1,...per.values());
+    body.innerHTML=[...per].map(([c,n])=>`<tr class="${n?"":"zero"}"><td>${esc(defectLabel(c))}</td>
+      <td class="n">${n||"·"}</td><td class="n">${n?pct(n)+"%":"·"}</td>
+      <td class="bar"><i style="width:${n?Math.max(n/max*100,2):0}%"></i></td></tr>`).join("")
+      + `<tr class="sum"><td><b>เที่ยวที่เกิดข้อขัดข้อง</b> <span class="muted" style="font-size:11px">(1 เที่ยวขัดข้องได้หลายระบบ)</span></td>
+         <td class="n"><b>${any}</b></td><td class="n"><b>${reported?pct(any)+"%":"·"}</b></td><td></td></tr>`;
+  }
+  dsFrom.addEventListener("change", renderDefects);
+  dsTo.addEventListener("change", renderDefects);
+  document.getElementById("dsFy").addEventListener("click", ()=>{ dsFrom.value=fyStart(); dsTo.value=ymd(new Date()); renderDefects(); });
+  document.getElementById("dsMonth").addEventListener("click", ()=>{
+    const ym=document.getElementById("mon").value; if (!ym) return;
+    const [y,m]=ym.split("-").map(Number);
+    dsFrom.value=`${ym}-01`; dsTo.value=`${ym}-${String(daysIn(y,m)).padStart(2,"0")}`; renderDefects(); });
+  renderDefects();
 </script>
 </body>
 </html>

@@ -48,6 +48,17 @@
   .vip-split b{color:var(--ink);font-variant-numeric:tabular-nums}
   .rest-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:13px;margin-top:8px;color:var(--muted)}
   .rest-row select{width:auto;min-width:160px}
+  /* ระบบที่ขัดข้อง (เลือกได้หลายระบบ) */
+  .dsys-lbl{font-weight:600;font-size:13.5px;margin:0 0 8px}
+  .dsys-lbl .req{color:var(--crit)}
+  .dsys{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:6px 14px;margin-bottom:14px}
+  .dsys label{display:flex;align-items:center;gap:8px;margin:0;font-size:13px;color:var(--ink);cursor:pointer;
+              padding:6px 8px;border:1px solid var(--line);border-radius:8px;background:var(--surface)}
+  .dsys label:has(input:checked){border-color:var(--primary);background:var(--primary-soft)}
+  .dsys label.none{grid-column:1/-1;font-weight:600}
+  .dsys label.none:has(input:checked){border-color:var(--good);background:var(--good-soft)}
+  .dsys input{width:18px;height:18px;margin:0;accent-color:var(--primary);flex-shrink:0}
+  .dsys.missing label{border-color:var(--crit)}
   .result-grid{display:grid;grid-template-columns:1.3fr 1fr 1fr;gap:12px;align-items:end}
   @media(max-width:640px){ .result-grid{grid-template-columns:1fr} }
   .result-grid label{margin:0 0 5px}
@@ -150,7 +161,10 @@
     <!-- ข้อขัดข้อง -->
     <div class="panel" style="margin-top:16px">
       <h3>🔧 ข้อขัดข้อง</h3>
-      <p class="hint">บันทึกแล้วจะเข้าไปรวมในสถิติของเครื่องลำนี้ · แนบรูป/วีดีโอได้ (รูปย่ออัตโนมัติ · วีดีโอไม่เกิน 50 MB)</p>
+      <div class="dsys-lbl" id="dsysTop">Defect / ระบบที่ขัดข้อง <span class="req">*</span>
+        <span class="muted" style="font-weight:400;font-size:12px">— เลือกได้หลายระบบ</span></div>
+      <div class="dsys" id="dsys"></div>
+      <p class="hint">รายละเอียดข้อขัดข้อง: บันทึกแล้วจะเข้าไปรวมในสถิติของเครื่องลำนี้ · แนบรูป/วีดีโอได้ (รูปย่ออัตโนมัติ · วีดีโอไม่เกิน 50 MB)</p>
       <div id="discList"></div>
       <div style="display:flex;gap:8px;align-items:end;margin-top:10px">
         <div style="flex:1"><label style="margin-top:0">รายละเอียด</label>
@@ -186,7 +200,7 @@
 <script type="module">
   import { requireAuth } from "./js/auth.js";
   import { renderTopbar } from "./js/ui.js";
-  import { getMission, routeToLegs, loadLegs, replaceLegs, saveReport, getReport,
+  import { getMission, routeToLegs, loadLegs, replaceLegs, saveReport, getReport, DEFECT_SYSTEMS,
            loadDiscrepancies, addDiscrepancy, deleteDiscrepancy,
            loadSafety, saveSafety } from "./js/reports.js";
   import { loadMissionMedia, uploadMany, deleteMedia, thumbsHtml, bindThumbs, pickFiles,
@@ -402,6 +416,21 @@
       await reloadMedia();
     }
 
+    // ---------- ระบบที่ขัดข้อง (migration_39) — "ไม่มีข้อขัดข้อง" เลือกคู่กับระบบอื่นไม่ได้ ----------
+    const dsysBox = document.getElementById("dsys");
+    dsysBox.innerHTML = `<label class="none"><input type="checkbox" data-none> ไม่มีข้อขัดข้อง</label>` +
+      DEFECT_SYSTEMS.map(([c, l]) => `<label><input type="checkbox" data-sys="${esc(c)}"> ${esc(l)}</label>`).join("");
+    const noneCb = dsysBox.querySelector("[data-none]");
+    const sysCbs = [...dsysBox.querySelectorAll("[data-sys]")];
+    noneCb.addEventListener("change", () => { if (noneCb.checked) sysCbs.forEach(c => c.checked = false); dsysBox.classList.remove("missing"); });
+    sysCbs.forEach(c => c.addEventListener("change", () => { if (c.checked) noneCb.checked = false; dsysBox.classList.remove("missing"); }));
+    if (Array.isArray(existing?.defect_systems)) {
+      noneCb.checked = existing.defect_systems.length === 0;
+      sysCbs.forEach(c => c.checked = existing.defect_systems.includes(c.dataset.sys));
+    }
+    // null = ยังไม่ได้เลือกอะไร · [] = ไม่มีข้อขัดข้อง
+    const defectSystems = () => noneCb.checked ? [] : (sysCbs.some(c => c.checked) ? sysCbs.filter(c => c.checked).map(c => c.dataset.sys) : null);
+
     // ---------- ข้อขัดข้อง ----------
     let discFiles = [];                                 // ไฟล์ที่เลือกไว้กับรายการใหม่ (อัปโหลดหลังกดบันทึก)
     function renderDiscPending() {
@@ -530,6 +559,15 @@
     // ---------- บันทึกทั้งหมด ----------
     document.getElementById("save").addEventListener("click", async () => {
       const btn = document.getElementById("save");
+      const dsys = defectSystems();
+      if (!dsys) {                                      // ต้องเลือก (เหมือนช่องบังคับใน Google Form เดิม)
+        dsysBox.classList.add("missing");
+        document.getElementById("dsysTop").scrollIntoView({ behavior: "smooth", block: "center" });
+        msg.className = "msg err"; msg.textContent = "กรุณาเลือกระบบที่ขัดข้อง หรือ \"ไม่มีข้อขัดข้อง\"";
+        return;
+      }
+      if (!dsys.length && document.querySelector("#discList .disc-item") &&
+          !confirm("เลือก \"ไม่มีข้อขัดข้อง\" แต่มีรายการข้อขัดข้องบันทึกไว้ — บันทึกต่อ?")) return;
       btn.disabled = true; btn.textContent = "กำลังบันทึก…"; msg.className = "msg"; msg.textContent = "";
 
       const clean = legs.filter(l => (l.from_point||"").trim() || (l.to_point||"").trim() || Number(l.hours));
@@ -543,6 +581,7 @@
       const repErr = await saveReport(missionId, total, document.getElementById("remarks").value.trim(), {
         result, parking_return: document.getElementById("parkRet").value.toUpperCase(),
         rest_kind: vipMode ? restSel.value : "training",
+        defect_systems: dsys,
       });
       if (repErr && !repErr.warning) { btn.disabled = false; btn.textContent = "บันทึกรายงาน";
         msg.className = "msg err"; msg.textContent = "บันทึกรายงานไม่สำเร็จ: " + repErr.message; return; }

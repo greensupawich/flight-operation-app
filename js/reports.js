@@ -60,6 +60,27 @@ export async function replaceLegs(missionId, legs) {
   return error;
 }
 
+// ---------- ระบบที่ขัดข้อง (migration_39) — ลำดับ/ชื่อตาม Google Form เดิม ----------
+//  เก็บใน post_flight_reports.defect_systems: null = ยังไม่ระบุ · [] = ไม่มีข้อขัดข้อง
+export const DEFECT_SYSTEMS = [
+  ["AIR", "AIR"],
+  ["AUTOMATIC FLIGHT CONTROL", "AUTOMATIC FLIGHT CONTROL"],
+  ["COMMUNICATIONS", "COMMUNICATIONS"],
+  ["ELECTRICAL", "ELECTRICAL"],
+  ["FIRE PROTECTION", "FIRE PROTECTION"],
+  ["FLIGHT CONTROL", "FLIGHT CONTROL"],
+  ["FLIGHT INSTRUMENTS", "FLIGHT INSTRUMENTS"],
+  ["FUEL", "FUEL"],
+  ["HYDRAULIC", "HYDRAULIC"],
+  ["ICE AND RAIN PROTECTION", "ICE AND RAIN PROTECTION"],
+  ["LANDING GEAR", "LANDING GEAR"],
+  ["NAVIGATION", "NAVIGATION"],
+  ["POWER PLANT", "POWER PLANT"],
+  ["BIRD STRIKE", "BIRD STRIKE"],
+  ["OTHER", "อื่นๆ"],
+];
+export const defectLabel = (code) => (DEFECT_SYSTEMS.find(([c]) => c === code) || [code, code])[1];
+
 // ---------- รายงานหลังบิน (upsert: 1 ภารกิจ = 1 รายงาน) ----------
 //  extra = { result: 'MCP'|'INCOMPLETE'|'CANCELLED'|null, parking_return }  (migration_16)
 export async function saveReport(missionId, totalHours, remarks, extra = {}) {
@@ -67,7 +88,15 @@ export async function saveReport(missionId, totalHours, remarks, extra = {}) {
   const row = { mission_id: missionId, total_hours: totalHours, remarks, created_by: session?.user?.id,
                 result: extra.result || null, parking_return: (extra.parking_return || "").trim() || null };
   if (extra.rest_kind) row.rest_kind = extra.rest_kind;   // วัง/เดโชชัย: ชม.ขาที่ไม่มีคณะ นับเป็นประเภทนี้ (migration_37)
+  if (Array.isArray(extra.defect_systems)) row.defect_systems = extra.defect_systems;   // ระบบที่ขัดข้อง (migration_39)
   let { error } = await supabase.from("post_flight_reports").upsert(row, { onConflict: "mission_id" });
+  // ยังไม่ได้รัน migration_39 → บันทึกโดยไม่มีระบบที่ขัดข้อง แล้วแจ้งเตือน
+  let warn39 = null;
+  if (error && /defect_systems/.test(error.message)) {
+    delete row.defect_systems;
+    ({ error } = await supabase.from("post_flight_reports").upsert(row, { onConflict: "mission_id" }));
+    if (!error) warn39 = { warning: "บันทึกแล้ว แต่ \"ระบบที่ขัดข้อง\" ยังไม่ถูกเก็บ — ต้องรัน migration_39_defect_systems.sql" };
+  }
   // ยังไม่ได้รัน migration_37 → บันทึกโดยไม่มี rest_kind (ที่เหลือนับเป็นฝึกบินตามเดิม) แล้วแจ้งเตือน
   if (error && /rest_kind/.test(error.message)) {
     delete row.rest_kind;
@@ -80,7 +109,7 @@ export async function saveReport(missionId, totalHours, remarks, extra = {}) {
     ({ error } = await supabase.from("post_flight_reports").upsert(row, { onConflict: "mission_id" }));
     if (!error) return { warning: "บันทึก ชม.แล้ว แต่ผลภารกิจ/จุดจอดขากลับยังไม่ถูกเก็บ — ต้องรัน migration_16_report_result.sql" };
   }
-  return error;
+  return error || warn39;
 }
 
 export async function getReport(missionId) {
