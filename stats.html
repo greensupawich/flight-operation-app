@@ -148,7 +148,9 @@
   }
   if (repErr) console.warn("reports:", repErr.message);
   // ภารกิจวัง/เดโชชัยที่ติ๊ก "คณะวัง" รายขา: ชม.ขาที่ติ๊ก → ประเภทภารกิจ · ส่วนที่เหลือ → rest_kind (ค่าเริ่มต้น ฝึกบิน, migration_37)
-  //  (เที่ยวนับในประเภทภารกิจ · ไม่มีขาไหนติ๊ก = นับทั้งภารกิจเป็นประเภทเดิม) — ตรงกับ archive_purge_month
+  //  f  = เที่ยวที่บินจริง (1 รายงาน = 1 เที่ยว) → KPI "เที่ยวบิน"
+  //  fk = เที่ยวในตารางแยกประเภท: ส่วนที่แตกออกนับเพิ่มอีก 1 เที่ยว → ตาราง ≥ KPI เสมอ
+  //  (ไม่มีขาไหนติ๊ก = นับทั้งภารกิจเป็นประเภทเดิม) — ตรงกับ archive_purge_month
   const VIP_KINDS=["palace","dechochai"];
   const rows=[];
   for(const r of reps||[]){
@@ -156,20 +158,24 @@
     const date=String(m.mission_date).slice(0,10), kind=m.kind||DEFAULT_KIND, total=fx(r.total_hours);
     const legs=m.flight_legs||[];
     if(VIP_KINDS.includes(kind) && legs.some(l=>l.vip)){
-      const vh=legs.reduce((t,l)=>t+(l.vip?fx(l.hours):0),0);
-      rows.push({ date, kind, h:vh, f:1 });
-      if(total>vh) rows.push({ date, kind:r.rest_kind||"training", h:total-vh, f:0 });
-    } else rows.push({ date, kind, h:total, f:1 });
+      const vh=Math.round(legs.reduce((t,l)=>t+(l.vip?fx(l.hours):0),0)*100)/100;   // ปัดทศนิยม float (0.7+0.6 ≠ 1.3)
+      rows.push({ date, kind, h:vh, f:1, fk:1 });
+      const rest=Math.round((total-vh)*100)/100;
+      if(rest>0) rows.push({ date, kind:r.rest_kind||"training", h:rest, f:0, fk:1 });
+    } else rows.push({ date, kind, h:total, f:1, fk:1 });
   }
 
   // เดือนที่เคลียร์ข้อมูลดิบแล้ว (archive.html) → ใช้สถิติสรุปรายวันแทน (migration_25)
   //  วันที่ยังมีข้อมูลดิบอยู่ใช้ข้อมูลดิบ กันนับซ้ำ
-  const { data: sd, error: sdErr } = await supabase.from("stats_daily").select("stat_date,kind,flights,hours");
+  //  flights = เที่ยวจริง · extra_flights = เที่ยวที่แตกจากภารกิจวัง/เดโชชัย (migration_37)
+  let { data: sd, error: sdErr } = await supabase.from("stats_daily").select("stat_date,kind,flights,extra_flights,hours");
+  if (sdErr) ({ data: sd, error: sdErr } = await supabase.from("stats_daily").select("stat_date,kind,flights,hours"));
   if (sdErr) console.warn("stats_daily:", sdErr.message);
   const rawDates=new Set(rows.map(r=>r.date));
   for(const x of sd||[]){
     const date=String(x.stat_date).slice(0,10);
-    if(!rawDates.has(date)) rows.push({ date, kind:x.kind||DEFAULT_KIND, h:fx(x.hours), f:Number(x.flights)||0 });
+    if(!rawDates.has(date)){ const f=Number(x.flights)||0;
+      rows.push({ date, kind:x.kind||DEFAULT_KIND, h:fx(x.hours), f, fk:f+(Number(x.extra_flights)||0) }); }
   }
 
   const daysIn=(y,m)=>new Date(y,m,0).getDate();   // m=1..12
@@ -194,18 +200,19 @@
 
     // รวมรายวัน (ทุกประเภท) + แยกตามประเภท (ชม.บิน + จำนวนเที่ยว)
     const perDay=Array(nd+1).fill(0);                 // ชม.รวมต่อวัน (ใช้ในกราฟ)
-    const perDayF=Array(nd+1).fill(0);               // จำนวนเที่ยวรวมต่อวัน
+    const perDayF=Array(nd+1).fill(0);               // จำนวนเที่ยวรวมต่อวัน (ตารางแยกประเภท — นับส่วนที่แตกออกด้วย)
     const perKindH=new Map(), perKindF=new Map();    // kind -> [day]=ชม. / =เที่ยว
+    let monthFlights=0;                              // เที่ยวที่บินจริง (KPI)
     for(const r of inMonth){
       const d=Number(r.date.slice(8,10));
       if(d<1||d>nd) continue;
-      perDay[d]+=r.h; perDayF[d]+=r.f;
+      perDay[d]+=r.h; perDayF[d]+=r.fk; monthFlights+=r.f;
       if(!perKindH.has(r.kind)){ perKindH.set(r.kind, Array(nd+1).fill(0)); perKindF.set(r.kind, Array(nd+1).fill(0)); }
       perKindH.get(r.kind)[d]+=r.h;
-      perKindF.get(r.kind)[d]+=r.f;
+      perKindF.get(r.kind)[d]+=r.fk;
     }
     const monthTotal=perDay.reduce((a,b)=>a+b,0);
-    const monthFlights=perDayF.reduce((a,b)=>a+b,0);
+    const tableFlights=perDayF.reduce((a,b)=>a+b,0);
     const flyingDays=perDay.filter(v=>v>0).length;
     const maxDay=Math.max(1,...perDay);
 
@@ -244,7 +251,7 @@
 
     const sumF=`<tr class="sum ktop"><td class="k" rowspan="2">รวม/วัน</td><td class="sub">เที่ยว</td>`+
       Array.from({length:nd},(_,i)=>{const v=perDayF[i+1];return `<td>${v>0?v:"·"}</td>`;}).join("")+
-      `<td class="tot">${monthFlights}</td></tr>`;
+      `<td class="tot">${tableFlights}</td></tr>`;
     const sumH=`<tr class="sum"><td class="sub">ชม.</td>`+
       Array.from({length:nd},(_,i)=>{const v=perDay[i+1];return `<td>${v>0?fmt(v):"·"}</td>`;}).join("")+
       `<td class="tot">${Math.round(monthTotal*10)/10}</td></tr>`;
