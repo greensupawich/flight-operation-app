@@ -23,7 +23,7 @@
   .kpi .card .l{font-size:12px;color:var(--muted)}
 
   /* ---- กราฟเส้น ชม.สะสมรายวัน ---- */
-  .chart{height:250px;padding:10px 12px;border:1px solid var(--line);border-radius:12px;
+  .chart{min-height:250px;padding:10px 12px;border:1px solid var(--line);border-radius:12px;
          background:var(--surface);box-shadow:var(--shadow);overflow-x:auto}
   .chart svg{display:block;height:230px}
   .chart .ln{fill:none;stroke:var(--primary);stroke-width:2.5;stroke-linejoin:round;stroke-linecap:round}
@@ -31,7 +31,16 @@
   .chart .dot{fill:var(--primary)}
   .chart .grid{stroke:var(--line);stroke-width:1}
   .chart .axt{fill:var(--faint);font-size:10px;font-family:"IBM Plex Mono",monospace}
-  .chart-empty{display:flex;align-items:center;justify-content:center;height:100%;color:var(--faint)}
+  .chart .tg{fill:none;stroke:#D32F2F;stroke-width:2}
+  .chart .tg95{fill:none;stroke:#2E9E44;stroke-width:2;stroke-dasharray:6 4}
+  .chart .mband{fill:var(--primary);opacity:.06}
+  .chart .tgl{font-size:10px;font-family:"IBM Plex Mono",monospace;font-weight:600}
+  .fyt{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:4px 0 8px;font-size:13px}
+  .fyt input{width:110px}
+  .fyt .lg{display:inline-flex;align-items:center;gap:5px;color:var(--muted);font-size:12px}
+  .fyt .lg i{display:inline-block;width:18px;height:0;border-top:2.5px solid}
+  .fyt .sp{flex:1}
+  .chart-empty{display:flex;align-items:center;justify-content:center;height:230px;color:var(--faint)}
 
   /* ---- ตารางแยกประเภท ---- */
   table.mt{border-collapse:collapse;width:100%;font-size:12px}
@@ -80,8 +89,9 @@
       </div>
     </div>
 
-    <h3 class="sec">ชั่วโมงบินรวมทุกเครื่อง — รายวัน</h3>
+    <h3 class="sec" id="chartTitle">ชั่วโมงบินรวมทุกเครื่อง — รายวัน</h3>
     <div class="kpi" id="kpi"></div>
+    <div class="fyt" id="fyt"></div>
     <div class="chart" id="chart"><div class="chart-empty">กำลังโหลด…</div></div>
 
     <h3 class="sec">ชั่วโมงบินแยกประเภทภารกิจ — รายวัน / รวมเดือน</h3>
@@ -112,7 +122,7 @@
 </main>
 
 <script type="module">
-  import { requireAuth } from "./js/auth.js";
+  import { requireAuth, canPlan } from "./js/auth.js";
   import { renderTopbar } from "./js/ui.js";
   import { supabase } from "./js/supabase.js";
   import { KINDS, KIND_COLORS, DEFAULT_KIND, isStby } from "./js/missions.js";
@@ -159,6 +169,19 @@
 
   const daysIn=(y,m)=>new Date(y,m,0).getDate();   // m=1..12
 
+  // ---------- เป้า ชม.บินทั้งปีงบ (migration_35) — ผู้วางแผนขึ้นไปแก้ได้ ----------
+  const planner=canPlan(profile);
+  const targets=new Map();                          // ปีงบ (พ.ศ.) -> ชม.
+  let tgErr=null;
+  { const { data, error } = await supabase.from("fy_hour_targets").select("fiscal_year,target_hours");
+    if (error) { tgErr=/does not exist|schema cache|Could not find/i.test(error.message||"")
+                   ? "ยังไม่มีตารางเป้า — ต้องรัน db/migration_35_fy_hour_targets.sql ก่อน" : error.message;
+                 console.warn("fy_hour_targets:", error.message); }
+    (data||[]).forEach(r=>targets.set(r.fiscal_year, Number(r.target_hours))); }
+  const ymd=(dt)=>`${dt.getFullYear()}-${String(dt.getMonth()+1).padStart(2,"0")}-${String(dt.getDate()).padStart(2,"0")}`;
+  const TH_MON=["ม.ค.","ก.พ.","มี.ค.","เม.ย.","พ.ค.","มิ.ย.","ก.ค.","ส.ค.","ก.ย.","ต.ค.","พ.ย.","ธ.ค."];
+  const r1=(v)=>Math.round(v*10)/10;
+
   function renderMonth(ym){
     const [y,m]=ym.split("-").map(Number);
     const nd=daysIn(y,m);
@@ -187,40 +210,7 @@
       <div class="card"><div class="n">${flyingDays}</div><div class="l">วันที่มีบิน</div></div>
       <div class="card"><div class="n">${monthFlights}</div><div class="l">เที่ยวบิน</div></div>`;
 
-    // ----- กราฟเส้น ชม.สะสม (รวมเพิ่มขึ้นเรื่อย ๆ ตลอดเดือน) -----
-    const chart=document.getElementById("chart");
-    if(monthTotal===0){ chart.innerHTML=`<div class="chart-empty">ยังไม่มีข้อมูลชั่วโมงบินในเดือนนี้</div>`; }
-    else{
-      // เดือนปัจจุบัน → ลากเส้นแค่ถึง "วันนี้" · เดือนที่ผ่านมาแล้ว → เต็มเดือน
-      const today=new Date();
-      const curYm=`${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,"0")}`;
-      const endDay = ym===curYm ? Math.min(today.getDate(),nd) : (ym>curYm ? 0 : nd);
-      const cum=Array(nd+1).fill(0);
-      for(let d=1;d<=nd;d++) cum[d]=cum[d-1]+perDay[d];
-      const yMax=cum[endDay]||1;
-      const padL=44,padR=16,padT=12,padB=24,H=230;
-      const cw=Math.max(320,(chart.clientWidth||900)-24);
-      const minW=padL+padR+Math.max(1,endDay-1)*22;
-      const W=Math.max(cw,minW);
-      const stepX=(W-padL-padR)/((endDay-1)||1);
-      const X=(d)=>padL+stepX*(d-1);
-      const Y=(v)=>padT+(H-padT-padB)*(1-v/yMax);
-      let grid="";
-      for(let i=0;i<=4;i++){ const v=yMax*i/4, yy=Y(v);
-        grid+=`<line class="grid" x1="${padL}" y1="${yy.toFixed(1)}" x2="${(W-padR).toFixed(1)}" y2="${yy.toFixed(1)}"/>`
-             +`<text class="axt" x="${padL-6}" y="${(yy+3).toFixed(1)}" text-anchor="end">${Math.round(v*10)/10}</text>`; }
-      let xl="",dots="";
-      for(let d=1;d<=endDay;d++){ if(d===1||d===endDay||d%5===0){
-        xl+=`<text class="axt" x="${X(d).toFixed(1)}" y="${H-6}" text-anchor="middle">${d}</text>`;
-        dots+=`<circle class="dot" cx="${X(d).toFixed(1)}" cy="${Y(cum[d]).toFixed(1)}" r="3"><title>${d} · สะสม ${Math.round(cum[d]*10)/10} ชม.</title></circle>`; } }
-      let ln="";
-      for(let d=1;d<=endDay;d++) ln+=(d===1?"M":"L")+X(d).toFixed(1)+","+Y(cum[d]).toFixed(1)+" ";
-      const area=`M${X(1).toFixed(1)},${Y(0).toFixed(1)} `
-        +Array.from({length:endDay},(_,i)=>`L${X(i+1).toFixed(1)},${Y(cum[i+1]).toFixed(1)}`).join(" ")
-        +` L${X(endDay).toFixed(1)},${Y(0).toFixed(1)} Z`;
-      chart.innerHTML=`<svg viewBox="0 0 ${W} ${H}" style="width:${W}px">
-        ${grid}<path class="ar" d="${area}"/><path class="ln" d="${ln.trim()}"/>${dots}${xl}</svg>`;
-    }
+    renderFyChart(ym);
 
     // ----- ตารางแยกประเภท -----
     const kindsShown=Object.keys(KINDS).filter(k=>!isStby(k));   // ทุกประเภท (ยกเว้น STBY) แม้ไม่มีข้อมูล
@@ -259,6 +249,105 @@
     document.getElementById("legend").innerHTML=kindsShown.map(k=>{
       const c=KIND_COLORS[k]||KIND_COLORS[DEFAULT_KIND];
       return `<span><i class="sw" style="background:${c.bg}"></i>${esc(KINDS[k])}</span>`;}).join("");
+  }
+
+  // ----- กราฟเส้น ชม.สะสมทั้งปีงบ (1 ต.ค. – 30 ก.ย.) + เส้นเป้า (แดง) + 95% ของเป้า (เขียวปะ) -----
+  //  ปีงบของเดือนที่เลือก · แถบจาง = เดือนที่เลือก · ปีงบปัจจุบัน → เส้นจริงลากถึงวันนี้
+  function renderFyChart(ym){
+    const [y,m]=ym.split("-").map(Number);
+    const fyCE=m>=10 ? y+1 : y, fy=fyCE+543;                     // ปีงบ 2570 = 1 ต.ค. 2569 – 30 ก.ย. 2570
+    const days=[];
+    for(let dt=new Date(fyCE-1,9,1); dt<=new Date(fyCE,8,30); dt.setDate(dt.getDate()+1)) days.push(ymd(dt));
+    const nD=days.length, idx=new Map(days.map((d,i)=>[d,i]));
+    const perDay=Array(nD).fill(0);
+    for(const r of rows){ const i=idx.get(r.date); if(i!==undefined) perDay[i]+=r.h; }
+    const cum=[]; perDay.reduce((t,v,i)=>(cum[i]=t+v),0);
+    const todayS=ymd(new Date());
+    const last = todayS>days[nD-1] ? nD-1 : (todayS<days[0] ? -1 : idx.get(todayS));   // จุดสุดท้ายของเส้นจริง
+    const actual = last>=0 ? cum[last] : 0;
+    const target=targets.get(fy)||0;
+
+    document.getElementById("chartTitle").textContent=`ชั่วโมงบินรวมทุกเครื่อง — สะสมรายวัน ปีงบประมาณ ${fy}`;
+    // ----- แถบเป้า: ผู้วางแผนขึ้นไปกรอกได้ -----
+    const fyt=document.getElementById("fyt");
+    const pace = target && last>=0 ? target*(last+1)/nD : 0;      // ตามเส้นแดง ณ วันล่าสุด
+    fyt.innerHTML=`<b>เป้า ชม.บินรวมทั้งปีงบ ${fy}:</b>`+
+      (planner && !tgErr
+        ? `<input type="number" id="tgIn" min="1" step="0.1" value="${target||""}" placeholder="ชม."><button class="btn sm" id="tgSave">บันทึก</button>`
+        : `<span class="mono">${target ? r1(target)+" ชม." : "ยังไม่ได้ตั้ง"}</span>`)+
+      (tgErr ? `<span style="color:var(--crit)">${esc(tgErr)}</span>` : "")+
+      `<span class="sp"></span>
+       <span class="lg"><i style="border-color:var(--primary)"></i>ชม.สะสมจริง</span>
+       <span class="lg"><i style="border-color:#D32F2F"></i>เป้า</span>
+       <span class="lg"><i style="border-color:#2E9E44;border-top-style:dashed"></i>95% ของเป้า</span>`;
+    if(planner && !tgErr){
+      const inp=document.getElementById("tgIn"), btn=document.getElementById("tgSave");
+      const save=async()=>{
+        const v=Number(inp.value);
+        if(inp.value.trim()==="" ){
+          if(!target || !confirm(`ลบเป้าปีงบ ${fy}?`)) return;
+          const { error } = await supabase.from("fy_hour_targets").delete().eq("fiscal_year",fy);
+          if(error) return alert("ลบไม่สำเร็จ: "+error.message);
+          targets.delete(fy); return renderFyChart(ym);
+        }
+        if(!(v>0 && v<100000)) return alert("กรอกชั่วโมงเป็นตัวเลขมากกว่า 0");
+        btn.disabled=true;
+        const { error } = await supabase.from("fy_hour_targets").upsert({ fiscal_year:fy, target_hours:r1(v) },{ onConflict:"fiscal_year" });
+        btn.disabled=false;
+        if(error) return alert("บันทึกไม่สำเร็จ: "+error.message);
+        targets.set(fy,r1(v)); renderFyChart(ym);
+      };
+      btn.addEventListener("click",save);
+      inp.addEventListener("keydown",(e)=>{ if(e.key==="Enter") save(); });
+    }
+    // ----- KPI ปีงบ (ต่อท้ายการ์ดของเดือน) -----
+    const kpi=document.getElementById("kpi");
+    kpi.querySelectorAll(".fyk").forEach(e=>e.remove());           // วาดใหม่ตอนบันทึกเป้า → ไม่ซ้ำ
+    kpi.insertAdjacentHTML("beforeend",
+      `<div class="card fyk"><div class="n">${r1(actual)}${target?`<span style="font-size:14px;color:var(--muted)"> / ${r1(target)}</span>`:""}</div>
+        <div class="l">ชม.สะสมปีงบ ${fy}${target?` · ${Math.round(actual/target*100)}% ของเป้า`:""}</div></div>`+
+      (pace ? `<div class="card fyk"><div class="n" style="color:${actual>=pace*0.95?"#2E9E44":"#D32F2F"}">${actual-pace>=0?"+":""}${r1(actual-pace)}</div>
+        <div class="l">เทียบเส้นเป้า ณ ${last===nD-1?"สิ้นปีงบ":"วันนี้"} (${r1(pace)} ชม.)</div></div>` : ""));
+
+    const chart=document.getElementById("chart");
+    if(!actual && !target){ chart.innerHTML=`<div class="chart-empty">ยังไม่มีข้อมูลชั่วโมงบินในปีงบ ${fy}</div>`; return; }
+    const padL=48,padR=56,padT=14,padB=24,H=230;
+    const W=Math.max(640,(chart.clientWidth||900)-24);
+    const X=(i)=>padL+(W-padL-padR)*i/(nD-1);
+    const yMax=Math.max(target, actual, 1)*1.05;
+    const Y=(v)=>padT+(H-padT-padB)*(1-v/yMax);
+    const f=(v)=>v.toFixed(1);
+    let grid="";
+    for(let i=0;i<=4;i++){ const v=yMax*i/4, yy=Y(v);
+      grid+=`<line class="grid" x1="${padL}" y1="${f(yy)}" x2="${f(W-padR)}" y2="${f(yy)}"/>`
+           +`<text class="axt" x="${padL-6}" y="${f(yy+3)}" text-anchor="end">${Math.round(v)}</text>`; }
+    // แกน X = ต้นเดือน · แถบจาง = เดือนที่เลือก
+    let xl="", band="";
+    days.forEach((d,i)=>{ if(d.endsWith("-01")){
+      const mm=Number(d.slice(5,7));
+      xl+=`<line class="grid" x1="${f(X(i))}" y1="${padT}" x2="${f(X(i))}" y2="${H-padB}" opacity=".5"/>`
+         +`<text class="axt" x="${f(X(i)+3)}" y="${H-8}">${TH_MON[mm-1]}${mm===1||i===0?String(Number(d.slice(0,4))+543).slice(2):""}</text>`;
+      if(d.slice(0,7)===ym){ const e=days.findIndex((x,j)=>j>i && x.endsWith("-01")); const ei=e<0?nD-1:e;
+        band=`<rect class="mband" x="${f(X(i))}" y="${padT}" width="${f(X(ei)-X(i))}" height="${H-padT-padB}"/>`; }
+    }});
+    // เส้นเป้า (ตรงจาก 0 ที่ 1 ต.ค. ถึงเป้าที่ 30 ก.ย.)
+    let tg="";
+    if(target){
+      tg=`<path class="tg" d="M${f(X(0))},${f(Y(0))} L${f(X(nD-1))},${f(Y(target))}"><title>เป้า ${r1(target)} ชม.</title></path>`
+        +`<path class="tg95" d="M${f(X(0))},${f(Y(0))} L${f(X(nD-1))},${f(Y(target*0.95))}"><title>95% = ${r1(target*0.95)} ชม.</title></path>`
+        +`<text class="tgl" x="${f(X(nD-1)+4)}" y="${f(Y(target)+3)}" fill="#D32F2F">${Math.round(target)}</text>`
+        +`<text class="tgl" x="${f(X(nD-1)+4)}" y="${f(Y(target*0.95)+12)}" fill="#2E9E44">${Math.round(target*0.95)}</text>`;
+    }
+    // เส้นจริง
+    let ln="", area="", dots="";
+    if(last>=0){
+      for(let i=0;i<=last;i++) ln+=(i?"L":"M")+f(X(i))+","+f(Y(cum[i]))+" ";
+      area=`<path class="ar" d="M${f(X(0))},${f(Y(0))} ${ln.replace(/^M/,"L")} L${f(X(last))},${f(Y(0))} Z"/>`;
+      for(let i=0;i<=last;i++){ const endM = i===last || days[i+1]?.endsWith("-01");
+        if(endM) dots+=`<circle class="dot" cx="${f(X(i))}" cy="${f(Y(cum[i]))}" r="3.5"><title>${Number(days[i].slice(8))} ${TH_MON[Number(days[i].slice(5,7))-1]} · สะสม ${r1(cum[i])} ชม.${target?` · เป้า ณ วันนั้น ${r1(target*(i+1)/nD)}`:""}</title></circle>`; }
+    }
+    chart.innerHTML=`<svg viewBox="0 0 ${W} ${H}" style="width:${W}px">
+      ${band}${grid}${xl}${tg}${area}<path class="ln" d="${ln.trim()}"/>${dots}</svg>`;
   }
 
   const mon=document.getElementById("mon");
@@ -326,7 +415,6 @@
   renderDisc();
 
   // ---------- รายงานอันตราย (safety) — 5 รายการ/หน้า · กดเข้าหน้ารายงานหลังบิน ----------
-  const TH_MON=["ม.ค.","ก.พ.","มี.ค.","เม.ย.","พ.ค.","มิ.ย.","ก.ค.","ส.ค.","ก.ย.","ต.ค.","พ.ย.","ธ.ค."];
   const thD=(s)=>{ if(!s) return "-"; const [y,mo,da]=String(s).slice(0,10).split("-").map(Number); return `${da} ${TH_MON[mo-1]} ${y+543}`; };
   const acLbl=(a)=> a ? `${a.type||""}/${a.tail_number||""}` : "";
   const SF_COLS="id, occurred_time, description, created_at, mission_id, missions(mission_date, callsign, route, aircraft(tail_number,type))";
