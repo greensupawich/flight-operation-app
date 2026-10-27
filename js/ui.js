@@ -13,6 +13,7 @@ const LINKS = [
   { href: "crew.html",      label: "ทะเบียนนักบิน" },
   { href: "pilot-month.html", label: "พ." },
   { href: "status.html",    label: "สถานภาพเครื่อง" },
+  { href: "checklist.html", label: "Checklist" },
   { href: "stats.html",     label: "สถิติ" },
   { href: "archive.html",   label: "ย้อนหลัง" },
   { href: "https://greensupawich.github.io/flightplan/", label: "Flight Plan ↗", external: true },

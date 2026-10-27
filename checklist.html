@@ -1,0 +1,229 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<!-- CSP: อนุญาตเฉพาะโดเมนที่ใช้จริง · เพิ่มโดเมนใหม่ (CDN/API) ต้องแก้ทุกหน้า -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' https://esm.sh https://cdnjs.cloudflare.com https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob: https://iljapjszrjuzjjbtxctu.supabase.co; media-src 'self' blob: https://iljapjszrjuzjjbtxctu.supabase.co; connect-src 'self' data: https://iljapjszrjuzjjbtxctu.supabase.co wss://iljapjszrjuzjjbtxctu.supabase.co https://esm.sh https://cdn.jsdelivr.net https://tessdata.projectnaptha.com; worker-src 'self' blob: https://cdn.jsdelivr.net; object-src 'none'; base-uri 'self'; form-action 'self'">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Flight Operation · Checklist น.จัดบิน</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bai+Jamjuree:wght@600;700&family=IBM+Plex+Sans+Thai:wght@400;500;600&family=IBM+Plex+Mono&display=swap">
+<link rel="stylesheet" href="css/style.css">
+<style>
+  .bar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:12px}
+  .bar .sp{flex:1}
+  .bar input{width:260px;max-width:100%}
+  .msg{font-size:12.5px;min-height:18px;color:var(--muted)}
+  .msg.err{color:var(--crit)} .msg.ok{color:var(--good)}
+  .cls{display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:14px;align-items:start}
+  .cl{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);overflow:hidden}
+  .cl.done{border-color:var(--good)}
+  .cl-h{display:flex;align-items:center;gap:6px;padding:8px 10px;background:var(--surface-2);border-bottom:1px solid var(--line)}
+  .cl-h .t{flex:1;font-family:"Bai Jamjuree",sans-serif;font-weight:700;font-size:16px;min-width:0}
+  .cl-h input.t{border:1px solid transparent;background:transparent;padding:3px 6px;border-radius:6px}
+  .cl-h input.t:hover,.cl-h input.t:focus{border-color:var(--line-strong);background:var(--surface)}
+  .cl-h .pg{font-family:"IBM Plex Mono",monospace;font-size:12px;color:var(--muted);white-space:nowrap}
+  .cl.done .cl-h .pg{color:var(--good);font-weight:700}
+  .bar-p{height:3px;background:var(--line)} .bar-p i{display:block;height:100%;background:var(--good);transition:width .2s}
+  .it{display:flex;align-items:center;gap:8px;padding:5px 10px;border-bottom:1px solid var(--line)}
+  .it:last-child{border-bottom:0}
+  .it input[type=checkbox]{width:19px;height:19px;flex:none;accent-color:var(--good);cursor:pointer;margin:0}
+  .it input[type=checkbox]:disabled{cursor:default}
+  .it .tx{flex:1;min-width:0;font-size:14px;line-height:1.4;padding:3px 6px;border:1px solid transparent;background:transparent;border-radius:6px;color:var(--ink)}
+  .it input.tx:hover,.it input.tx:focus{border-color:var(--line-strong);background:var(--surface)}
+  .it.on .tx{color:var(--faint);text-decoration:line-through}
+  .it .tm{font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--good);white-space:nowrap}
+  .ib{border:0;background:transparent;color:var(--faint);cursor:pointer;padding:2px 5px;border-radius:5px;font-size:13px;line-height:1}
+  .ib:hover{background:var(--surface-2);color:var(--ink)} .ib.del:hover{color:var(--crit)}
+  .ib:disabled{opacity:.3;cursor:default;background:transparent}
+  .add{display:flex;gap:6px;padding:8px 10px;border-top:1px dashed var(--line)}
+  .add input{flex:1;min-width:0}
+  .noitem{padding:14px 10px;color:var(--faint);font-size:13px;text-align:center}
+  .empty{padding:40px;text-align:center;color:var(--muted)}
+  @media (max-width:520px){ .cls{grid-template-columns:1fr} .bar input{width:100%} }
+</style>
+</head>
+<body>
+<main>
+  <div class="wrap">
+    <div class="page-head">
+      <h1>Checklist น.จัดบิน</h1>
+      <div class="sub">กระดาษทดรายวัน · ปุ่ม Reset ล้างเฉพาะช่องติ๊ก หัวข้อคงเดิม · ไม่เก็บประวัติ/สถิติ</div>
+    </div>
+    <div class="bar" id="bar"></div>
+    <div class="msg" id="msg"></div>
+    <div class="cls" id="cls"><div class="empty">กำลังโหลด…</div></div>
+  </div>
+</main>
+
+<script type="module">
+  import { requireAuth, canPlan } from "./js/auth.js";
+  import { renderTopbar } from "./js/ui.js";
+  import { supabase } from "./js/supabase.js";
+
+  const profile = await requireAuth();
+  if (!profile) throw new Error("no auth");
+  renderTopbar(profile);
+  const planner = canPlan(profile);
+  const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[c]));
+  const $ = (id) => document.getElementById(id);
+  const NEED_MIGRATION = "ยังไม่มีตาราง — ต้องรัน db/migration_36_checklists.sql ก่อน";
+  const errText = (e) => /does not exist|schema cache|Could not find/i.test(e?.message || "") ? NEED_MIGRATION : (e?.message || String(e));
+  function msg(t, kind = "") { const m = $("msg"); m.textContent = t || ""; m.className = "msg " + kind;
+    if (kind === "ok") setTimeout(() => { if (m.textContent === t) m.textContent = ""; }, 2500); }
+
+  let lists = [];                                   // [{id,title,seq,items:[{id,text,seq,checked,checked_at}]}]
+  const hhmm = (t) => t ? new Date(t).toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit" }) : "";
+  const nextSeq = (arr) => arr.reduce((m, x) => Math.max(m, x.seq), 0) + 1;
+
+  async function load() {
+    const [a, b] = await Promise.all([
+      supabase.from("checklists").select("id,title,seq").order("seq").order("created_at"),
+      supabase.from("checklist_items").select("id,checklist_id,text,seq,checked,checked_at").order("seq"),
+    ]);
+    const e = a.error || b.error;
+    if (e) { $("cls").innerHTML = `<div class="empty">${esc(errText(e))}</div>`; return; }
+    lists = (a.data || []).map((l) => ({ ...l, items: (b.data || []).filter((i) => i.checklist_id === l.id) }));
+    render();
+  }
+
+  // ---------- แถบบน ----------
+  $("bar").innerHTML = (planner
+    ? `<input id="newTitle" placeholder="ชื่อ Checklist ใหม่ เช่น ก่อนส่งใบจัดบิน" maxlength="200">
+       <button class="btn sm primary" id="newBtn">+ สร้าง Checklist</button>` : `<span class="muted" style="font-size:13px">ดูได้อย่างเดียว — ผู้วางแผนขึ้นไปจึงติ๊ก/แก้ได้</span>`)
+    + `<span class="sp"></span>` + (planner ? `<button class="btn sm" id="resetAll">↺ Reset ทั้งหมด</button>` : "");
+  if (planner) {
+    const create = async () => {
+      const t = $("newTitle").value.trim(); if (!t) return $("newTitle").focus();
+      const { data, error } = await supabase.from("checklists").insert({ title: t, seq: nextSeq(lists) }).select("id,title,seq").single();
+      if (error) return msg("สร้างไม่สำเร็จ: " + errText(error), "err");
+      lists.push({ ...data, items: [] }); $("newTitle").value = ""; render();
+      document.querySelector(`.cl[data-id="${data.id}"] .add input`)?.focus();
+    };
+    $("newBtn").addEventListener("click", create);
+    $("newTitle").addEventListener("keydown", (e) => { if (e.key === "Enter") create(); });
+    $("resetAll").addEventListener("click", () => reset(null));
+  }
+
+  // ---------- วาด ----------
+  function itemHTML(it, i, n) {
+    return `<div class="it${it.checked ? " on" : ""}" data-item="${it.id}">
+      <input type="checkbox" ${it.checked ? "checked" : ""} ${planner ? "" : "disabled"} aria-label="ติ๊ก">
+      ${planner ? `<input class="tx" value="${esc(it.text)}" maxlength="500">` : `<span class="tx">${esc(it.text)}</span>`}
+      ${it.checked ? `<span class="tm" title="เวลาที่ติ๊ก">${hhmm(it.checked_at)}</span>` : ""}
+      ${planner ? `<button class="ib" data-mv="-1" title="เลื่อนขึ้น" ${i === 0 ? "disabled" : ""}>▲</button>
+                   <button class="ib" data-mv="1" title="เลื่อนลง" ${i === n - 1 ? "disabled" : ""}>▼</button>
+                   <button class="ib del" data-del title="ลบหัวข้อนี้">✕</button>` : ""}
+    </div>`;
+  }
+  function listHTML(l) {
+    const n = l.items.length, done = l.items.filter((i) => i.checked).length;
+    return `<section class="cl${n && done === n ? " done" : ""}" data-id="${l.id}">
+      <div class="cl-h">
+        ${planner ? `<input class="t" value="${esc(l.title)}" maxlength="200" aria-label="ชื่อ Checklist">` : `<span class="t">${esc(l.title)}</span>`}
+        <span class="pg">${done}/${n}${n && done === n ? " ✓" : ""}</span>
+        ${planner ? `<button class="btn sm ghost" data-reset title="ล้างติ๊กทั้งหมดใน Checklist นี้">↺ Reset</button>
+                     <button class="ib del" data-dell title="ลบ Checklist นี้">🗑</button>` : ""}
+      </div>
+      <div class="bar-p"><i style="width:${n ? done / n * 100 : 0}%"></i></div>
+      ${n ? l.items.map((it, i) => itemHTML(it, i, n)).join("") : `<div class="noitem">ยังไม่มีหัวข้อ${planner ? " — พิมพ์ด้านล่างแล้วกด Enter" : ""}</div>`}
+      ${planner ? `<div class="add"><input placeholder="+ เพิ่มหัวข้อ แล้วกด Enter" maxlength="500"><button class="btn sm">เพิ่ม</button></div>` : ""}
+    </section>`;
+  }
+  function render() {
+    $("cls").innerHTML = lists.length ? lists.map(listHTML).join("")
+      : `<div class="empty">ยังไม่มี Checklist${planner ? " — ตั้งชื่อด้านบนแล้วกด “+ สร้าง Checklist”" : ""}</div>`;
+  }
+  const findList = (el) => lists.find((l) => l.id === el.closest(".cl")?.dataset.id);
+  const findItem = (el) => { const l = findList(el); return [l, l?.items.find((i) => i.id === el.closest(".it")?.dataset.item)]; };
+
+  // ---------- การกระทำ ----------
+  async function reset(list) {
+    const targets = list ? [list] : lists;
+    const ids = targets.flatMap((l) => l.items.filter((i) => i.checked).map((i) => i.id));
+    if (!ids.length) return msg("ไม่มีช่องที่ติ๊กไว้", "ok");
+    if (!confirm(list ? `Reset “${list.title}” — ล้างติ๊ก ${ids.length} ช่อง (หัวข้อคงเดิม)?` : `Reset ทุก Checklist — ล้างติ๊ก ${ids.length} ช่อง (หัวข้อคงเดิม)?`)) return;
+    const { error } = await supabase.from("checklist_items").update({ checked: false }).in("id", ids);
+    if (error) return msg("Reset ไม่สำเร็จ: " + errText(error), "err");
+    targets.forEach((l) => l.items.forEach((i) => { i.checked = false; i.checked_at = null; }));
+    render(); msg("Reset แล้ว", "ok");
+  }
+  async function addItem(sec) {
+    const l = findList(sec), inp = sec.querySelector(".add input"), t = inp.value.trim();
+    if (!t) return inp.focus();
+    const { data, error } = await supabase.from("checklist_items")
+      .insert({ checklist_id: l.id, text: t, seq: nextSeq(l.items) }).select("id,checklist_id,text,seq,checked,checked_at").single();
+    if (error) return msg("เพิ่มไม่สำเร็จ: " + errText(error), "err");
+    l.items.push(data); render();
+    document.querySelector(`.cl[data-id="${l.id}"] .add input`)?.focus();
+  }
+
+  $("cls").addEventListener("click", async (e) => {
+    if (!planner) return;
+    const b = e.target.closest("button"); if (!b) return;
+    const sec = b.closest(".cl"), l = findList(b);
+    if (b.hasAttribute("data-reset")) return reset(l);
+    if (b.closest(".add")) return addItem(sec);
+    if (b.hasAttribute("data-dell")) {
+      if (!confirm(`ลบ Checklist “${l.title}” และหัวข้อทั้งหมด ${l.items.length} ข้อ?`)) return;
+      const { error } = await supabase.from("checklists").delete().eq("id", l.id);
+      if (error) return msg("ลบไม่สำเร็จ: " + errText(error), "err");
+      lists = lists.filter((x) => x !== l); return render();
+    }
+    const [, it] = findItem(b); if (!it) return;
+    if (b.hasAttribute("data-del")) {
+      if (!confirm(`ลบหัวข้อ “${it.text}”?`)) return;
+      const { error } = await supabase.from("checklist_items").delete().eq("id", it.id);
+      if (error) return msg("ลบไม่สำเร็จ: " + errText(error), "err");
+      l.items = l.items.filter((x) => x !== it); return render();
+    }
+    if (b.dataset.mv) {                                 // สลับลำดับกับหัวข้อข้างเคียง
+      const i = l.items.indexOf(it), j = i + Number(b.dataset.mv), o = l.items[j]; if (!o) return;
+      const [sa, sb] = [it.seq === o.seq ? j + 1 : o.seq, it.seq === o.seq ? i + 1 : it.seq];
+      const r = await Promise.all([supabase.from("checklist_items").update({ seq: sa }).eq("id", it.id),
+                                   supabase.from("checklist_items").update({ seq: sb }).eq("id", o.id)]);
+      const err = r.find((x) => x.error)?.error; if (err) return msg("เลื่อนไม่สำเร็จ: " + errText(err), "err");
+      it.seq = sa; o.seq = sb; l.items.sort((x, y) => x.seq - y.seq); render();
+    }
+  });
+
+  $("cls").addEventListener("change", async (e) => {
+    if (!planner) return;
+    const el = e.target;
+    if (el.type === "checkbox") {
+      const [l, it] = findItem(el), v = el.checked;
+      el.disabled = true;
+      const { data, error } = await supabase.from("checklist_items").update({ checked: v }).eq("id", it.id).select("checked,checked_at").single();
+      if (error) { el.checked = !v; el.disabled = false; return msg("บันทึกไม่สำเร็จ: " + errText(error), "err"); }
+      Object.assign(it, data); render();
+    } else if (el.classList.contains("tx")) {           // แก้ข้อความหัวข้อ
+      const [, it] = findItem(el), t = el.value.trim();
+      if (!t) { el.value = it.text; return msg("หัวข้อว่างไม่ได้ — ถ้าจะลบให้กด ✕", "err"); }
+      if (t === it.text) return;
+      const { error } = await supabase.from("checklist_items").update({ text: t }).eq("id", it.id);
+      if (error) { el.value = it.text; return msg("บันทึกไม่สำเร็จ: " + errText(error), "err"); }
+      it.text = t; msg("บันทึกแล้ว", "ok");
+    } else if (el.classList.contains("t")) {            // แก้ชื่อ checklist
+      const l = findList(el), t = el.value.trim();
+      if (!t) { el.value = l.title; return msg("ชื่อ Checklist ว่างไม่ได้", "err"); }
+      if (t === l.title) return;
+      const { error } = await supabase.from("checklists").update({ title: t }).eq("id", l.id);
+      if (error) { el.value = l.title; return msg("บันทึกไม่สำเร็จ: " + errText(error), "err"); }
+      l.title = t; msg("บันทึกแล้ว", "ok");
+    }
+  });
+  $("cls").addEventListener("keydown", (e) => {
+    if (e.key !== "Enter" || e.isComposing) return;
+    if (e.target.closest(".add")) { e.preventDefault(); addItem(e.target.closest(".cl")); }
+    else if (e.target.matches("input.tx, input.t")) e.target.blur();      // Enter = บันทึก (change)
+  });
+
+  // ข้อมูลอาจถูกแก้จากเครื่องอื่น → โหลดใหม่เมื่อกลับมาที่แท็บ (ถ้าไม่ได้กำลังพิมพ์อยู่)
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible" && !document.activeElement?.matches?.("input")) load();
+  });
+  load();
+</script>
+</body>
+</html>
