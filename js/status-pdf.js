@@ -76,8 +76,17 @@ export function analyzeLayout(words, W, H) {
   };
 
   // แถวเครื่อง: เลขในวงเล็บ (313) ใต้หมายเลข 1/52
-  const tails = words.filter((w) => /^\(?3\d{2}\)?$/.test(w.t) && w.x0 < 0.2 * W && w.x0 > 0.08 * W)
-    .sort((a, b) => a.y0 - b.y0);
+  //  มาจาก 2 รอบ OCR: ทั้งหน้า (ไทย+อังกฤษ — บางทีอ่าน "(302)" เป็นอักษรไทย) + คอลัมน์หมายเลข (อังกฤษล้วน, src "col")
+  //  → รวมกัน ตัดซ้ำ: เลขเดียวกันใกล้กัน = แถวเดียว · ตำแหน่งเดียวกันแต่อ่านต่างกัน = เชื่อรอบคอลัมน์
+  const tails = [];
+  for (const w of words.filter((w) => /^\(?3\d{2}\)?$/.test(w.t) && w.x0 < 0.2 * W && w.x0 > 0.08 * W)
+                       .sort((a, b) => (a.src === "col" ? 0 : 1) - (b.src === "col" ? 0 : 1))) {
+    const t3 = w.t.replace(/\D/g, "");
+    if (tails.some((x) => x.t.replace(/\D/g, "") === t3 && Math.abs(x.y0 - w.y0) < 150 * k)) continue;
+    if (tails.some((x) => Math.abs(x.y0 - w.y0) < 40 * k)) continue;
+    tails.push(w);
+  }
+  tails.sort((a, b) => a.y0 - b.y0);
   const rows = tails.map((tw) => {
     const above = words.find((w) => /\/\s*(52|66)$/.test(w.t) && Math.abs(w.x0 - tw.x0) < 60 * k &&
                                     w.y0 < tw.y0 - 15 * k && w.y0 > tw.y0 - 120 * k);

@@ -203,6 +203,24 @@
         const words = [];
         for (const b of data.blocks || []) for (const p of b.paragraphs) for (const l of p.lines) for (const w of l.words)
           words.push({ t: w.text, x0: w.bbox.x0, y0: w.bbox.y0, x1: w.bbox.x1, y1: w.bbox.y1 });
+        // รอบ 2: คอลัมน์ "หมายเลข" อ่านอังกฤษล้วน (เฉพาะตัวเลข/วงเล็บ) — รอบทั้งหน้าไทย+อังกฤษบางทีอ่าน "(302)" เป็นอักษรไทย
+        //  เก็บเฉพาะคำที่เป็นเลขเครื่อง (313) / หมายเลข 1/52 ไม่ให้ปนคอลัมน์สภาพที่อยู่ติดกัน
+        setProg(0.48, "กำลังอ่านเลขเครื่องซ้ำอีกรอบ…");
+        {
+          const cx0 = Math.round(0.08 * canvas.width), cx1 = Math.round(0.2 * canvas.width), S = 2;
+          const col = document.createElement("canvas"); col.width = (cx1 - cx0) * S; col.height = canvas.height * S;
+          const cg = col.getContext("2d"); cg.fillStyle = "#fff"; cg.fillRect(0, 0, col.width, col.height);
+          cg.drawImage(canvas, cx0, 0, cx1 - cx0, canvas.height, 0, 0, col.width, col.height);
+          await wEN.setParameters({ tessedit_pageseg_mode: Tesseract.PSM.SINGLE_BLOCK, tessedit_char_whitelist: "0123456789()/" });
+          try {
+            const { data: cd } = await wEN.recognize(col, {}, { blocks: true });
+            for (const b of cd.blocks || []) for (const p of b.paragraphs) for (const l of p.lines) for (const w of l.words)
+              if (/^\(?3\d{2}\)?$|^\d\/(52|66)$/.test(w.text))
+                words.push({ t: w.text, src: "col", x0: cx0 + w.bbox.x0 / S, y0: w.bbox.y0 / S, x1: cx0 + w.bbox.x1 / S, y1: w.bbox.y1 / S });
+          } finally {
+            await wEN.setParameters({ tessedit_char_whitelist: "" });     // wEN ใช้อ่านสภาพ FMC/NMC ต่อ
+          }
+        }
         setProg(0.5, "กำลังแยกข้อมูลรายเครื่อง…");
         const sheet = await extractSheet({ words, W: canvas.width, H: canvas.height, ocrCrop: makeOcrCrop(canvas),
           fileName: file.name, onProgress: (f) => setProg(0.5 + 0.45 * f, "กำลังอ่านละเอียดทีละช่อง…") });
