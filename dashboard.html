@@ -101,6 +101,7 @@
   import { getSharedFile, uploadSharedFile, downloadSharedFile } from "./js/duty.js";
   import { loadCrew } from "./js/crew.js";
   import { addUnavailable, removeUnavailable } from "./js/queue.js";
+  import { MAX_OFF_DAYS } from "./js/availability.js";
 
   const profile = await requireAuth();
   if (profile) {
@@ -119,8 +120,10 @@
       const a = document.getElementById("addBtn");
       a.hidden = false;
       a.href = `mission.html?new=1&date=${todayStr}`;
+    }
 
-      // ---------- ตั้ง "ไม่ว่าง" เป็นช่วงวันที่ ----------
+    // ---------- ตั้ง "ไม่ว่าง" เป็นช่วงวันที่ — ทุกสิทธิ์ที่ลงไม่ว่างได้ (admin/ผู้วางแผน/นักบิน/ลูกเรือ · migration_31) ----------
+    if (["admin", "planner", "pilot", "crew"].includes(profile.role)) {
       document.getElementById("offRangeBox").hidden = false;
       const fr = document.getElementById("orFrom"), to = document.getElementById("orTo");
       const msg = document.getElementById("orMsg");
@@ -141,6 +144,7 @@
         const ds = datesBetween(fr.value, to.value);
         if (!id) { msg.style.color = "var(--crit)"; msg.textContent = "กรุณาเลือกนักบิน"; return null; }
         if (!ds.length) { msg.style.color = "var(--crit)"; msg.textContent = "ช่วงวันที่ไม่ถูกต้อง (วันสิ้นสุดต้องไม่ก่อนวันเริ่ม)"; return null; }
+        if (ds.length > MAX_OFF_DAYS) { msg.style.color = "var(--crit)"; msg.textContent = `ตั้งได้ครั้งละไม่เกิน ${MAX_OFF_DAYS} วัน`; return null; }
         return { id, ds };
       };
       const shortD = (s) => { const [, mo, da] = s.split("-").map(Number); return `${da}/${mo}`; };
