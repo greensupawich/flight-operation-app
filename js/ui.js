@@ -3,6 +3,7 @@
 // =====================================================================
 import { signOut, canPlan, isAdmin } from "./auth.js";
 import { DB_ENV } from "./supabase.js";
+const EMBLEM = new URL("../assets/emblem-603.png", import.meta.url).href;   // ตรา ฝูง.603 (มุมซ้ายบน)
 
 const escHtml = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 
@@ -41,7 +42,7 @@ export function renderTopbar(profile) {
   bar.className = "topbar";
   bar.innerHTML = `
     <div class="wrap">
-      <div class="brand"><span class="mk">🛩️</span> Flight Operation${ENV_BADGE[DB_ENV] || ""}</div>
+      <div class="brand"><img class="mk" src="${EMBLEM}" alt="ตรา ฝูง.603" width="30" height="30"> Flight Operation${ENV_BADGE[DB_ENV] || ""}</div>
       <button class="nav-toggle" id="__navToggle" aria-label="เมนู" aria-expanded="false">
         <span></span><span></span><span></span>
       </button>
