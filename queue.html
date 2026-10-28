@@ -104,6 +104,7 @@
                  white-space:nowrap;max-width:45%;overflow:hidden;text-overflow:ellipsis}
   .qlist .nm{font-weight:600;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;border-radius:4px;padding:0 5px}
   .qlist .xtag{font-size:10.5px;font-weight:700;color:#fff;background:var(--warn);border-radius:5px;padding:1px 6px;white-space:nowrap}
+  .qlist .xtag.z{background:var(--surface-2);color:var(--muted);border:1px solid var(--line-strong);padding:0 5px}
   .qpanel.hol{border-color:var(--accent)}
   .qlist .meta{font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--muted);white-space:nowrap}
   .qskip{font-size:11.5px;color:var(--faint);margin-top:6px;line-height:1.5}
@@ -510,16 +511,16 @@
             const note = r.off ? (holData.off.get(r.id) || "") : "";
             return `<li class="${r.off ? "off" : r.id === nextId ? "next" : ""}"${r.off ? ` title="ไม่ว่าง${note ? ": " + esc(note) : ""}"` : ""}>
               <span class="qno">${r.rank}</span><span class="nm" style="${r.off ? "" : qualStyle(c.position)}">${esc(c.full_name)}</span>
-              ${r.tag ? `<span class="xtag" title="บินวันหยุดเกินรอบ ${r.tag} ครั้ง (ยังมีคนในรอบนี้ที่ยังไม่ได้บิน)">${r.tag}</span>` : ""}
+              ${r.tag != null ? `<span class="xtag${r.tag ? "" : " z"}" title="บินวันหยุด ${r.count} ครั้ง · มากกว่าคนที่บินน้อยสุดในกลุ่ม ${r.tag} ครั้ง">${r.tag}</span>` : ""}
               ${r.off ? `<span class="offtag">ไม่ว่าง${note ? " · " + esc(note) : ""}</span>` : ""}
-              <span class="meta">${r.count != null ? `บิน ${r.count} ครั้ง · ` : ""}ล่าสุด ${r.last ? thaiShort(r.last) + String(Number(r.last.slice(0, 4)) + 543).slice(-2) : "—"}</span></li>`;
+              <span class="meta">ล่าสุด ${r.last ? thaiShort(r.last) + String(Number(r.last.slice(0, 4)) + 543).slice(-2) : "—"}</span></li>`;
           }).join("") || `<li class="muted">ไม่มีผู้ที่นับคิวได้</li>`}</ol></div>`;
       };
       const holName = holData.holidays.has(holTarget) ? (data.holidays.find(h => h.holiday_date === holTarget)?.name || "") : "";
       box.innerHTML = `<h3>คิววันหยุด · ${thaiLong(holTarget)}${holName ? ` <span class="muted" style="font-weight:400">(${esc(holName)})</span>` : ""}</h3>
         <p class="rule">เรียงตามวันหยุดล่าสุดที่บิน — บินมานานที่สุดอยู่คิวแรก · บินล่าสุดอยู่คิวสุดท้าย · ไม่เคยบินวันหยุด = อยู่หน้าสุด (เฉพาะที่ติ๊ก) ·
           วันล่าสุดคิดจากข้อมูลไฟล์ "นจบ." (ชีตวันหยุด) รวมกับเที่ยวจริงในวันหยุด/เสาร์-อาทิตย์ในระบบตั้งแต่ ${thaiShort(HOLIDAY_QUEUE_START)} ${Number(HOLIDAY_QUEUE_START.slice(0, 4)) + 543} (ไม่นับ ST)${holData.count ? ` ·
-          จำนวนครั้ง = ตามตารางคิววันหยุด + ครั้งที่บินวันหยุดหลังวันล่าสุดในตาราง (บินติดกันหลายวัน = 1 ครั้ง)` : ""}</p>
+          แทคเลขหลังชื่อ = จำนวนครั้งที่บินวันหยุด เทียบกับคนที่บินน้อยสุดในกลุ่ม (น้อยสุด = 0) · จำนวนครั้งตามตารางคิววันหยุด + ครั้งที่บินหลังจากนั้น (บินติดกันหลายวัน = 1 ครั้ง)` : ""}</p>
         <div class="qcols">${col("IPP", "IP / P")}${col("CP", "CP")}</div>`;
     }
 

@@ -103,7 +103,8 @@ function countTrips(dates) {
  * @param baselineDays  Map(crewId -> Iterable(date))  วันหยุดที่บินจากไฟล์ "นจบ." (ไม่กรองวันหยุดซ้ำ)
  * @param baselineCount Map(crewId -> {count, last}) | null  จำนวนครั้งตั้งต้นจากตารางคิววันหยุด (migration_41)
  *                      null = ไม่มีข้อมูล → count เป็น null (ไม่แสดง)
- * @returns Map(crewId -> { group, rank|null, count|null, last|null, tag, reason|null, off })
+ * @returns Map(crewId -> { group, rank|null, count|null, last|null, tag|null, reason|null, off })
+ *          tag = count − จำนวนครั้งน้อยสุดในกลุ่ม (เฉพาะที่ติ๊กนับคิว) · ทุกคนบินครบรอบ → เลขลดลงพร้อมกัน
  */
 export function rankHolidayQueue({ crew, target, since = HOLIDAY_QUEUE_START, isOff, flownDays, hasItemOn, isUnavailable,
                                    baselineDays = new Map(), baselineCount = null }) {
@@ -126,7 +127,7 @@ export function rankHolidayQueue({ crew, target, since = HOLIDAY_QUEUE_START, is
       count = b.count + countTrips(days.filter((d) => (b.last ? d > b.last : d >= since)));
     }
     const row = { id: p.id, idx, group, count, last: days[days.length - 1] || null,
-                  reason, off, rank: null, tag: 0 };
+                  reason, off, rank: null, tag: null, inQueue: p.in_queue !== false };
     groups[group].push(row);
     result.set(p.id, row);
   });
@@ -134,6 +135,12 @@ export function rankHolidayQueue({ crew, target, since = HOLIDAY_QUEUE_START, is
     g.filter((r) => !r.reason)
      .sort((a, b) => (a.last || "").localeCompare(b.last || "") || a.idx - b.idx)   // ไม่เคยบิน ("") มาก่อน
      .forEach((r, i) => { r.rank = i + 1; });
+    // แทคเลข (ผู้ใช้กำหนด 28 ต.ค. 69): คนที่บินน้อยสุดในกลุ่ม = 0 — ไม่มีผลกับลำดับคิว
+    const counted = g.filter((r) => r.inQueue && r.count != null);
+    if (counted.length) {
+      const min = Math.min(...counted.map((r) => r.count));
+      counted.forEach((r) => { r.tag = r.count - min; });
+    }
   }
   return result;
 }
