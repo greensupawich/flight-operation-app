@@ -75,6 +75,10 @@
              border-radius:9px;padding:10px 12px;margin-bottom:8px;font-size:13.5px}
   .disc-item .txt{flex:1}
   .msg{font-size:13.5px;margin-top:10px;min-height:18px}
+  /* ข้อความสรุปหลังรายงาน (สำหรับ copy ไปส่งต่อ) */
+  #sumText{width:100%;font-family:"IBM Plex Sans Thai",system-ui,sans-serif;font-size:14px;line-height:1.6;
+           resize:vertical;background:var(--surface-2);white-space:pre-wrap}
+  .sum-actions{display:flex;gap:10px;align-items:center;margin-top:8px;flex-wrap:wrap}
   .msg.ok{color:var(--good)} .msg.err{color:var(--crit)}
   /* ---- รายงานอันตราย (safety) ---- */
   .safety-meta{flex-wrap:wrap;gap:16px}
@@ -189,10 +193,21 @@
       <div id="safetyBox"></div>
     </div>
 
-    <div style="display:flex;gap:10px;align-items:center;margin-top:20px;padding-bottom:40px">
+    <div style="display:flex;gap:10px;align-items:center;margin-top:20px;padding-bottom:16px">
       <button class="btn primary" id="save">บันทึกรายงาน</button>
       <a class="btn ghost" id="back" href="dashboard.html">กลับ</a>
       <span class="msg" id="msg"></span>
+    </div>
+
+    <!-- ข้อความสรุป — แสดงเมื่อมีรายงานแล้ว · copy ไปส่งต่อ -->
+    <div class="panel" id="sumPanel" hidden style="margin-bottom:40px">
+      <h3>📋 ข้อความสรุปสำหรับส่งต่อ</h3>
+      <p class="hint">สร้างจากรายงานที่บันทึกแล้ว · แก้ข้อความในกล่องก่อน copy ได้ (ไม่กระทบรายงาน)</p>
+      <textarea id="sumText" rows="7" aria-label="ข้อความสรุป"></textarea>
+      <div class="sum-actions">
+        <button class="btn primary" id="sumCopy">📋 คัดลอกข้อความ</button>
+        <span class="msg" id="sumMsg" style="margin:0"></span>
+      </div>
     </div>
   </div>
 </main>
@@ -388,6 +403,29 @@
     }
     paintResult();
 
+    // ---------- ข้อความสรุปสำหรับส่งต่อ ----------
+    //  ATR316 MCP2.6 / ข้อขัดข้อง / - ... / Parking N16
+    let lastSum = null;
+    async function showSummary(sum) {
+      lastSum = sum;
+      const list = await loadDiscrepancies(missionId);
+      const tail = String(m.aircraft?.tail_number || "").trim();
+      const pre = (String(m.aircraft?.type || "").match(/^[A-Za-z]+/) || [""])[0].toUpperCase();
+      const ac = tail ? pre + (/^\d{4,}$/.test(tail) ? tail.slice(-3) : tail) : (m.callsign || "");
+      const lines = [`${ac} ${sum.result || ""}${fmt(Number(sum.total) || 0)}`.trim(), "ข้อขัดข้อง",
+        ...(list.length ? list.map((d) => `- ${String(d.description || "").trim()}`) : ["- ไม่มี"])];
+      if (sum.parking) lines.push(`Parking ${sum.parking}`);
+      document.getElementById("sumText").value = lines.join("\n");
+      document.getElementById("sumMsg").textContent = "";
+      document.getElementById("sumPanel").hidden = false;
+    }
+    document.getElementById("sumCopy").addEventListener("click", async () => {
+      const ta = document.getElementById("sumText"), sm = document.getElementById("sumMsg");
+      try { await navigator.clipboard.writeText(ta.value); sm.className = "msg ok"; sm.textContent = "✓ คัดลอกแล้ว"; }
+      catch { ta.focus(); ta.select(); sm.className = "msg"; sm.textContent = "เลือกข้อความไว้แล้ว — กด Cmd/Ctrl+C"; }
+    });
+    if (existing) showSummary({ result: existing.result, total: existing.total_hours, parking: existing.parking_return || "" });
+
     // ---------- รูป/วีดีโอแนบ (ข้อขัดข้อง + รายงานอันตราย) ----------
     let media = await loadMissionMedia(missionId);
     const mediaOf = (key, id) => id ? media.filter(x => x[key] === id) : [];
@@ -448,6 +486,7 @@
 
     async function refreshDisc() {
       const list = await loadDiscrepancies(missionId);
+      if (lastSum) showSummary(lastSum);                // ข้อความสรุปตามรายการข้อขัดข้องล่าสุด
       const listBox = document.getElementById("discList");
       listBox.innerHTML = list.length
         ? list.map(d => `<div class="disc-item" data-id="${d.id}">
@@ -611,6 +650,7 @@
       }
 
       const sfN = safety.filter(s => (s.description||"").trim()).length;
+      await showSummary({ result, total, parking: document.getElementById("parkRet").value.toUpperCase().trim() });
       msg.className = repErr?.warning || legErr?.warning ? "msg err" : "msg ok";
       msg.textContent = repErr?.warning || legErr?.warning ||
         `✓ บันทึกแล้ว · ${result || "ยังไม่ระบุผล"} · ${fmt(total)} ชม.${sfN ? ` · รายงานอันตราย ${sfN} รายการ` : ""} — กระจายไปลูกเรือและเครื่องอัตโนมัติ`;
