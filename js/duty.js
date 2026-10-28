@@ -39,6 +39,15 @@ export async function loadDuty(category) {
   return { days, notes, error: null };
 }
 
+// ---------- คิววันหยุด: จำนวนครั้งตั้งต้น (migration_41) ----------
+//  คืน { base: Map(crewId -> { count, last }) | null (ยังไม่รัน migration_41 → ไม่แสดงจำนวนครั้ง), error }
+export async function loadHolidayBase() {
+  const { data, error } = await supabase.from("crew_holiday_base").select("crew_member_id, base_count, base_last");
+  if (error) return { base: null, error };
+  return { base: new Map((data || []).map((r) => [r.crew_member_id,
+    { count: r.base_count || 0, last: r.base_last ? String(r.base_last).slice(0, 10) : null }])), error: null };
+}
+
 export async function addDuty(crewId, category, date) {
   const { error } = await supabase.from("crew_duty_log")
     .upsert({ crew_member_id: crewId, category, duty_date: date },

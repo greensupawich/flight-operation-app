@@ -83,6 +83,15 @@ export function rankQueue({ crew, monthDates, target, isOff, itemsFor, isUnavail
 // เริ่มนับคิววันหยุดตั้งแต่ ต.ค. 2569 (ผู้ใช้กำหนด) — เปลี่ยนวันเริ่มรอบใหม่ได้ที่นี่
 export const HOLIDAY_QUEUE_START = "2026-10-01";
 
+// บินวันหยุดติดกันหลายวัน (เช่น เสาร์-อาทิตย์ ภารกิจเดียว) = 1 ครั้ง · dates เรียงเก่า → ใหม่
+function countTrips(dates) {
+  let n = 0, prev = null;
+  for (const d of dates) {
+    if (!prev || (Date.parse(d) - Date.parse(prev)) / 86400000 > 1) n++;
+    prev = d;
+  }
+  return n;
+}
 /**
  * @param crew      [{id, position, in_queue}] เรียงตามลำดับในตาราง
  * @param target    วันหยุดที่จะแสดงคิว (นับเฉพาะเที่ยวก่อนวันนี้)
@@ -92,10 +101,12 @@ export const HOLIDAY_QUEUE_START = "2026-10-01";
  * @param hasItemOn (crewId, date) => มีรายการในวันนั้นแล้ว
  * @param isUnavailable (crewId, date) => boolean
  * @param baselineDays  Map(crewId -> Iterable(date))  วันหยุดที่บินจากไฟล์ "นจบ." (ไม่กรองวันหยุดซ้ำ)
- * @returns Map(crewId -> { group, rank|null, count, last|null, tag, reason|null, off })
+ * @param baselineCount Map(crewId -> {count, last}) | null  จำนวนครั้งตั้งต้นจากตารางคิววันหยุด (migration_41)
+ *                      null = ไม่มีข้อมูล → count เป็น null (ไม่แสดง)
+ * @returns Map(crewId -> { group, rank|null, count|null, last|null, tag, reason|null, off })
  */
 export function rankHolidayQueue({ crew, target, since = HOLIDAY_QUEUE_START, isOff, flownDays, hasItemOn, isUnavailable,
-                                   baselineDays = new Map() }) {
+                                   baselineDays = new Map(), baselineCount = null }) {
   const result = new Map();
   const groups = { IPP: [], CP: [] };
   crew.forEach((p, idx) => {
@@ -108,7 +119,13 @@ export function rankHolidayQueue({ crew, target, since = HOLIDAY_QUEUE_START, is
     if (p.in_queue === false) reason = "ไม่ได้ติ๊กนับคิว";
     else if (hasItemOn(p.id, target)) reason = "มีรายการในวันนั้นแล้ว";
     const off = !reason && isUnavailable(p.id, target);
-    const row = { id: p.id, idx, group, count: days.length, last: days[days.length - 1] || null,
+    // จำนวนครั้ง = ตั้งต้นจากตาราง + ครั้งที่บินหลังวันล่าสุดในตาราง (ไม่มีวันล่าสุด = นับตั้งแต่ since)
+    let count = null;
+    if (baselineCount) {
+      const b = baselineCount.get(p.id) || { count: 0, last: null };
+      count = b.count + countTrips(days.filter((d) => (b.last ? d > b.last : d >= since)));
+    }
+    const row = { id: p.id, idx, group, count, last: days[days.length - 1] || null,
                   reason, off, rank: null, tag: 0 };
     groups[group].push(row);
     result.set(p.id, row);
