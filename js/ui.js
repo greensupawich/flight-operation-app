@@ -13,7 +13,7 @@ const LINKS = [
   { href: "crew.html",      label: "ทะเบียนนักบิน" },
   { href: "pilot-month.html", label: "พ." },
   { href: "status.html",    label: "สถานภาพเครื่อง" },
-  { href: "checklist.html", label: "Checklist" },
+  { href: "checklist.html", label: "Checklist", plannerOnly: true },
   { href: "stats.html",     label: "สถิติ" },
   { href: "archive.html",   label: "ย้อนหลัง" },
   { href: "https://greensupawich.github.io/flightplan/", label: "Flight Plan ↗", external: true },
@@ -31,7 +31,7 @@ const ENV_BADGE = {
 export function renderTopbar(profile) {
   const here = location.pathname.split("/").pop() || "dashboard.html";
   const links = LINKS
-    .filter((l) => !l.adminOnly || isAdmin(profile))
+    .filter((l) => (!l.adminOnly || isAdmin(profile)) && (!l.plannerOnly || canPlan(profile)))
     .map((l) => l.external
       ? `<a href="${l.href}" target="_blank" rel="noopener" title="เปิด Flight Plan Generator ในแท็บใหม่">${l.label}</a>`
       : `<a href="${l.href}" class="${l.href === here ? "active" : ""}">${l.label}</a>`)

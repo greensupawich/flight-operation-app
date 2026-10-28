@@ -66,6 +66,12 @@
   if (!profile) throw new Error("no auth");
   renderTopbar(profile);
   const planner = canPlan(profile);
+  // หน้านี้เฉพาะผู้วางแผน / admin (เมนูถูกซ่อนสำหรับสิทธิ์อื่น · ฐานข้อมูลก็กันการอ่านไว้ — migration_40)
+  if (!planner) {
+    document.querySelector("main .wrap").innerHTML =
+      `<div class="page-head"><h1>Checklist น.จัดบิน</h1></div><div class="empty">หน้านี้สำหรับผู้วางแผน / admin เท่านั้น</div>`;
+    throw new Error("planner only");
+  }
   const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[c]));
   const $ = (id) => document.getElementById(id);
   const NEED_MIGRATION = "ยังไม่มีตาราง — ต้องรัน db/migration_36_checklists.sql ก่อน";
