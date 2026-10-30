@@ -81,6 +81,25 @@ export async function loadMonthCounts(year, month /* 0-11 */) {
   return counts;
 }
 
+// ---------- วันที่มีภารกิจยังไม่รายงานหลังบิน (ไม่นับ STBY / STBY เดโชชัย / ยกเลิก) ----------
+//  คืน Map("YYYY-MM-DD" -> จำนวนภารกิจที่ยังไม่รายงาน) — ปฏิทินแสดงเครื่องบินสีแดง
+export async function loadMonthUnreported(year, month /* 0-11 */) {
+  const first = new Date(Date.UTC(year, month, 1));
+  const last  = new Date(Date.UTC(year, month + 1, 0));
+  const { data, error } = await supabase
+    .from("missions")
+    .select("mission_date, kind, status, post_flight_reports(id)")
+    .gte("mission_date", iso(first))
+    .lte("mission_date", iso(last));
+  if (error) { console.error(error); return new Map(); }
+  const out = new Map();
+  (data || []).forEach((m) => {
+    if (isStby(m.kind) || m.status === "cancelled" || reportOf(m)) return;
+    out.set(m.mission_date, (out.get(m.mission_date) || 0) + 1);
+  });
+  return out;
+}
+
 // ---------- ภารกิจทั้งหมดของวันหนึ่ง (พร้อมลูกเรือ) ----------
 export async function loadMissionsByDate(dateStr) {
   const { data, error } = await supabase
