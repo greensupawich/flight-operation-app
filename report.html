@@ -236,6 +236,20 @@
     const m = await getMission(missionId);
     if (!m) { document.getElementById("sub").textContent = "ไม่พบภารกิจ"; throw new Error("not found"); }
 
+    // นักบิน/เจ้าหน้าที่ บันทึกได้เฉพาะภารกิจที่ชื่อตัวเองอยู่ในลูกเรือ (บัญชีต้องผูกชื่อในทะเบียน — migration_45)
+    const NO_RIGHT = "คุณยังไม่มีสิทธิ์บันทึกภารกิจนี้ — บัญชีต้องผูกกับชื่อในทะเบียนนักบิน (admin ตั้งที่หน้า admin) และชื่อต้องอยู่ในลูกเรือภารกิจนี้";
+    const why = (e) => /row-level security|permission denied/i.test(e?.message || "") ? NO_RIGHT : (e?.message || String(e));
+    if (!["admin", "planner"].includes(profile.role)) {
+      const mine = profile.crew_member_id && (m.mission_crew || []).some(c => c.crew_member_id === profile.crew_member_id);
+      if (!mine) {
+        const w = document.createElement("div");
+        w.className = "panel"; w.style.cssText = "margin-bottom:16px;border-color:var(--warn);background:var(--warn-soft);font-size:13.5px;line-height:1.6";
+        w.textContent = "⚠️ " + (profile.crew_member_id ? "ชื่อของคุณไม่อยู่ในลูกเรือภารกิจนี้ — บันทึกรายงานไม่ได้ (ให้ผู้วางแผนแก้ลูกเรือ หรือรายงานแทน)"
+                                                   : "บัญชีของคุณยังไม่ได้ผูกกับชื่อในทะเบียนนักบิน — บันทึกรายงานไม่ได้ ให้ admin ผูกชื่อที่หน้า admin ก่อน");
+        document.querySelector(".page-head").after(w);
+      }
+    }
+
     const acTxt = m.aircraft ? `${m.aircraft.type || ""}/${m.aircraft.tail_number}` : "ไม่ระบุเครื่อง";
     document.getElementById("sub").textContent =
       `${m.mission_name || "-"} · ${m.mission_date} · ${m.callsign || ""} · ${acTxt}`;
@@ -441,7 +455,7 @@
     async function removeMedia(row) {
       if (!confirm(`ลบไฟล์ ${row.file_name || ""}?`)) return false;
       const err = await deleteMedia(row);
-      if (err) { alert("ลบไฟล์ไม่สำเร็จ: " + err.message); return false; }
+      if (err) { alert("ลบไฟล์ไม่สำเร็จ: " + why(err)); return false; }
       await reloadMedia(); return true;
     }
     async function uploadWithNote(noteEl, parent, files) {
@@ -507,7 +521,7 @@
         el.querySelector("[data-deldisc]").addEventListener("click", async () => {
           if (!confirm("ลบข้อขัดข้องนี้? (ไฟล์แนบจะถูกลบด้วย)")) return;
           const err = await deleteDiscrepancy(id);
-          if (err) { alert("ลบไม่สำเร็จ: " + err.message); return; }
+          if (err) { alert("ลบไม่สำเร็จ: " + why(err)); return; }
           await reloadMedia(); refreshDisc();
         });
       });
@@ -519,7 +533,7 @@
       const text = t.value.trim(); if (!text) return;
       const btn = document.getElementById("addDisc"); btn.disabled = true;
       const { error, id } = await addDiscrepancy(missionId, m.aircraft_id, text);
-      if (error) { btn.disabled = false; alert("บันทึกไม่สำเร็จ: " + error.message); return; }
+      if (error) { btn.disabled = false; alert("บันทึกไม่สำเร็จ: " + why(error)); return; }
       t.value = "";
       const files = discFiles; discFiles = []; renderDiscPending();
       const note = document.createElement("div"); note.className = "upl-note";
@@ -611,7 +625,7 @@
 
       const clean = legs.filter(l => (l.from_point||"").trim() || (l.to_point||"").trim() || Number(l.hours));
       const legErr = await replaceLegs(missionId, clean);
-      if (legErr && !legErr.warning) { msg.className = "msg err"; msg.textContent = "บันทึกขาไม่สำเร็จ: " + legErr.message;
+      if (legErr && !legErr.warning) { msg.className = "msg err"; msg.textContent = "บันทึกขาไม่สำเร็จ: " + why(legErr);
                     btn.disabled = false; btn.textContent = "บันทึกรายงาน"; return; }
 
       const legSum = clean.reduce((s, l) => s + (Number(l.hours) || 0), 0);
@@ -623,11 +637,11 @@
         defect_systems: dsys,
       });
       if (repErr && !repErr.warning) { btn.disabled = false; btn.textContent = "บันทึกรายงาน";
-        msg.className = "msg err"; msg.textContent = "บันทึกรายงานไม่สำเร็จ: " + repErr.message; return; }
+        msg.className = "msg err"; msg.textContent = "บันทึกรายงานไม่สำเร็จ: " + why(repErr); return; }
 
       const { error: sfErr, ids } = await saveSafety(missionId, safety);
       if (sfErr) { btn.disabled = false; btn.textContent = "บันทึกรายงาน";
-        msg.className = "msg err"; msg.textContent = "บันทึก ชม.แล้ว แต่รายงานอันตรายไม่สำเร็จ: " + sfErr.message; return; }
+        msg.className = "msg err"; msg.textContent = "บันทึก ชม.แล้ว แต่รายงานอันตรายไม่สำเร็จ: " + why(sfErr); return; }
 
       // ไฟล์ที่เลือกไว้กับรายการใหม่ → อัปโหลดหลังได้ id · รายการว่าง (ไม่ได้เก็บ) ตัดทิ้ง
       const upErrs = [];

@@ -36,11 +36,24 @@ export async function reject(id) {
   return error;
 }
 
-// ---------- แก้บทบาท/สถานะของผู้ใช้เดิม ----------
-export async function updateUser(id, role, status) {
-  const { error } = await supabase.from("profiles")
-    .update({ role, status }).eq("id", id);
+// ---------- แก้บทบาท/สถานะ + ชื่อในทะเบียนนักบินของผู้ใช้เดิม ----------
+//  crewId: undefined = ไม่แตะ · null = ยกเลิกการผูก (migration_45 — ใช้เช็คสิทธิ์รายงานหลังบินของนักบิน)
+export async function updateUser(id, role, status, crewId) {
+  const patch = { role, status };
+  if (crewId !== undefined) patch.crew_member_id = crewId;
+  const { error } = await supabase.from("profiles").update(patch).eq("id", id);
+  if (error && /crew_member_id/.test(error.message || ""))
+    return { message: "ยังไม่มีช่องผูกชื่อ — ต้องรัน db/migration_45_profile_crew_link.sql ก่อน" };
+  if (error && /uq_profiles_crew_member|duplicate key/.test(error.message || ""))
+    return { message: "ชื่อนี้ผูกกับบัญชีอื่นอยู่แล้ว (1 ชื่อ = 1 บัญชี)" };
   return error;
+}
+
+// ชื่อในทะเบียน (ตัดยศ เช่น "ร.ท.วิทวัส" → "วิทวัส") ตรงกับคำแรกของชื่อบัญชี → แนะนำให้ผูก
+const bareName = (s) => String(s || "").replace(/^.*\./, "").replace(/\s*\(.*\)\s*$/, "").trim();
+function suggestCrew(p, crew) {
+  const first = String(p.full_name || "").trim().split(/\s+/)[0];
+  return first ? crew.find((c) => bareName(c.full_name) === first) : null;
 }
 
 // =====================================================================
@@ -95,10 +108,25 @@ export function renderRequests(card, tbody, countEl, profiles, onDone) {
 // =====================================================================
 //  วาดตาราง "ผู้ใช้ทั้งหมด"
 // =====================================================================
-export function renderUsers(tbody, profiles, onDone) {
+export function renderUsers(tbody, profiles, onDone, crew = []) {
+  const hasLink = profiles.some((p) => "crew_member_id" in p);       // รัน migration_45 แล้ว
+  const linked = new Map(profiles.filter((p) => p.crew_member_id).map((p) => [p.crew_member_id, p.id]));
   const rows = profiles.filter((p) => p.status !== "pending")
     .sort((a, b) => (isDefaultAdmin(b) - isDefaultAdmin(a)) || ((b.role === "admin") - (a.role === "admin")));
   const full = adminCount(profiles) >= MAX_ADMINS;
+
+  // ช่องผูกชื่อในทะเบียนนักบิน — นักบินรายงานหลังบินได้เฉพาะภารกิจที่ชื่อตัวเองอยู่ในลูกเรือ
+  function crewCell(p) {
+    const sug = !p.crew_member_id ? suggestCrew(p, crew) : null;
+    const opts = crew.filter((c) => c.active !== false || c.id === p.crew_member_id)
+      .map((c) => {
+        const taken = linked.has(c.id) && linked.get(c.id) !== p.id;
+        return `<option value="${c.id}" ${c.id === p.crew_member_id ? "selected" : ""} ${taken ? "disabled" : ""}>${esc(c.full_name)}${c.position ? " · " + esc(c.position) : ""}${taken ? " (ผูกแล้ว)" : ""}</option>`;
+      }).join("");
+    return `<select data-crew style="min-width:150px"><option value="">— ไม่ผูก —</option>${opts}</select>
+      ${sug && !linked.has(sug.id) ? `<div class="muted" style="font-size:11.5px;margin-top:3px">แนะนำ: <a href="#" data-sug="${sug.id}">${esc(sug.full_name)}</a></div>` : ""}
+      ${["pilot", "crew"].includes(p.role) && !p.crew_member_id ? `<div style="font-size:11.5px;color:var(--warn);margin-top:2px">ยังไม่ผูก → รายงานหลังบินไม่ได้</div>` : ""}`;
+  }
 
   tbody.innerHTML = rows.length ? rows.map((p) => {
     const locked = isDefaultAdmin(p);
@@ -114,19 +142,25 @@ export function renderUsers(tbody, profiles, onDone) {
         <div class="muted mono" style="font-size:12px">${esc(p.email)}</div>
       </td>
       <td>${esc(p.rank || "-")}</td>
+      <td>${hasLink ? crewCell(p) : `<span class="muted" style="font-size:12px">ต้องรัน migration_45</span>`}</td>
       <td><select data-role ${locked ? "disabled" : ""}>${roleOpts}</select></td>
       <td><select data-status ${locked ? "disabled" : ""}>${STATUS.map(s=>`<option value="${s}" ${s===p.status?"selected":""}>${s}</option>`).join("")}</select></td>
       <td>${locked ? `<span class="muted" style="font-size:12px">ล็อก</span>` : `<button class="btn sm" data-save>บันทึก</button>`}</td>
     </tr>`;
   }).join("")
-    : `<tr><td colspan="5" class="empty">ยังไม่มีผู้ใช้ที่อนุมัติแล้ว</td></tr>`;
+    : `<tr><td colspan="6" class="empty">ยังไม่มีผู้ใช้ที่อนุมัติแล้ว</td></tr>`;
 
+  tbody.querySelectorAll("[data-sug]").forEach((a) => a.addEventListener("click", (e) => {
+    e.preventDefault(); a.closest("tr").querySelector("[data-crew]").value = a.dataset.sug;
+  }));
   tbody.querySelectorAll("[data-save]").forEach((b) =>
     b.addEventListener("click", async (e) => {
       const tr = e.target.closest("tr");
       b.disabled = true; b.textContent = "…";
+      const cs = tr.querySelector("[data-crew]");
       const err = await updateUser(tr.dataset.id,
-        tr.querySelector("[data-role]").value, tr.querySelector("[data-status]").value);
+        tr.querySelector("[data-role]").value, tr.querySelector("[data-status]").value,
+        cs ? (cs.value || null) : undefined);
       b.disabled = false; b.textContent = err ? "บันทึก" : "✓";
       if (err) alert("ไม่สำเร็จ: " + err.message); else onDone && onDone();
     }));

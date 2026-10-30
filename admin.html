@@ -77,8 +77,8 @@
     <h2 class="sec">ผู้ใช้ในระบบ <span class="admin-quota" id="adminQuota"></span></h2>
     <div class="tablewrap">
       <table>
-        <thead><tr><th>ผู้ใช้</th><th>ตำแหน่ง</th><th>สิทธิ์</th><th>สถานะ</th><th></th></tr></thead>
-        <tbody id="userRows"><tr><td colspan="5" class="empty">กำลังโหลด…</td></tr></tbody>
+        <thead><tr><th>ผู้ใช้</th><th>ตำแหน่ง</th><th title="นักบินรายงานหลังบินได้เฉพาะภารกิจที่ชื่อนี้อยู่ในลูกเรือ">ชื่อในทะเบียนนักบิน</th><th>สิทธิ์</th><th>สถานะ</th><th></th></tr></thead>
+        <tbody id="userRows"><tr><td colspan="6" class="empty">กำลังโหลด…</td></tr></tbody>
       </table>
     </div>
     <p class="muted" style="margin-top:14px;font-size:12.5px">
@@ -107,6 +107,7 @@
 <script type="module">
   import { requireAuth } from "./js/auth.js";
   import { renderTopbar } from "./js/ui.js";
+  import { loadCrew } from "./js/crew.js";
   import { loadProfiles, renderRequests, renderUsers, loadInvites, addInvite, renderInvites, ROLES, ROLE_LABEL, MAX_ADMINS,
            loadAudit, renderAudit, AUDIT_TABLE_LABEL } from "./js/admin.js";
 
@@ -125,10 +126,10 @@
       .map(r => `<option value="${r}" ${r === "crew" ? "selected" : ""}>${ROLE_LABEL[r]}</option>`).join("");
 
     async function refresh() {
-      const [profiles, invites] = await Promise.all([loadProfiles(), loadInvites()]);
+      const [profiles, invites, crew] = await Promise.all([loadProfiles(), loadInvites(), loadCrew()]);
       renderRequests(card, reqTb, cnt, profiles, refresh);
       renderInvites(ivTb, invites, profiles, refresh);
-      renderUsers(userTb, profiles, refresh);
+      renderUsers(userTb, profiles, refresh, crew);
       const n = profiles.filter(p => p.role === "admin").length;
       const q = document.getElementById("adminQuota");
       q.textContent = `ผู้ดูแลระบบ ${n}/${MAX_ADMINS}`;
