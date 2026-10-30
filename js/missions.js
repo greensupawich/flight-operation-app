@@ -124,20 +124,23 @@ export async function getMission(id) {
 //  บันทึกภารกิจ (สร้างใหม่ถ้าไม่มี id) + แทนที่รายชื่อลูกเรือทั้งชุด
 //  crew = [{ position, crew_name, crew_member_id }]
 // =====================================================================
-let _hasTD;
-async function hasTravelDirector() {
-  if (_hasTD === undefined) {
-    const { error } = await supabase.from("missions").select("travel_director").limit(1);
-    _hasTD = !error;
+// ช่องที่เพิ่มทีหลัง (migration_48 travel_director, 49 doc_officer) — ยังไม่รัน migration → ตัดช่องที่ว่างออก แทนที่จะบันทึกไม่ได้ทั้งภารกิจ
+const LATE_COLS = ["travel_director", "doc_officer"];
+let _colOk;
+async function lateColsOk() {
+  if (!_colOk) {
+    _colOk = {};
+    for (const c of LATE_COLS) _colOk[c] = !(await supabase.from("missions").select(c).limit(1)).error;
   }
-  return _hasTD;
+  return _colOk;
 }
 
 export async function saveMission(id, fields, crew) {
   const { data: { session } } = await supabase.auth.getSession();
   let missionId = id;
-  // ยังไม่รัน migration_48 → ไม่มีคอลัมน์ travel_director: ตัดช่องนี้ออก (ถ้าว่าง) แทนที่จะบันทึกไม่ได้ทั้งภารกิจ
-  if (!fields.travel_director && !(await hasTravelDirector())) { fields = { ...fields }; delete fields.travel_director; }
+  const ok = await lateColsOk();
+  fields = { ...fields };
+  LATE_COLS.forEach((c) => { if (!fields[c] && !ok[c]) delete fields[c]; });
 
   if (missionId) {
     const { error } = await supabase.from("missions").update(fields).eq("id", missionId);

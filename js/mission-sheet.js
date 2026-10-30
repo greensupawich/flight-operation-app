@@ -67,7 +67,8 @@ export function sheetHTML(m, { planner = false } = {}) {
       <tr><td class="lb">หน.คณะ</td><td colspan="5" class="v">${v(m.head_delegation)}</td></tr>
       ${m.travel_director ? `<tr><td class="lb">ผอ.เดินทาง</td><td colspan="5" class="v">${esc(m.travel_director)}</td></tr>` : ""}
       ${[...PILOT_ROLES, ...OTHER_ROLES].map(r => crewRow(r, crew)).join("")}
-      <tr><td class="lb">POCคณะ</td><td colspan="5" class="v">${v(poc)}</td></tr>
+      <tr><td class="lb">POCคณะ</td><td colspan="5" class="v">${poc ? esc(poc).split(/\s*\/\s*/).filter(Boolean).join("<br>") : v("")}</td></tr>
+      ${m.doc_officer ? `<tr><td class="lb">น.เอกสาร</td><td colspan="5" class="v">${esc(m.doc_officer)}</td></tr>` : ""}
       <tr><td class="lb" rowspan="2">หมายเหตุ</td><td colspan="3" rowspan="2" class="v">${m.remark ? esc(m.remark).split(/\s*\/\s*/).filter(Boolean).join("<br>") : v("")}</td>
           <td class="lb">ไป</td><td class="v c hot">${v(m.parking_out)}</td></tr>
       <tr><td class="lb">กลับ</td><td class="v c hot">${v(m.parking_in)}</td></tr>

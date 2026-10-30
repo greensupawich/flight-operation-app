@@ -120,9 +120,16 @@ function fillCard(ws, [r0, c0], m) {
   const crewRows = clean(m.travel_director)
     ? [{ position: "ผอ.เดินทาง", crew_name: clean(m.travel_director), sort_order: -1 }, ...(m.mission_crew || [])]
     : (m.mission_crew || []);
+  const rng = (r1, c1, r2, c2) => `${at(r1, c1).address}:${at(r2, c2).address}`;
   crewLayout(crewRows).forEach(({ role, names }, i) => {
     const r = 9 + i;
     at(r, 1).value = role;
+    if (role === "ผอ.เดินทาง" || role === "AC") {            // ชื่อ + เบอร์ยาว → ใช้เต็มแถว
+      [[2, 3], [4, 5], [6, 7]].forEach(([a, b]) => ws.unMergeCells(rng(r, a, r, b)));
+      ws.mergeCells(rng(r, 2, r, 7));
+      at(r, 2).value = names.join("  ·  ") || null;
+      return;
+    }
     const slots = [names[0], names[1], names.slice(2).join(", ")];
     [2, 4, 6].forEach((c, k) => { at(r, c).value = slots[k] || null; });
   });
@@ -131,7 +138,17 @@ function fillCard(ws, [r0, c0], m) {
     .split(/\s*\/\s*/).filter(Boolean);
   const pc = at(17, 2);
   pc.value = poc.join("\n") || null;
-  if (poc.length > 2) pc.font = { ...pc.font, size: Math.max(14, Math.floor((pc.font?.size || 26) * 2.5 / poc.length)) };
+  const doc = clean(m.doc_officer);
+  if (doc) {
+    // มี น.เอกสาร (migration_49) → POCคณะ 1 แถว (17) + น.เอกสาร (18) เหมือนกระดานจริง · POC หลายคณะ → เพิ่มความสูงแถว 17
+    ws.unMergeCells(rng(17, 1, 18, 1)); ws.unMergeCells(rng(17, 2, 18, 7));
+    for (let c = 1; c <= 7; c++) at(18, c).style = JSON.parse(JSON.stringify(at(17, c).style || {}));   // แถว 18 ใช้ style เดียวกับแถว POC
+    ws.mergeCells(rng(17, 2, 17, 7)); ws.mergeCells(rng(18, 2, 18, 7));
+    at(18, 1).value = "น.เอกสาร";
+    at(18, 2).value = doc;
+    const row = ws.getRow(r0 + 16), need = poc.length * 33 + 4;
+    if (poc.length > 1 && (row.height || 35) < need) row.height = need;
+  } else if (poc.length > 2) pc.font = { ...pc.font, size: Math.max(14, Math.floor((pc.font?.size || 26) * 2.5 / poc.length)) };
   // หมายเหตุ: "/" = ขึ้นบรรทัดใหม่ · บรรทัดแรกลงแถว 19 ที่เหลือลงแถว 20 · ยาวเกินช่อง → ตัดบรรทัด + เพิ่มความสูงแถว
   const rem = clean(m.remark).split(/\s*\/\s*/).filter(Boolean);
   [[19, rem.slice(0, 1)], [20, rem.slice(1)]].forEach(([r, lines]) => {

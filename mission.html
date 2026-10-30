@@ -111,6 +111,8 @@
       </div>
       <label style="margin-top:12px">ผอ.เดินทาง</label>
       <input id="f_director" placeholder="ชื่อ ผอ.เดินทาง (ถ้ามี)">
+      <label style="margin-top:12px">น.เอกสาร</label>
+      <input id="f_docOfficer" placeholder="ชื่อ + เบอร์ น.เอกสาร (ถ้ามี) เช่น ร.ท.ตรัย หวานขัน 09 9302 5625">
     </div>
 
     <!-- ลูกเรือ -->
@@ -293,6 +295,7 @@
         $("f_head").value = m.head_delegation || ""; $("f_pocName").value = m.poc_name || "";
         $("f_pocPhone").value = m.poc_phone || ""; $("f_remark").value = m.remark || "";
         $("f_director").value = m.travel_director || "";
+        $("f_docOfficer").value = m.doc_officer || "";
         $("back").href = `day.html?date=${m.mission_date}`;
 
         // เติมลูกเรือเดิมเข้า state
@@ -336,6 +339,7 @@
         poc_name: $("f_pocName").value.trim(), poc_phone: $("f_pocPhone").value.trim(),
         remark: $("f_remark").value.trim(),
         travel_director: $("f_director").value.trim() || null,      // migration_48
+        doc_officer: $("f_docOfficer").value.trim() || null,         // migration_49
       };
 
       // รวบรวมลูกเรือ + ผูก profile ถ้าชื่อตรงกับผู้ใช้ในระบบ
