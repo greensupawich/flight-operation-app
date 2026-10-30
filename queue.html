@@ -102,6 +102,8 @@
   .qlist li{display:flex;align-items:center;gap:8px;font-size:12.5px;padding:3px 6px;border-radius:6px}
   .qlist li.next{background:var(--primary-soft)}
   .qlist li.off{background:var(--crit-soft)}
+  .qlist li.done .nm,.qlist li.done .meta{opacity:.55}
+  .qlist .donetag{font-size:10.5px;font-weight:700;color:var(--good);border:1px solid var(--good);border-radius:5px;padding:0 5px;white-space:nowrap}
   .qlist li.off .nm{color:var(--crit)}
   .qlist li.off .qno{border-color:var(--crit);color:var(--crit)}
   .qlist .offtag{font-size:10.5px;font-weight:700;color:#fff;background:var(--crit);border-radius:5px;padding:1px 6px;
@@ -500,15 +502,16 @@
         const rows = [...src.values()].filter(r => r.group === group);
         const ranked = rows.filter(r => r.rank).sort((a, b) => a.rank - b.rank);
         // คนไม่ว่างยังอยู่ในลำดับคิว แต่เป็นแถวสีแดง + หมายเหตุ · ไฮไลต์ "คิวถัดไป" ที่คนแรกที่ว่าง
-        const nextId = ranked.find(r => !r.off)?.id;
+        const nextId = ranked.find(r => !r.off && !r.assigned)?.id;     // คนแรกที่ว่างและยังไม่ถูกจัด
         const offN = ranked.filter(r => r.off).length;
         return `<div class="qcol${ref ? " ref" : ""}"><h4>${title} <span class="muted" style="font-weight:400">(${ranked.length} คน${offN ? ` · ไม่ว่าง ${offN}` : ""})</span></h4>
           <ol class="qlist">${ranked.map(r => {
             const c = byId.get(r.id);
             const note = r.off ? (qMaps.offMap.get(`${r.id}|${target}`) || "") : "";
-            return `<li class="${r.off ? "off" : r.id === nextId ? "next" : ""}"${r.off ? ` title="ไม่ว่าง${note ? ": " + esc(note) : ""}"` : ""}>
+            return `<li class="${r.off ? "off" : r.assigned ? "done" : r.id === nextId ? "next" : ""}"${r.off ? ` title="ไม่ว่าง${note ? ": " + esc(note) : ""}"` : r.assigned ? ` title="จัดลงวันนั้นแล้ว"` : ""}>
               <span class="qno">${r.rank}</span><span class="nm" style="${r.off ? "" : qualStyle(c.position)}">${esc(c.full_name)}</span>
               ${r.off ? `<span class="offtag">ไม่ว่าง${note ? " · " + esc(note) : ""}</span>` : ""}
+              ${r.assigned ? `<span class="donetag">✓ จัดแล้ว</span>` : ""}
               <span class="meta">บิน ${r.flights} · ล่าสุด ${r.last ? thaiShort(r.last) : "—"}</span></li>`;
           }).join("") || `<li class="muted">ไม่มีผู้ที่นับคิวได้</li>`}</ol></div>`;
       };
@@ -606,16 +609,17 @@
       const byId = new Map(data.crew.map(c => [c.id, c]));
       const col = (group, title) => {
         const ranked = [...holRanks.values()].filter(r => r.group === group && r.rank).sort((a, b) => a.rank - b.rank);
-        const nextId = ranked.find(r => !r.off)?.id;
+        const nextId = ranked.find(r => !r.off && !r.assigned)?.id;     // คนแรกที่ว่างและยังไม่ถูกจัด
         const offN = ranked.filter(r => r.off).length;
         return `<div class="qcol"><h4>${title} <span class="muted" style="font-weight:400">(${ranked.length} คน${offN ? ` · ไม่ว่าง ${offN}` : ""})</span></h4>
           <ol class="qlist">${ranked.map(r => {
             const c = byId.get(r.id);
             const note = r.off ? (holData.off.get(r.id) || "") : "";
-            return `<li class="${r.off ? "off" : r.id === nextId ? "next" : ""}"${r.off ? ` title="ไม่ว่าง${note ? ": " + esc(note) : ""}"` : ""}>
+            return `<li class="${r.off ? "off" : r.assigned ? "done" : r.id === nextId ? "next" : ""}"${r.off ? ` title="ไม่ว่าง${note ? ": " + esc(note) : ""}"` : r.assigned ? ` title="จัดลงวันนั้นแล้ว"` : ""}>
               <span class="qno">${r.rank}</span><span class="nm" style="${r.off ? "" : qualStyle(c.position)}">${esc(c.full_name)}</span>
               ${r.tag != null ? `<span class="xtag${r.tag ? "" : " z"}${admin ? " xed" : ""}" data-id="${r.id}" title="บินวันหยุด ${r.count} ครั้ง · มากกว่าคนที่บินน้อยสุดในกลุ่ม ${r.tag} ครั้ง${admin ? "\nadmin: คลิกเพื่อแก้เลข" : ""}">${r.tag}</span>` : ""}
               ${r.off ? `<span class="offtag">ไม่ว่าง${note ? " · " + esc(note) : ""}</span>` : ""}
+              ${r.assigned ? `<span class="donetag">✓ จัดแล้ว</span>` : ""}
               <span class="meta">ล่าสุด ${r.last ? thaiShort(r.last) + String(Number(r.last.slice(0, 4)) + 543).slice(-2) : "—"}</span></li>`;
           }).join("") || `<li class="muted">ไม่มีผู้ที่นับคิวได้</li>`}</ol></div>`;
       };
