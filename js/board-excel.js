@@ -6,7 +6,6 @@
 //         การ์ดภารกิจ 6 ใบ (คอลัมน์เริ่ม F / M / T × แถวเริ่ม 1 / 21) ใบละ 7 คอลัมน์ × 20 แถว
 //  • ไลบรารี ExcelJS โหลดเมื่อกดปุ่มเท่านั้น (pin เวอร์ชัน + SRI)
 // =====================================================================
-import { isStby } from "./missions.js";
 import { orderMissions } from "./mission-sheet.js";
 
 const EXCELJS_URL = new URL("../vendor/exceljs-4.4.0.min.js", import.meta.url).href;   // เก็บในระบบเอง (vendor/README.md)
@@ -176,8 +175,9 @@ function fillPanel(ws, aircraft, defMap, chkMap, stLabel) {
   }
 }
 
+// แถว STBY = เฉพาะชนิด "stby" อันสุดท้าย (สร้างล่าสุด) — STBY เดโชชัย ลงเป็นการ์ดเหมือนภารกิจปกติ
 function fillStby(ws, stbys) {
-  const m = stbys[0];
+  const m = stbys[stbys.length - 1];
   if (!m) return;
   const type = clean(m.aircraft?.type) || "ATR72-500/600";
   const title = /^STBY/i.test(clean(m.mission_name)) ? clean(m.mission_name)       // ชื่อจากกระดาน เช่น "STBY ATR72-600"
@@ -224,7 +224,7 @@ export async function exportBoardXlsx({ day, missions, aircraft, defMap, chkMap,
 
   const order = (a) => [clean(a.type), clean(a.tail_number)].join("|");    // -500 ก่อน -600 เหมือนกระดาน
   fillPanel(ws, [...aircraft].sort((a, b) => order(a).localeCompare(order(b))), defMap, chkMap, stLabel);
-  fillStby(ws, missions.filter((m) => isStby(m.kind)));
+  fillStby(ws, missions.filter((m) => m.kind === "stby"));
 
   ws.getCell("A38").value = personLine(noteToday);
   ws.getCell("A39").value = `น.จัดบิน ภารกิจ วันที่ ${shortTH(next)}`;
@@ -232,7 +232,7 @@ export async function exportBoardXlsx({ day, missions, aircraft, defMap, chkMap,
 
   // ป้ายการ์ดในแม่แบบเขียน "COWBOY" → เปลี่ยนเป็น "Callsign" ทุกการ์ด (รวมการ์ดที่ว่าง)
   CARD_ORIGINS.forEach(([r, c]) => { ws.getCell(r, c + 4).value = "Callsign"; dropDistanceRow(ws, [r, c]); });
-  const cards = orderMissions(missions.filter((m) => !isStby(m.kind)));
+  const cards = orderMissions(missions.filter((m) => m.kind !== "stby"));
   cards.slice(0, CARD_ORIGINS.length).forEach((m, i) => fillCard(ws, CARD_ORIGINS[i], m));
 
   wb.creator = wb.lastModifiedBy = "Flight Operation";

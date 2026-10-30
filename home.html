@@ -141,7 +141,7 @@
 <script type="module">
   import { getCurrentProfile, canPlan } from "./js/auth.js";
   import { renderTopbar } from "./js/ui.js";
-  import { loadMissionsByDate, reportOf, isStby } from "./js/missions.js";
+  import { loadMissionsByDate, reportOf } from "./js/missions.js";
   import { sheetHTML, orderMissions, hasCustomOrder, wireReorder, resetOrder, wireSheetDelete } from "./js/mission-sheet.js";
   import { loadAircraft, loadDefects, loadChecks } from "./js/status.js";
   import { supabase } from "./js/supabase.js";
@@ -329,8 +329,9 @@
         loadMissionsByDate(date), loadAircraft(), loadDefects(), loadChecks(),
         loadDayNote(date), loadDayNote(nextDate)
       ]);
-      const stbys = all.filter(m => isStby(m.kind));
-      const list = orderMissions(all.filter(m => !isStby(m.kind)));   // ลำดับที่จัดเอง หรือ T/O
+      // ช่อง STBY ล่างแผงสถานภาพ = เฉพาะชนิด "stby" อันสุดท้าย (สร้างล่าสุด) · STBY เดโชชัย วางเป็นการ์ดเหมือนภารกิจปกติ
+      const stbys = all.filter(m => m.kind === "stby").slice(-1);
+      const list = orderMissions(all.filter(m => m.kind !== "stby"));   // ลำดับที่จัดเอง หรือ T/O
 
       renderAcp(aircraft, defMap, chkMap, stbys, noteToday, noteNext);
       lastData = { day: view, missions: all, aircraft, defMap, chkMap, noteToday, noteNext };
