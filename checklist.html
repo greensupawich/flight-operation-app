@@ -41,7 +41,23 @@
   .add input{flex:1;min-width:0}
   .noitem{padding:14px 10px;color:var(--faint);font-size:13px;text-align:center}
   .empty{padding:40px;text-align:center;color:var(--muted)}
-  @media (max-width:520px){ .cls{grid-template-columns:1fr} .bar input{width:100%} }
+  /* ---- กระดานข้อความ (migration_44) ---- */
+  .sec-h{display:flex;align-items:center;gap:10px;margin:22px 0 10px}
+  .sec-h h2{font-family:"Bai Jamjuree",sans-serif;font-size:17px;margin:0}
+  .sec-h .sp{flex:1}
+  .nts{display:grid;grid-template-columns:repeat(auto-fill,minmax(420px,1fr));gap:14px;align-items:start}
+  .nt{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);overflow:hidden}
+  .nt-h{display:flex;align-items:center;gap:6px;padding:8px 10px;background:var(--surface-2);border-bottom:1px solid var(--line)}
+  .nt-h input.t{flex:1;min-width:0;font-family:"Bai Jamjuree",sans-serif;font-weight:700;font-size:16px;
+                border:1px solid transparent;background:transparent;padding:3px 6px;border-radius:6px}
+  .nt-h input.t:hover,.nt-h input.t:focus{border-color:var(--line-strong);background:var(--surface)}
+  .nt textarea{display:block;width:100%;min-height:140px;border:0;border-radius:0;resize:vertical;padding:10px 12px;
+               font:inherit;font-size:14px;line-height:1.6;background:var(--surface);color:var(--ink);overflow:hidden}
+  .nt textarea:focus{outline:2px solid var(--primary);outline-offset:-2px}
+  .nt-f{display:flex;align-items:center;gap:8px;padding:5px 10px;border-top:1px solid var(--line);font-size:11.5px;color:var(--faint)}
+  .nt-f .sp{flex:1}
+  .nt-f .dirty{color:var(--warn);font-weight:600}
+  @media (max-width:520px){ .cls,.nts{grid-template-columns:1fr} .bar input{width:100%} }
 </style>
 </head>
 <body>
@@ -49,11 +65,16 @@
   <div class="wrap">
     <div class="page-head">
       <h1>Checklist น.จัดบิน</h1>
-      <div class="sub">กระดาษทดรายวัน · ปุ่ม Reset ล้างเฉพาะช่องติ๊ก หัวข้อคงเดิม · ไม่เก็บประวัติ/สถิติ</div>
+      <div class="sub">กระดาษทดรายวัน · ปุ่ม Reset ล้างเฉพาะช่องติ๊ก หัวข้อคงเดิม · ไม่เก็บประวัติ/สถิติ · ด้านล่างมีกระดานข้อความไว้แปะข้อความยาว ๆ</div>
     </div>
     <div class="bar" id="bar"></div>
     <div class="msg" id="msg"></div>
     <div class="cls" id="cls"><div class="empty">กำลังโหลด…</div></div>
+
+    <!-- กระดานข้อความ: แปะข้อความยาว ๆ · ไม่ถูก Reset (migration_44) -->
+    <div class="sec-h"><h2>📝 กระดานข้อความ</h2><span class="muted" style="font-size:12.5px">ไว้แปะข้อความยาว ๆ · บันทึกเองเมื่อคลิกออกจากช่อง · ไม่ถูก Reset</span>
+      <span class="sp"></span><button class="btn sm primary" id="newNote">+ เพิ่มกระดานข้อความ</button></div>
+    <div class="nts" id="nts"><div class="empty">กำลังโหลด…</div></div>
   </div>
 </main>
 
@@ -92,7 +113,97 @@
     if (e) { $("cls").innerHTML = `<div class="empty">${esc(errText(e))}</div>`; return; }
     lists = (a.data || []).map((l) => ({ ...l, items: (b.data || []).filter((i) => i.checklist_id === l.id) }));
     render();
+    loadNotes();
   }
+
+  // =================== กระดานข้อความ (checklist_notes · migration_44) ===================
+  const NEED_NOTES = "ยังไม่มีตาราง — ต้องรัน db/migration_44_checklist_notes.sql ก่อน";
+  let notes = [];
+  const whenTxt = (t) => t ? new Date(t).toLocaleString("th-TH", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) : "";
+  async function loadNotes() {
+    const { data, error } = await supabase.from("checklist_notes").select("id,title,body,seq,updated_at").order("seq").order("created_at");
+    if (error) {
+      $("nts").innerHTML = `<div class="empty">${esc(/does not exist|schema cache|Could not find/i.test(error.message || "") ? NEED_NOTES : error.message)}</div>`;
+      $("newNote").disabled = true; return;
+    }
+    $("newNote").disabled = false;
+    notes = data || []; renderNotes();
+  }
+  const grow = (ta) => { ta.style.height = "auto"; ta.style.height = Math.max(140, ta.scrollHeight + 2) + "px"; };
+  function noteHTML(n, i, len) {
+    return `<section class="nt" data-note="${n.id}">
+      <div class="nt-h">
+        <input class="t" value="${esc(n.title)}" maxlength="200" placeholder="หัวข้อ (ไม่ใส่ก็ได้)" aria-label="หัวข้อกระดาน">
+        <button class="ib" data-copy title="คัดลอกข้อความ">📋</button>
+        <button class="ib" data-nmv="-1" title="เลื่อนขึ้น" ${i === 0 ? "disabled" : ""}>▲</button>
+        <button class="ib" data-nmv="1" title="เลื่อนลง" ${i === len - 1 ? "disabled" : ""}>▼</button>
+        <button class="ib del" data-ndel title="ลบกระดานนี้">🗑</button>
+      </div>
+      <textarea maxlength="20000" placeholder="พิมพ์หรือวางข้อความยาว ๆ ที่นี่…">${esc(n.body)}</textarea>
+      <div class="nt-f"><span class="st">${n.updated_at ? "บันทึกล่าสุด " + whenTxt(n.updated_at) : ""}</span><span class="sp"></span>
+        <span class="cnt">${n.body.length.toLocaleString()} ตัวอักษร</span></div>
+    </section>`;
+  }
+  function renderNotes() {
+    $("nts").innerHTML = notes.length ? notes.map((n, i) => noteHTML(n, i, notes.length)).join("")
+      : `<div class="empty">ยังไม่มีกระดานข้อความ — กด “+ เพิ่มกระดานข้อความ”</div>`;
+    $("nts").querySelectorAll("textarea").forEach(grow);
+  }
+  const findNote = (el) => notes.find((n) => n.id === el.closest(".nt")?.dataset.note);
+  async function saveNote(el) {
+    const n = findNote(el); if (!n) return;
+    const sec = el.closest(".nt"), patch = el.tagName === "TEXTAREA" ? { body: el.value } : { title: el.value.trim() };
+    const key = Object.keys(patch)[0];
+    if (patch[key] === n[key]) { sec.querySelector(".st").classList.remove("dirty"); return; }
+    sec.querySelector(".st").textContent = "กำลังบันทึก…";
+    const { data, error } = await supabase.from("checklist_notes").update({ ...patch, updated_at: new Date().toISOString(), updated_by: profile.id })
+      .eq("id", n.id).select("updated_at").single();
+    if (error) { sec.querySelector(".st").textContent = "⚠️ ยังไม่ได้บันทึก"; sec.querySelector(".st").classList.add("dirty");
+                 return msg("บันทึกข้อความไม่สำเร็จ: " + error.message, "err"); }
+    Object.assign(n, patch, data);
+    const st = sec.querySelector(".st"); st.classList.remove("dirty"); st.textContent = "บันทึกล่าสุด " + whenTxt(n.updated_at);
+  }
+  $("newNote").addEventListener("click", async () => {
+    const { data, error } = await supabase.from("checklist_notes").insert({ title: "", body: "", seq: nextSeq(notes) })
+      .select("id,title,body,seq,updated_at").single();
+    if (error) return msg("เพิ่มไม่สำเร็จ: " + error.message, "err");
+    notes.push(data); renderNotes();
+    document.querySelector(`.nt[data-note="${data.id}"] textarea`)?.focus();
+  });
+  $("nts").addEventListener("input", (e) => {
+    const sec = e.target.closest(".nt"); if (!sec) return;
+    if (e.target.tagName === "TEXTAREA") { grow(e.target); sec.querySelector(".cnt").textContent = e.target.value.length.toLocaleString() + " ตัวอักษร"; }
+    const st = sec.querySelector(".st"); st.textContent = "● ยังไม่ได้บันทึก"; st.classList.add("dirty");
+  });
+  $("nts").addEventListener("change", (e) => { if (e.target.matches("textarea, input.t")) saveNote(e.target); });
+  $("nts").addEventListener("keydown", (e) => { if (e.key === "Enter" && !e.isComposing && e.target.matches("input.t")) e.target.blur(); });
+  $("nts").addEventListener("click", async (e) => {
+    const b = e.target.closest("button"); if (!b) return;
+    const n = findNote(b); if (!n) return;
+    const sec = b.closest(".nt");
+    if (b.hasAttribute("data-copy")) {
+      const ta = sec.querySelector("textarea");
+      try { await navigator.clipboard.writeText(ta.value); msg("คัดลอกแล้ว", "ok"); }
+      catch { ta.focus(); ta.select(); msg("เลือกข้อความแล้ว — กด Ctrl/⌘+C เพื่อคัดลอก", "ok"); }
+      return;
+    }
+    if (b.hasAttribute("data-ndel")) {
+      if (!confirm(`ลบกระดาน “${n.title || "(ไม่มีหัวข้อ)"}” (${n.body.length.toLocaleString()} ตัวอักษร)?`)) return;
+      const { error } = await supabase.from("checklist_notes").delete().eq("id", n.id);
+      if (error) return msg("ลบไม่สำเร็จ: " + error.message, "err");
+      notes = notes.filter((x) => x !== n); return renderNotes();
+    }
+    if (b.dataset.nmv) {
+      const i = notes.indexOf(n), j = i + Number(b.dataset.nmv), o = notes[j]; if (!o) return;
+      const [sa, sb] = [n.seq === o.seq ? j + 1 : o.seq, n.seq === o.seq ? i + 1 : n.seq];
+      const r = await Promise.all([supabase.from("checklist_notes").update({ seq: sa }).eq("id", n.id),
+                                   supabase.from("checklist_notes").update({ seq: sb }).eq("id", o.id)]);
+      const err = r.find((x) => x.error)?.error; if (err) return msg("เลื่อนไม่สำเร็จ: " + err.message, "err");
+      n.seq = sa; o.seq = sb; notes.sort((x, y) => x.seq - y.seq); renderNotes();
+    }
+  });
+  // กันปิดหน้าตอนยังพิมพ์ค้าง (ยังไม่ได้คลิกออกจากช่อง)
+  addEventListener("beforeunload", (e) => { if (document.querySelector(".nt .st.dirty")) { e.preventDefault(); e.returnValue = ""; } });
 
   // ---------- แถบบน ----------
   $("bar").innerHTML = (planner
@@ -227,7 +338,8 @@
 
   // ข้อมูลอาจถูกแก้จากเครื่องอื่น → โหลดใหม่เมื่อกลับมาที่แท็บ (ถ้าไม่ได้กำลังพิมพ์อยู่)
   document.addEventListener("visibilitychange", () => {
-    if (document.visibilityState === "visible" && !document.activeElement?.matches?.("input")) load();
+    if (document.visibilityState === "visible" && !document.activeElement?.matches?.("input, textarea")
+        && !document.querySelector(".nt .st.dirty")) load();
   });
   load();
 </script>
