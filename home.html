@@ -232,7 +232,7 @@
         }).join("");
         const acType = m.aircraft ? esc(m.aircraft.type || "ATR72-500/600") : "ATR72-500/600";
         return `<div class="acp-stby">
-          <div class="hd">${m.kind === "stby_dechochai" ? "STBY เดโชชัย" : "STBY"} <span class="tag">${acType}</span> <span class="tag">COWBOY ${esc(m.callsign || "-")}</span></div>
+          <div class="hd">${m.kind === "stby_dechochai" ? "STBY เดโชชัย" : "STBY"} <span class="tag">${acType}</span> <span class="tag">Callsign ${esc(m.callsign || "-")}</span></div>
           ${lines ? `<div class="cw">${lines}</div>` : `<div class="poc">— ยังไม่ระบุลูกเรือ —</div>`}
         </div>`;
       }).join("");

@@ -50,7 +50,7 @@ export function sheetHTML(m, { planner = false } = {}) {
       <colgroup><col style="width:17%"><col style="width:16%"><col style="width:17%">
                 <col style="width:16%"><col style="width:17%"><col style="width:17%"></colgroup>
       <tr><td class="lb">A/C No.</td><td colspan="2" class="v c mono">${v(ac)}</td>
-          <td class="lb">COWBOY</td><td colspan="2" class="v c mono">${v(m.callsign)}</td></tr>
+          <td class="lb">Callsign</td><td colspan="2" class="v c mono">${v(m.callsign)}</td></tr>
       <tr><td class="lb">SHOWTIME</td><td colspan="2" class="v c mono">${v(m.showtime)}</td>
           <td class="lb">BRIEF</td><td colspan="2" class="v c mono">${v(m.brief_time)}</td></tr>
       <tr><td class="lb">STEP</td><td class="v c mono">${v(m.step_time)}</td>
