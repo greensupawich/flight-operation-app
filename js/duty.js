@@ -48,6 +48,14 @@ export async function loadHolidayBase() {
     { count: r.base_count || 0, last: r.base_last ? String(r.base_last).slice(0, 10) : null }])), error: null };
 }
 
+// admin แก้แทคเลขคิววันหยุด → ปรับจำนวนครั้งตั้งต้น (ไม่แตะวันล่าสุด) · RLS: เขียนได้เฉพาะ admin (migration_43)
+export async function saveHolidayBaseCount(crewId, count, last) {
+  const { error } = await supabase.from("crew_holiday_base")
+    .upsert({ crew_member_id: crewId, base_count: count, base_last: last || null, updated_at: new Date().toISOString() },
+            { onConflict: "crew_member_id" });
+  return error;
+}
+
 export async function addDuty(crewId, category, date) {
   const { error } = await supabase.from("crew_duty_log")
     .upsert({ crew_member_id: crewId, category, duty_date: date },
