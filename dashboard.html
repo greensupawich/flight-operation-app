@@ -40,6 +40,11 @@
   .filebox .fn{font-weight:700;font-size:14px;word-break:break-all}
   .filebox .meta{font-size:12px;color:var(--muted)}
   .filebox .acts{margin-inline-start:auto;display:flex;gap:8px;flex-wrap:wrap}
+  .filebox .drop{flex:1 1 100%;border:2px dashed var(--line-strong);border-radius:10px;padding:18px;text-align:center;cursor:pointer;
+                 background:var(--surface-2);font-size:13px;color:var(--muted);transition:border-color .15s,background .15s}
+  .filebox .drop:hover,.filebox .drop.over{border-color:var(--primary);background:var(--primary-soft)}
+  .filebox .drop b{font-size:14.5px;color:var(--ink)}
+  .filebox .drop.busy{pointer-events:none;opacity:.6}
 </style>
 </head>
 <body>
@@ -86,9 +91,12 @@
         <div class="fn" id="fbName">กำลังโหลด…</div><div class="meta" id="fbMeta"></div></div>
       <div class="acts">
         <button class="btn sm primary" id="fbDown" hidden>⬇️ ดาวน์โหลด</button>
-        <label class="btn sm ghost" id="fbUpLbl" hidden style="cursor:pointer">⬆️ อัปโหลดไฟล์ใหม่ (แทนที่ของเดิม)
-          <input type="file" id="fbFile" hidden></label>
       </div>
+      <!-- อัปโหลด (ผู้วางแผน): ลาก PDF มาวาง หรือกดเลือกไฟล์ — แบบเดียวกับนำเข้าใบสถานภาพ -->
+      <label class="drop" id="fbDrop" hidden>
+        <input type="file" id="fbFile" accept="application/pdf,.pdf" hidden>
+        <b>📄 ลากไฟล์ PDF มาวางที่นี่</b> หรือกดเพื่อเลือกไฟล์ · อัปใหม่ = แทนที่ไฟล์เดิม
+      </label>
     </div>
 
   </div>
@@ -210,7 +218,7 @@
       curFile = file;
       const name = document.getElementById("fbName"), meta = document.getElementById("fbMeta");
       if (error) { name.textContent = "— ยังใช้งานไม่ได้ —"; meta.textContent = error.message; }
-      else if (!file) { name.textContent = "— ยังไม่มีไฟล์ —"; meta.textContent = planner ? "กด \"อัปโหลดไฟล์ใหม่\" เพื่อเพิ่ม" : ""; }
+      else if (!file) { name.textContent = "— ยังไม่มีไฟล์ —"; meta.textContent = planner ? "ลากไฟล์ PDF มาวางด้านล่างเพื่อเพิ่ม" : ""; }
       else {
         name.textContent = file.file_name;
         const t = new Date(file.uploaded_at);
@@ -219,7 +227,7 @@
           `${file.uploader ? " · โดย " + file.uploader : ""}${kb ? " · " + kb : ""}`;
       }
       document.getElementById("fbDown").hidden = !file;
-      document.getElementById("fbUpLbl").hidden = !planner || !!error;
+      document.getElementById("fbDrop").hidden = !planner || !!error;
     }
     document.getElementById("fbDown").addEventListener("click", async (e) => {
       if (!curFile) return;
@@ -228,16 +236,26 @@
       btn.disabled = false; btn.textContent = t;
       if (err) alert("ดาวน์โหลดไม่สำเร็จ: " + err.message);
     });
-    document.getElementById("fbFile").addEventListener("change", async (e) => {
-      const f = e.target.files[0]; e.target.value = "";
-      if (!f) return;
+    const fbDrop = document.getElementById("fbDrop");
+    async function uploadAdvance(f) {
+      if (!f || fbDrop.classList.contains("busy")) return;
+      if (!/\.pdf$/i.test(f.name) && f.type !== "application/pdf") { alert("รองรับเฉพาะไฟล์ PDF"); return; }
       if (f.size > 50 * 1048576) { alert("ไฟล์ใหญ่เกิน 50 MB"); return; }
       if (curFile && !confirm(`อัปโหลด "${f.name}" แทนไฟล์เดิม "${curFile.file_name}"?\n(ไฟล์เดิมจะถูกลบ)`)) return;
       document.getElementById("fbName").textContent = "กำลังอัปโหลด…";
+      fbDrop.classList.add("busy");
       const err = await uploadSharedFile(SLOT, f, profile.full_name || profile.email);
+      fbDrop.classList.remove("busy");
       if (err) alert("อัปโหลดไม่สำเร็จ: " + err.message);
       loadFileBox();
+    }
+    document.getElementById("fbFile").addEventListener("change", (e) => {
+      const f = e.target.files[0]; e.target.value = "";
+      uploadAdvance(f);
     });
+    ["dragover", "dragenter"].forEach(ev => fbDrop.addEventListener(ev, (e) => { e.preventDefault(); fbDrop.classList.add("over"); }));
+    ["dragleave", "drop"].forEach(ev => fbDrop.addEventListener(ev, () => fbDrop.classList.remove("over")));
+    fbDrop.addEventListener("drop", (e) => { e.preventDefault(); uploadAdvance(e.dataTransfer.files[0]); });
     loadFileBox();
 
   }
