@@ -20,7 +20,7 @@ const TH_DOW = ["อาทิตย์","จันทร์","อังคาร
 const shortTH = (d) => `${d.getDate()} ${TH_MON_SHORT[d.getMonth()]}${String(d.getFullYear() + 543).slice(-2)}`;
 
 const CARD_ORIGINS = [[1, 6], [1, 13], [1, 20], [21, 6], [21, 13], [21, 20]];   // [แถว, คอลัมน์] มุมซ้ายบนของการ์ด
-const CREW_ROWS = 8;                                                             // แถว 10–17 ของการ์ด
+const CREW_ROWS = 8;                                                             // แถว 9–16 ของการ์ด (หลังตัดแถวระยะทาง)
 const BASE_ROLES = ["IP", "P", "CP", "N", "FM", "RO", "LM", "AH"];               // ป้ายมาตรฐานของกระดาน
 const ROLE_ORDER = ["AC", "IP", "P", "CP", "N", "FM", "RO", "LM", "AH"];
 const PANEL_FIRST = 4, PANEL_LAST = 31;                                          // แผงสถานภาพเครื่อง
@@ -60,6 +60,32 @@ function crewLayout(crew) {
   return labels.slice(0, CREW_ROWS).map((r) => ({ role: r, names: by[r] }));
 }
 
+// แม่แบบการ์ดมีแถว ระยะทาง/เวลา/ความสูง (แถว 8) — ไม่ใช้ (ผู้ใช้ขอเอาออก 30 ต.ค. 69)
+//  → เลื่อนแถว 9–18 ขึ้น 1 แถว (ค่า + style + merge) · POC คณะได้ 2 แถว (17–18) ไว้แยกบรรทัดตามภารกิจ
+//  ไม่ลบแถวทั้งแผ่น เพราะคอลัมน์ A–E (สถานภาพเครื่อง / STBY) ใช้แถวเดียวกัน
+function dropDistanceRow(ws, [r0, c0]) {
+  const addr = (r, c) => ws.getCell(r0 + r - 1, c0 + c - 1).address;
+  const rng = (r1, c1, r2, c2) => `${addr(r1, c1)}:${addr(r2, c2)}`;
+  const PAIRS = [[2, 3], [4, 5], [6, 7]];
+  ws.unMergeCells(rng(8, 4, 8, 5));
+  ws.unMergeCells(rng(9, 2, 9, 7));
+  for (let r = 10; r <= 17; r++) PAIRS.forEach(([a, b]) => ws.unMergeCells(rng(r, a, r, b)));
+  ws.unMergeCells(rng(18, 2, 18, 7));
+  for (let r = 8; r <= 17; r++) {                               // แถว 18 คงเดิม (เป็นแถว POC อยู่แล้ว)
+    for (let c = 1; c <= 7; c++) {
+      const src = ws.getCell(addr(r + 1, c)), dst = ws.getCell(addr(r, c));
+      dst.value = src.value;
+      dst.style = JSON.parse(JSON.stringify(src.style || {}));
+    }
+  }
+  ws.mergeCells(rng(8, 2, 8, 7));
+  for (let r = 9; r <= 16; r++) PAIRS.forEach(([a, b]) => ws.mergeCells(rng(r, a, r, b)));
+  ws.mergeCells(rng(17, 1, 18, 1));
+  ws.mergeCells(rng(17, 2, 18, 7));
+  const poc = ws.getCell(addr(17, 2));
+  poc.alignment = { ...poc.alignment, wrapText: true, vertical: "middle" };
+}
+
 function fillCard(ws, [r0, c0], m) {
   const at = (r, c) => ws.getCell(r0 + r - 1, c0 + c - 1);    // r 1–20 · c 1–7 (1 = คอลัมน์ป้าย)
   const ac = m.aircraft;
@@ -77,14 +103,19 @@ function fillCard(ws, [r0, c0], m) {
   const name = clean(m.mission_name).replace(/\s*\/\s*(?=\(\d+\))/g, "\n");
   at(5, 2).value = (m.status === "cancelled" ? "(ยกเลิก) " : "") + name;
   at(7, 2).value = clean(m.route) || null;
-  at(9, 2).value = clean(m.head_delegation) || null;
+  at(8, 2).value = clean(m.head_delegation) || null;
   crewLayout(m.mission_crew || []).forEach(({ role, names }, i) => {
-    const r = 10 + i;
+    const r = 9 + i;
     at(r, 1).value = role;
     const slots = [names[0], names[1], names.slice(2).join(", ")];
     [2, 4, 6].forEach((c, k) => { at(r, c).value = slots[k] || null; });
   });
-  at(18, 2).value = [clean(m.poc_name), clean(m.poc_phone)].filter(Boolean).join("  ") || null;
+  // POC หลายคณะ: ในระบบคั่นด้วย "/" → ขึ้นบรรทัดใหม่ต่อคณะ · เกิน 2 บรรทัด → ย่อตัวอักษรให้พอ 2 แถว
+  const poc = [clean(m.poc_name), clean(m.poc_phone)].filter(Boolean).join("  ")
+    .split(/\s*\/\s*/).filter(Boolean);
+  const pc = at(17, 2);
+  pc.value = poc.join("\n") || null;
+  if (poc.length > 2) pc.font = { ...pc.font, size: Math.max(14, Math.floor((pc.font?.size || 26) * 2.5 / poc.length)) };
   at(19, 2).value = clean(m.remark) || null;
   at(19, 7).value = clean(m.parking_out) || null;
   at(20, 7).value = clean(m.parking_in) || null;
@@ -200,7 +231,7 @@ export async function exportBoardXlsx({ day, missions, aircraft, defMap, chkMap,
   ws.getCell("A40").value = personLine(noteNext);
 
   // ป้ายการ์ดในแม่แบบเขียน "COWBOY" → เปลี่ยนเป็น "Callsign" ทุกการ์ด (รวมการ์ดที่ว่าง)
-  CARD_ORIGINS.forEach(([r, c]) => { ws.getCell(r, c + 4).value = "Callsign"; });
+  CARD_ORIGINS.forEach(([r, c]) => { ws.getCell(r, c + 4).value = "Callsign"; dropDistanceRow(ws, [r, c]); });
   const cards = orderMissions(missions.filter((m) => !isStby(m.kind)));
   cards.slice(0, CARD_ORIGINS.length).forEach((m, i) => fillCard(ws, CARD_ORIGINS[i], m));
 
