@@ -42,7 +42,6 @@ export function loadExcelJS() {
 
 const clean = (s) => String(s ?? "").trim();
 const tail3 = (t) => clean(t).slice(-3);
-const cowboyNo = (cs) => clean(cs).replace(/^CBY\s*/i, "");
 function namesBy(crew, role) {
   return crew.filter((c) => clean(c.position).toUpperCase() === role)
     .sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0))
@@ -65,7 +64,7 @@ function fillCard(ws, [r0, c0], m) {
   const at = (r, c) => ws.getCell(r0 + r - 1, c0 + c - 1);    // r 1–20 · c 1–7 (1 = คอลัมน์ป้าย)
   const ac = m.aircraft;
   if (ac) { at(1, 2).value = `${clean(ac.type)}/ `; at(1, 4).value = tail3(ac.tail_number); }
-  at(1, 6).value = cowboyNo(m.callsign) || null;
+  at(1, 6).value = clean(m.callsign) || null;                  // ป้าย "Callsign" · ค่าเต็ม เช่น CBY301
   at(2, 2).value = clean(m.showtime) || "-";
   at(2, 6).value = clean(m.brief_time) || "-";
   at(3, 2).value = clean(m.step_time) || "-";
@@ -153,8 +152,8 @@ function fillStby(ws, stbys) {
   const title = /^STBY/i.test(clean(m.mission_name)) ? clean(m.mission_name)       // ชื่อจากกระดาน เช่น "STBY ATR72-600"
     : m.kind === "stby_dechochai" ? `STBY เดโชชัย ${type}` : `STBY ${type}`;
   ws.getCell("A32").value = title;
-  ws.getCell("C32").value = "COWBOY";
-  ws.getCell("D32").value = cowboyNo(m.callsign) || null;
+  ws.getCell("C32").value = "Callsign";
+  ws.getCell("D32").value = clean(m.callsign) || null;
   const rows = ROLE_ORDER.map((role) => ({ role, names: namesBy(m.mission_crew || [], role) }))
     .filter((x) => x.names.length);
   // 5 แถว (33–37) · ตำแหน่งเกิน → รวมไว้แถวสุดท้าย
@@ -200,6 +199,8 @@ export async function exportBoardXlsx({ day, missions, aircraft, defMap, chkMap,
   ws.getCell("A39").value = `น.จัดบิน ภารกิจ วันที่ ${shortTH(next)}`;
   ws.getCell("A40").value = personLine(noteNext);
 
+  // ป้ายการ์ดในแม่แบบเขียน "COWBOY" → เปลี่ยนเป็น "Callsign" ทุกการ์ด (รวมการ์ดที่ว่าง)
+  CARD_ORIGINS.forEach(([r, c]) => { ws.getCell(r, c + 4).value = "Callsign"; });
   const cards = orderMissions(missions.filter((m) => !isStby(m.kind)));
   cards.slice(0, CARD_ORIGINS.length).forEach((m, i) => fillCard(ws, CARD_ORIGINS[i], m));
 
