@@ -42,6 +42,9 @@ export function loadExcelJS() {
 }
 
 const clean = (s) => String(s ?? "").trim();
+// ความกว้างข้อความไทยโดยประมาณ (สระบน/ล่าง วรรณยุกต์ ไม่กินที่) · ช่องหมายเหตุ (G:J, TH SarabunPSK 26) ≈ 34 ตัวอักษร/บรรทัด
+const thWidth = (s) => String(s).replace(/[\u0E31\u0E34-\u0E3A\u0E47-\u0E4E]/g, "").length;
+const REMARK_CHARS = 34;
 const tail3 = (t) => clean(t).slice(-3);
 function namesBy(crew, role) {
   return crew.filter((c) => clean(c.position).toUpperCase() === role)
@@ -129,7 +132,17 @@ function fillCard(ws, [r0, c0], m) {
   const pc = at(17, 2);
   pc.value = poc.join("\n") || null;
   if (poc.length > 2) pc.font = { ...pc.font, size: Math.max(14, Math.floor((pc.font?.size || 26) * 2.5 / poc.length)) };
-  at(19, 2).value = clean(m.remark) || null;
+  // หมายเหตุ: "/" = ขึ้นบรรทัดใหม่ · บรรทัดแรกลงแถว 19 ที่เหลือลงแถว 20 · ยาวเกินช่อง → ตัดบรรทัด + เพิ่มความสูงแถว
+  const rem = clean(m.remark).split(/\s*\/\s*/).filter(Boolean);
+  [[19, rem.slice(0, 1)], [20, rem.slice(1)]].forEach(([r, lines]) => {
+    if (!lines.length) return;
+    const cell = at(r, 2);
+    cell.value = lines.join("\n");
+    cell.alignment = { ...cell.alignment, wrapText: true, vertical: "middle" };
+    const vis = lines.reduce((n, t) => n + Math.max(1, Math.ceil(thWidth(t) / REMARK_CHARS)), 0);
+    const row = ws.getRow(r0 + r - 1), need = vis * 33 + 4;
+    if (vis > 1 && (row.height || 35) < need) row.height = need;   // แถวเดียวกันของ 3 การ์ด → ใช้ค่าสูงสุด
+  });
   at(19, 7).value = clean(m.parking_out) || null;
   at(20, 7).value = clean(m.parking_in) || null;
 }
