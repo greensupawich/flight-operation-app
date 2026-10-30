@@ -14,7 +14,7 @@ function crewRow(role, crew) {
                     .filter(Boolean);
   if (!names.length) return "";
   // AC มีคนเดียว → ใช้เต็มบรรทัด (ชื่อ + เบอร์ยาว ๆ ไม่ตัดขึ้นบรรทัดใหม่)
-  if (role === "AC") return `<tr><td class="lb">${role}</td><td colspan="5" class="v">${names.map(esc).join(" · ")}</td></tr>`;
+  if (role === "AC" || role === "ผอ.เดินทาง") return `<tr><td class="lb">${role}</td><td colspan="5" class="v">${names.map(esc).join(" · ")}</td></tr>`;
   const slots = Math.max(3, names.length);          // อย่างน้อย 3 ช่องให้ตรงกับกระดาน
   const cells = Array.from({length: slots}, (_, i) => `<span>${esc(names[i] || "")}</span>`).join("");
   return `<tr><td class="lb">${role}</td><td colspan="5" class="v">

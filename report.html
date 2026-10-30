@@ -546,7 +546,7 @@
     // ---------- รายงานอันตราย (safety) ----------
     document.getElementById("sfDate").textContent = m.mission_date || "-";
     const pilotNames = (m.mission_crew || [])
-      .filter(c => ["AC","IP","P","CP","N"].includes((c.position||"").toUpperCase()))
+      .filter(c => ["AC","IP","P","CP","นบ.ราชฯ 1","นบ.ราชฯ 2","ตห.","N"].includes((c.position||"").toUpperCase()))
       .sort((a,b) => (a.sort_order||0) - (b.sort_order||0))
       .map(c => (c.crew_name||"").trim()).filter(Boolean);
     document.getElementById("sfPilots").textContent = pilotNames.join(", ") || "-";

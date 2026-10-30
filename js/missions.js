@@ -48,11 +48,13 @@ export const qualStyle = (q) => {
 };
 
 // ---------- ตำแหน่งลูกเรือ (เรียงตามฟอร์ม) ----------
-export const PILOT_ROLES = ["AC", "IP", "P", "CP", "N"];
+//  ผอ.เดินทาง บนสุด · นบ.ราชฯ 1/2 และ ตห. (เที่ยวบินพิเศษ) นับ ชม.บินเหมือน IP/P/CP (ผู้ใช้กำหนด 30 ต.ค. 69 · migration_47)
+export const SPECIAL_PILOT_ROLES = ["นบ.ราชฯ 1", "นบ.ราชฯ 2", "ตห."];
+export const PILOT_ROLES = ["ผอ.เดินทาง", "AC", "IP", "P", "CP", ...SPECIAL_PILOT_ROLES, "N"];
 export const OTHER_ROLES = ["FM", "RO", "LM", "AH"];
 export const CREW_ROLES  = [...PILOT_ROLES, ...OTHER_ROLES];
-// N ไม่นับ ชม.บิน (AC นับเมื่อผูกทะเบียนนักบิน · ไม่อยู่ในทะเบียนก็ได้)
-export const NO_HOURS_ROLES = ["N"];
+// ผอ.เดินทาง · N ไม่นับ ชม.บิน (AC นับเมื่อผูกทะเบียนนักบิน · ไม่อยู่ในทะเบียนก็ได้)
+export const NO_HOURS_ROLES = ["ผอ.เดินทาง", "N"];
 
 const MISSION_SELECT =
   "*, aircraft(id,tail_number,type), mission_crew(id,position,crew_name,crew_member_id,sort_order), post_flight_reports(id,total_hours)";

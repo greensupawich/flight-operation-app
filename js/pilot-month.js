@@ -42,7 +42,7 @@ export async function loadMonth(y, m0) {
   });
 }
 
-const PM_ROLES = PILOT_ROLES.filter((r) => r !== "N");     // ตำแหน่งที่นับเที่ยวในหน้า พ.
+const PM_ROLES = PILOT_ROLES.filter((r) => r !== "N" && r !== "ผอ.เดินทาง");     // ตำแหน่งที่นับเที่ยวในหน้า พ.
 
 // แปลงข้อมูลดิบจากฐาน → โครงสร้างของตาราง (แยกออกมาเพื่อทดสอบได้โดยไม่ต้องล็อกอิน)
 export function buildMonth(y, m0, { crew, missions, notes, holidays, notesMissing = false }) {

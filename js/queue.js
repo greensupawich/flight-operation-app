@@ -4,7 +4,8 @@
 // =====================================================================
 import { supabase } from "./supabase.js";
 
-export const PILOT_POSITIONS = ["AC", "IP", "P", "CP", "N"];
+// ตำแหน่งที่นับเป็นเที่ยวบินของนักบิน (คิวบิน) · ผอ.เดินทาง ไม่นับ
+export const PILOT_POSITIONS = ["AC", "IP", "P", "CP", "นบ.ราชฯ 1", "นบ.ราชฯ 2", "ตห.", "N"];
 
 const pad = (n) => String(n).padStart(2, "0");
 export const monthRange = (y, m /* 0-11 */) => ({

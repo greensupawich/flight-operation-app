@@ -10,8 +10,8 @@ import { defectLabel } from "./reports.js";
 import { BUCKET, removeFiles } from "./media.js";
 
 export const FORMAT = "flight-operation-archive";
-const PILOT_POS = ["AC", "IP", "P", "CP", "N"];
-const HOUR_POS = ["AC", "IP", "P", "CP"];
+const PILOT_POS = ["AC", "IP", "P", "CP", "นบ.ราชฯ 1", "นบ.ราชฯ 2", "ตห.", "N"];   // ผอ.เดินทาง ไม่นับ
+const HOUR_POS = ["AC", "IP", "P", "CP", "นบ.ราชฯ 1", "นบ.ราชฯ 2", "ตห."];
 
 const pad = (n) => String(n).padStart(2, "0");
 export function monthRange(ym /* 'YYYY-MM' */) {

@@ -21,7 +21,8 @@ const shortTH = (d) => `${d.getDate()} ${TH_MON_SHORT[d.getMonth()]}${String(d.g
 const CARD_ORIGINS = [[1, 6], [1, 13], [1, 20], [21, 6], [21, 13], [21, 20]];   // [แถว, คอลัมน์] มุมซ้ายบนของการ์ด
 const CREW_ROWS = 8;                                                             // แถว 9–16 ของการ์ด (หลังตัดแถวระยะทาง)
 const BASE_ROLES = ["IP", "P", "CP", "N", "FM", "RO", "LM", "AH"];               // ป้ายมาตรฐานของกระดาน
-const ROLE_ORDER = ["AC", "IP", "P", "CP", "N", "FM", "RO", "LM", "AH"];
+const ROLE_ORDER = ["ผอ.เดินทาง", "AC", "IP", "P", "CP", "นบ.ราชฯ 1", "นบ.ราชฯ 2", "ตห.", "N", "FM", "RO", "LM", "AH"];
+const EXTRA_ROLES = ["ผอ.เดินทาง", "AC", "นบ.ราชฯ 1", "นบ.ราชฯ 2", "ตห."];                // มีคนเมื่อไรจึงขึ้นแถว
 const PANEL_FIRST = 4, PANEL_LAST = 31;                                          // แผงสถานภาพเครื่อง
 const STATUS_FILL = { FMC: "FF00B050", PMC: "FFFFFF00", NMC: "FFFF0000" };
 const MED = { style: "medium" };
@@ -47,16 +48,21 @@ function namesBy(crew, role) {
     .map((c) => clean(c.crew_name)).filter(Boolean);
 }
 
-// ป้ายตำแหน่ง 8 แถว: มาตรฐาน IP…AH · มี AC → ใส่ AC บนสุด แทนตำแหน่งที่ว่าง (เหมือนกระดานจริง)
+// ป้ายตำแหน่ง 8 แถว: มาตรฐาน IP…AH · ตำแหน่งพิเศษ (ผอ.เดินทาง / AC / นบ.ราชฯ / ตห.) ที่มีคน → แทรกตามลำดับ ROLE_ORDER
+//  แทนแถวมาตรฐานที่ว่าง (เหมือนกระดานจริง) · ยังไม่พอ → รวมชื่อที่เกินไว้แถวสุดท้ายแบบ "ตำแหน่ง: ชื่อ"
 function crewLayout(crew) {
   const by = Object.fromEntries(ROLE_ORDER.map((r) => [r, namesBy(crew, r)]));
-  let labels = [...BASE_ROLES];
-  if (by.AC.length) {
-    const drop = ["P", "N", "AH", "RO", "LM", "FM", "CP"].find((r) => !by[r].length) || "N";
-    labels = ["AC", ...labels.filter((r) => r !== drop)];
-    if (by[drop].length) by.AC = [...by.AC, ...by[drop].map((n) => `${drop}: ${n}`)];
+  let labels = ROLE_ORDER.filter((r) => BASE_ROLES.includes(r) || (EXTRA_ROLES.includes(r) && by[r].length));
+  for (const drop of ["P", "N", "AH", "RO", "LM", "FM", "CP", "IP"]) {
+    if (labels.length <= CREW_ROWS) break;
+    if (!by[drop].length) labels = labels.filter((r) => r !== drop);
   }
-  return labels.slice(0, CREW_ROWS).map((r) => ({ role: r, names: by[r] }));
+  if (labels.length > CREW_ROWS) {
+    const keep = labels.slice(0, CREW_ROWS), last = keep[CREW_ROWS - 1];
+    by[last] = [...by[last], ...labels.slice(CREW_ROWS).flatMap((r) => by[r].map((n) => `${r}: ${n}`))];
+    labels = keep;
+  }
+  return labels.map((r) => ({ role: r, names: by[r] }));
 }
 
 // แม่แบบการ์ดมีแถว ระยะทาง/เวลา/ความสูง (แถว 8) — ไม่ใช้ (ผู้ใช้ขอเอาออก 30 ต.ค. 69)
