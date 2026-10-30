@@ -125,7 +125,7 @@ export async function loadLastFlown(todayISO) {
     if (error) { console.error(error); break; }
     (data || []).forEach((r) => {
       const m = r.missions;
-      if (!m || m.status === "cancelled" || m.kind === "stby") return;
+      if (!m || m.status === "cancelled" || m.kind === "stby" || m.kind === "stby_mission") return;
       if (!PILOT_POSITIONS.includes(String(r.position || "").trim().toUpperCase())) return;
       const t = String(m.aircraft?.type || "");
       const tp = /500/.test(t) ? "500" : /600/.test(t) ? "600" : null;

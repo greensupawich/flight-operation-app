@@ -219,7 +219,7 @@ function fillPanel(ws, aircraft, defMap, chkMap, stLabel) {
   }
 }
 
-// แถว STBY = เฉพาะชนิด "stby" อันสุดท้าย (สร้างล่าสุด) — STBY เดโชชัย ลงเป็นการ์ดเหมือนภารกิจปกติ
+// แถว STBY = เฉพาะชนิด "stby" อันสุดท้าย (สร้างล่าสุด) — STBY เดโชชัย / STBY (ภารกิจ) ลงเป็นการ์ดเหมือนภารกิจปกติ
 function fillStby(ws, stbys) {
   const m = stbys[stbys.length - 1];
   if (!m) return;

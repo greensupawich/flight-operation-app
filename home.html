@@ -329,7 +329,7 @@
         loadMissionsByDate(date), loadAircraft(), loadDefects(), loadChecks(),
         loadDayNote(date), loadDayNote(nextDate)
       ]);
-      // ช่อง STBY ล่างแผงสถานภาพ = เฉพาะชนิด "stby" อันสุดท้าย (สร้างล่าสุด) · STBY เดโชชัย วางเป็นการ์ดเหมือนภารกิจปกติ
+      // ช่อง STBY ล่างแผงสถานภาพ = เฉพาะชนิด "stby" อันสุดท้าย (สร้างล่าสุด) · STBY เดโชชัย / STBY (ภารกิจ) วางเป็นการ์ดเหมือนภารกิจปกติ
       const stbys = all.filter(m => m.kind === "stby").slice(-1);
       const list = orderMissions(all.filter(m => m.kind !== "stby"));   // ลำดับที่จัดเอง หรือ T/O
 
