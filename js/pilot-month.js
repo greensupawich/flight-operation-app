@@ -42,6 +42,8 @@ export async function loadMonth(y, m0) {
   });
 }
 
+const PM_ROLES = PILOT_ROLES.filter((r) => r !== "N");     // ตำแหน่งที่นับเที่ยวในหน้า พ.
+
 // แปลงข้อมูลดิบจากฐาน → โครงสร้างของตาราง (แยกออกมาเพื่อทดสอบได้โดยไม่ต้องล็อกอิน)
 export function buildMonth(y, m0, { crew, missions, notes, holidays, notesMissing = false }) {
   const order = (p) => ROSTER_POSITIONS.indexOf(p);
@@ -55,8 +57,9 @@ export function buildMonth(y, m0, { crew, missions, notes, holidays, notesMissin
     const rep = Array.isArray(m.post_flight_reports) ? m.post_flight_reports[0] : m.post_flight_reports;
     const hours = rep && rep.total_hours != null ? Number(rep.total_hours) : null;
     const day = Number(m.mission_date.slice(8, 10));
+    // หน้าที่ N (ผู้ช่วยนำร่อง) ไม่นับเป็นเที่ยวในหน้า พ. (ผู้ใช้กำหนด 30 ต.ค. 69)
     const ids = new Set((m.mission_crew || [])
-      .filter((c) => c.crew_member_id && PILOT_ROLES.includes(String(c.position || "").toUpperCase()))
+      .filter((c) => c.crew_member_id && PM_ROLES.includes(String(c.position || "").toUpperCase()))
       .map((c) => c.crew_member_id));
     for (const id of ids) {
       if (!flights.has(id)) flights.set(id, new Map());
