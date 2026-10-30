@@ -92,7 +92,11 @@
   .qpanel h3{font-family:"Bai Jamjuree",sans-serif;font-weight:600;font-size:15px;margin:0 0 2px}
   .qpanel .rule{font-size:12px;color:var(--faint);margin:0 0 10px}
   .qcols{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
-  @media(max-width:760px){ .qcols{grid-template-columns:1fr} }
+  .qcols.with-ref{grid-template-columns:repeat(4,minmax(0,1fr))}
+  .qcol.ref{background:var(--surface-2);border-radius:8px;padding:6px 6px 4px}
+  .qcol.ref h4{color:var(--muted)}
+  @media(max-width:1100px){ .qcols.with-ref{grid-template-columns:repeat(2,minmax(0,1fr))} }
+  @media(max-width:760px){ .qcols,.qcols.with-ref{grid-template-columns:1fr} }
   .qcol h4{margin:0 0 6px;font-size:13px;font-weight:700}
   .qlist{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:3px;max-height:230px;overflow:auto}
   .qlist li{display:flex;align-items:center;gap:8px;font-size:12.5px;padding:3px 6px;border-radius:6px}
@@ -105,9 +109,18 @@
   .qlist .nm{font-weight:600;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;border-radius:4px;padding:0 5px}
   .qlist .xtag{font-size:10.5px;font-weight:700;color:#fff;background:var(--warn);border-radius:5px;padding:1px 6px;white-space:nowrap}
   .qlist .xtag.z{background:var(--surface-2);color:var(--muted);border:1px solid var(--line-strong);padding:0 5px}
-  .qlist .xtag.ed{cursor:pointer}
-  .qlist .xtag.ed:hover{outline:2px solid var(--primary);outline-offset:1px}
-  .qlist input.xtag-in{width:48px;padding:1px 4px;font-size:12px;font-weight:700;text-align:center;border-radius:5px}
+  .qlist .xtag.xed{cursor:pointer}
+  .qlist .xtag.xed:hover{outline:2px solid var(--primary);outline-offset:1px}
+  /* popup แก้แทคเลข (admin) */
+  .tagdlg-bg{position:fixed;inset:0;z-index:80;background:rgba(10,15,25,.35);display:flex;align-items:center;justify-content:center;padding:16px}
+  .tagdlg{background:var(--surface);border:1px solid var(--line-strong);border-radius:12px;box-shadow:0 12px 40px rgba(0,0,0,.25);
+          padding:16px 18px;width:300px;max-width:100%}
+  .tagdlg h4{margin:0 0 2px;font-family:"Bai Jamjuree",sans-serif;font-size:16px}
+  .tagdlg .sub{font-size:12px;color:var(--muted);margin-bottom:12px;line-height:1.5}
+  .tagdlg .stp{display:flex;align-items:center;justify-content:center;gap:12px;margin:6px 0 14px}
+  .tagdlg .stp button{width:44px;height:44px;border-radius:10px;font-size:22px;font-weight:700;justify-content:center}
+  .tagdlg .stp input{width:72px;text-align:center;font-size:22px;font-weight:700;font-family:"IBM Plex Mono",monospace}
+  .tagdlg .acts{display:flex;gap:8px} .tagdlg .acts .btn{flex:1;justify-content:center}
   .qpanel.hol{border-color:var(--accent)}
   .qlist .meta{font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--muted);white-space:nowrap}
   .qskip{font-size:11.5px;color:var(--faint);margin-top:6px;line-height:1.5}
@@ -225,6 +238,7 @@
     let lastKind = "rtaf", lastAc = "600";
     let target = null, aheadHol = new Set(), ranks = null;
     let tq = null, qMaps = null;      // ข้อมูลเดือนของวันที่จัดคิว (เมื่อเปิดดูเดือนอื่น) · maps ที่ใช้คิดคิว
+    let prevRef = null, ranksPrev = null;   // สัปดาห์แรกของเดือน: คิวอ้างอิงที่นับต่อจากเดือนก่อน
     let holTarget = null, holData = null, holRanks = null;      // คิววันหยุด
 
     const table = document.getElementById("q");
@@ -280,6 +294,17 @@
         ]);
         tq = { ...tBase, entries: tEntries, hist: tHist,
                dates: Array.from({ length: t.days }, (_, i) => `${ty}-${pad(tm)}-${pad(i + 1)}`) };
+      }
+      // สัปดาห์แรกของเดือน (วันที่ 1–7): คิวอ้างอิง = นับเที่ยวต่อจากเดือนก่อน (ผู้ใช้ขอ 30 ต.ค. 69)
+      //  เที่ยวของเดือนก่อน + เดือนนี้ก่อนวันจัดคิว · ต้องรู้วันหยุดของเดือนก่อน (ไม่นับเที่ยวในวันหยุด)
+      prevRef = null;
+      if (Number(target.slice(8, 10)) <= 7) {
+        const [ty, tm] = target.split("-").map(Number);
+        const pd = new Date(ty, tm - 2, 1), pr = monthRange(pd.getFullYear(), pd.getMonth());
+        const prevHol = await loadHolidaysBetween(pr.first, pr.last);
+        prevRef = { label: `${TH_MONTH[pd.getMonth()]} ${pd.getFullYear() + 543}`,
+                    holidays: new Set(prevHol.map(h => h.holiday_date)),
+                    dates: Array.from({ length: pr.days }, (_, i) => `${pd.getFullYear()}-${pad(pd.getMonth() + 1)}-${pad(i + 1)}`) };
       }
       // คิววันหยุด: วันหยุดถัดไป (ตั้งแต่พรุ่งนี้) · นับจากประวัติทั้งหมดในระบบ
       holTarget = nextWorkingDay(todayStr, d => !(isWeekend(d) || aheadHol.has(d)));
@@ -393,6 +418,16 @@
             historyStart: addDays(target, -120),
           })
         : null;
+      // คิวอ้างอิง: นับเที่ยวตั้งแต่ต้นเดือนก่อนจนถึงวันก่อนวันจัดคิว (เหมือนไม่ได้เริ่มนับใหม่ต้นเดือน)
+      ranksPrev = ranks && prevRef
+        ? rankQueue({
+            crew: data.crew, monthDates: [...prevRef.dates, ...qDates.filter(d => d < target)], target,
+            isOff: d => isWeekend(d) || qMaps.holidayMap.has(d) || aheadHol.has(d) || prevRef.holidays.has(d),
+            itemsFor: (id, d) => cellItems(id, d, qMaps).items.filter(it => !it.cancelled),
+            isUnavailable: (id, d) => qMaps.offMap.has(`${id}|${d}`),
+            historyStart: addDays(target, -120),
+          })
+        : null;
 
       holRanks = holData ? computeHolidayRanks() : null;
 
@@ -461,13 +496,13 @@
         return;
       }
       const byId = new Map(data.crew.map(c => [c.id, c]));
-      const col = (group, title) => {
-        const rows = [...ranks.values()].filter(r => r.group === group);
+      const col = (group, title, src = ranks, ref = false) => {
+        const rows = [...src.values()].filter(r => r.group === group);
         const ranked = rows.filter(r => r.rank).sort((a, b) => a.rank - b.rank);
         // คนไม่ว่างยังอยู่ในลำดับคิว แต่เป็นแถวสีแดง + หมายเหตุ · ไฮไลต์ "คิวถัดไป" ที่คนแรกที่ว่าง
         const nextId = ranked.find(r => !r.off)?.id;
         const offN = ranked.filter(r => r.off).length;
-        return `<div class="qcol"><h4>${title} <span class="muted" style="font-weight:400">(${ranked.length} คน${offN ? ` · ไม่ว่าง ${offN}` : ""})</span></h4>
+        return `<div class="qcol${ref ? " ref" : ""}"><h4>${title} <span class="muted" style="font-weight:400">(${ranked.length} คน${offN ? ` · ไม่ว่าง ${offN}` : ""})</span></h4>
           <ol class="qlist">${ranked.map(r => {
             const c = byId.get(r.id);
             const note = r.off ? (qMaps.offMap.get(`${r.id}|${target}`) || "") : "";
@@ -479,7 +514,8 @@
       };
       box.innerHTML = `<h3>คิวบิน · ${thaiLong(target)}</h3>
         <p class="rule">${dates.includes(target) ? "" : `คิดจากข้อมูลเดือน ${TH_MONTH[Number(target.slice(5, 7)) - 1]} ${Number(target.slice(0, 4)) + 543} · `}บินจริงน้อยสุดก่อน (ไม่นับ ST และเที่ยวที่บินในวันหยุด ในเดือนนั้น) → บินล่าสุดนานกว่าก่อน → ชื่ออยู่บนก่อน · ติ๊กหน้าชื่อเพื่อนับคิว</p>
-        <div class="qcols">${col("IPP", "IP / P")}${col("CP", "CP")}</div>`;
+        ${ranksPrev ? `<p class="rule" style="margin-top:-6px">สัปดาห์แรกของเดือน: คอลัมน์ <b>อ้างอิง</b> = นับเที่ยวต่อจากเดือน ${prevRef.label} (เดือนก่อน + เดือนนี้ก่อนวันจัดคิว) ไว้ประกอบการจัดลำดับ</p>` : ""}
+        <div class="qcols${ranksPrev ? " with-ref" : ""}">${col("IPP", "IP / P")}${ranksPrev ? col("IPP", `IP / P · อ้างอิง ${prevRef.label}`, ranksPrev, true) : ""}${col("CP", "CP")}${ranksPrev ? col("CP", `CP · อ้างอิง ${prevRef.label}`, ranksPrev, true) : ""}</div>`;
     }
 
     // ---------- คิววันหยุด ----------
@@ -524,25 +560,43 @@
     // ---------- admin แก้แทคเลขคิววันหยุด: เลขใหม่ − เลขเดิม → บวก/ลบที่จำนวนครั้งตั้งต้น (crew_holiday_base) ----------
     const admin = isAdmin(profile);
     if (admin) document.getElementById("hpanel").addEventListener("click", (e) => {
-      const tag = e.target.closest(".xtag.ed"); if (!tag || !holRanks || !holData?.count) return;
+      const tag = e.target.closest(".xtag.xed"); if (!tag || !holRanks || !holData?.count) return;
       const id = tag.dataset.id, r = holRanks.get(id); if (!r || r.tag == null) return;
-      const inp = Object.assign(document.createElement("input"), { type: "number", min: "0", step: "1", value: r.tag, className: "xtag-in" });
-      tag.replaceWith(inp); inp.focus(); inp.select();
-      let done = false;
-      const finish = async (save) => {
-        if (done) return; done = true;
+      const c = data.crew.find(x => x.id === id);
+      const bg = document.createElement("div");
+      bg.className = "tagdlg-bg";
+      bg.innerHTML = `<div class="tagdlg" role="dialog" aria-modal="true" aria-label="แก้แทคเลขคิววันหยุด">
+        <h4>${esc(c?.full_name || "")}</h4>
+        <div class="sub">แทคเลขคิววันหยุด (เทียบกับคนที่บินน้อยสุดในกลุ่ม) · บินวันหยุดรวม ${r.count} ครั้ง</div>
+        <div class="stp"><button class="btn" data-d="-1" aria-label="ลด">−</button>
+          <input type="number" min="0" step="1" value="${r.tag}" aria-label="แทคเลข">
+          <button class="btn" data-d="1" aria-label="เพิ่ม">+</button></div>
+        <div class="acts"><button class="btn ghost" data-x>ยกเลิก</button><button class="btn primary" data-ok>บันทึก</button></div></div>`;
+      document.body.appendChild(bg);
+      const inp = bg.querySelector("input");
+      const onKey = (k) => { if (k.key === "Escape") close(); if (k.key === "Enter") save(); };
+      const close = () => { bg.remove(); removeEventListener("keydown", onKey); };
+      const save = async () => {
         const v = Number(inp.value);
-        if (!save || inp.value === "" || !Number.isInteger(v) || v < 0 || v === r.tag) return renderHolidayPanel();
+        if (inp.value === "" || !Number.isInteger(v) || v < 0) { inp.focus(); return; }
+        if (v === r.tag) return close();
         const b = holData.count.get(id) || { count: 0, last: null };
         const next = b.count + (v - r.tag);
-        if (next < 0) { alert("ลดได้ไม่ถึงเลขนี้ — จำนวนครั้งตั้งต้นจะติดลบ"); return renderHolidayPanel(); }
+        if (next < 0) return alert("ลดได้ไม่ถึงเลขนี้ — จำนวนครั้งตั้งต้นจะติดลบ");
+        bg.querySelector("[data-ok]").disabled = true;
         const err = await saveHolidayBaseCount(id, next, b.last);
-        if (err) { alert("บันทึกไม่สำเร็จ: " + err.message); return renderHolidayPanel(); }
+        if (err) { bg.querySelector("[data-ok]").disabled = false; return alert("บันทึกไม่สำเร็จ: " + err.message); }
         holData.count.set(id, { ...b, count: next });
-        render();
+        close(); render();
       };
-      inp.addEventListener("keydown", (k) => { if (k.key === "Enter") finish(true); if (k.key === "Escape") finish(false); });
-      inp.addEventListener("blur", () => finish(true));
+      addEventListener("keydown", onKey);
+      bg.addEventListener("click", (ev) => {
+        if (ev.target === bg || ev.target.closest("[data-x]")) return close();
+        if (ev.target.closest("[data-ok]")) return save();
+        const d = ev.target.closest("[data-d]");
+        if (d) inp.value = Math.max(0, (Number(inp.value) || 0) + Number(d.dataset.d));
+      });
+      inp.focus(); inp.select();
     });
 
     function renderHolidayPanel() {
@@ -560,7 +614,7 @@
             const note = r.off ? (holData.off.get(r.id) || "") : "";
             return `<li class="${r.off ? "off" : r.id === nextId ? "next" : ""}"${r.off ? ` title="ไม่ว่าง${note ? ": " + esc(note) : ""}"` : ""}>
               <span class="qno">${r.rank}</span><span class="nm" style="${r.off ? "" : qualStyle(c.position)}">${esc(c.full_name)}</span>
-              ${r.tag != null ? `<span class="xtag${r.tag ? "" : " z"}${admin ? " ed" : ""}" data-id="${r.id}" title="บินวันหยุด ${r.count} ครั้ง · มากกว่าคนที่บินน้อยสุดในกลุ่ม ${r.tag} ครั้ง${admin ? "\nadmin: คลิกเพื่อแก้เลข" : ""}">${r.tag}</span>` : ""}
+              ${r.tag != null ? `<span class="xtag${r.tag ? "" : " z"}${admin ? " xed" : ""}" data-id="${r.id}" title="บินวันหยุด ${r.count} ครั้ง · มากกว่าคนที่บินน้อยสุดในกลุ่ม ${r.tag} ครั้ง${admin ? "\nadmin: คลิกเพื่อแก้เลข" : ""}">${r.tag}</span>` : ""}
               ${r.off ? `<span class="offtag">ไม่ว่าง${note ? " · " + esc(note) : ""}</span>` : ""}
               <span class="meta">ล่าสุด ${r.last ? thaiShort(r.last) + String(Number(r.last.slice(0, 4)) + 543).slice(-2) : "—"}</span></li>`;
           }).join("") || `<li class="muted">ไม่มีผู้ที่นับคิวได้</li>`}</ol></div>`;
