@@ -66,7 +66,7 @@
       <span id="lgIP"></span><span id="lgP"></span><span id="lgCP"></span>
       <span style="margin-inline-start:14px">ความพร้อมบิน:</span>
       <span class="cur ok"   style="display:inline-block;padding:2px 8px">ปกติ</span>
-      <span class="cur warn" style="display:inline-block;padding:2px 8px">เกิน 80 วัน</span>
+      <span class="cur warn" style="display:inline-block;padding:2px 8px">เกิน 60 วัน</span>
       <span class="cur crit" style="display:inline-block;padding:2px 8px">เกิน 90 วัน / ไม่มีข้อมูล</span>
       <span class="cur na"   style="display:inline-block;padding:2px 8px">บินแบบนี้ไม่ได้</span>
     </div>
@@ -133,9 +133,9 @@
     const daysSince = (d) => d ? Math.floor((todayMid - new Date(d.slice(0,10)+"T00:00:00")) / 86400000) : null;
     const thShort = (d) => { if(!d) return "—"; const [y,mo,da]=d.slice(0,10).split("-").map(Number);
       return `${da} ${TH_MON_SHORT[mo-1]}${String(y+543).slice(-2)}`; };
-    // สี: ดำ=บินไม่ได้ · แดง=เกิน90วัน/ไม่มีข้อมูล · เหลือง=เกิน80วัน · เขียว=ปกติ
+    // สี: ดำ=บินไม่ได้ · แดง=เกิน90วัน/ไม่มีข้อมูล · เหลือง=เกิน60วัน · เขียว=ปกติ
     const curClass = (canFly, d) => { if(!canFly) return "na"; const n=daysSince(d);
-      if(n===null || n>=90) return "crit"; if(n>=80) return "warn"; return "ok"; };
+      if(n===null || n>=90) return "crit"; if(n>=60) return "warn"; return "ok"; };
     const curCell = (type, canFly, d) => {
       const cls = curClass(canFly, d);
       if (!planner) return `<td><div class="cur ${cls}">${canFly ? `<span class="dv">${thShort(d)}</span>${daysSince(d)!==null?`<span style="font-size:10px;opacity:.8">${daysSince(d)} วัน</span>`:""}` : "บินไม่ได้"}</div></td>`;
