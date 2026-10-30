@@ -236,10 +236,10 @@
     const m = await getMission(missionId);
     if (!m) { document.getElementById("sub").textContent = "ไม่พบภารกิจ"; throw new Error("not found"); }
 
-    // นักบิน/เจ้าหน้าที่ บันทึกได้เฉพาะภารกิจที่ชื่อตัวเองอยู่ในลูกเรือ (บัญชีต้องผูกชื่อในทะเบียน — migration_45)
-    const NO_RIGHT = "คุณยังไม่มีสิทธิ์บันทึกภารกิจนี้ — บัญชีต้องผูกกับชื่อในทะเบียนนักบิน (admin ตั้งที่หน้า admin) และชื่อต้องอยู่ในลูกเรือภารกิจนี้";
+    // admin / ผู้วางแผน / นักบิน บันทึกได้ทุกภารกิจ (migration_46) · เจ้าหน้าที่ (crew) เฉพาะภารกิจที่ชื่อตัวเองอยู่ในลูกเรือ (migration_45)
+    const NO_RIGHT = "คุณยังไม่มีสิทธิ์บันทึกภารกิจนี้ — สิทธิ์เจ้าหน้าที่ต้องผูกบัญชีกับชื่อในทะเบียน (admin ตั้งที่หน้า admin) และชื่อต้องอยู่ในลูกเรือภารกิจนี้ · ผู้ชม (viewer) บันทึกไม่ได้";
     const why = (e) => /row-level security|permission denied/i.test(e?.message || "") ? NO_RIGHT : (e?.message || String(e));
-    if (!["admin", "planner"].includes(profile.role)) {
+    if (!["admin", "planner", "pilot"].includes(profile.role)) {
       const mine = profile.crew_member_id && (m.mission_crew || []).some(c => c.crew_member_id === profile.crew_member_id);
       if (!mine) {
         const w = document.createElement("div");

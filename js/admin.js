@@ -115,7 +115,7 @@ export function renderUsers(tbody, profiles, onDone, crew = []) {
     .sort((a, b) => (isDefaultAdmin(b) - isDefaultAdmin(a)) || ((b.role === "admin") - (a.role === "admin")));
   const full = adminCount(profiles) >= MAX_ADMINS;
 
-  // ช่องผูกชื่อในทะเบียนนักบิน — นักบินรายงานหลังบินได้เฉพาะภารกิจที่ชื่อตัวเองอยู่ในลูกเรือ
+  // ช่องผูกชื่อในทะเบียนนักบิน — เจ้าหน้าที่ (crew) รายงานหลังบินได้เฉพาะภารกิจที่ชื่อตัวเองอยู่ในลูกเรือ (นักบินได้ทุกภารกิจ — migration_46)
   function crewCell(p) {
     const sug = !p.crew_member_id ? suggestCrew(p, crew) : null;
     const opts = crew.filter((c) => c.active !== false || c.id === p.crew_member_id)
@@ -125,7 +125,7 @@ export function renderUsers(tbody, profiles, onDone, crew = []) {
       }).join("");
     return `<select data-crew style="min-width:150px"><option value="">— ไม่ผูก —</option>${opts}</select>
       ${sug && !linked.has(sug.id) ? `<div class="muted" style="font-size:11.5px;margin-top:3px">แนะนำ: <a href="#" data-sug="${sug.id}">${esc(sug.full_name)}</a></div>` : ""}
-      ${["pilot", "crew"].includes(p.role) && !p.crew_member_id ? `<div style="font-size:11.5px;color:var(--warn);margin-top:2px">ยังไม่ผูก → รายงานหลังบินไม่ได้</div>` : ""}`;
+      ${p.role === "crew" && !p.crew_member_id ? `<div style="font-size:11.5px;color:var(--warn);margin-top:2px">ยังไม่ผูก → รายงานหลังบินไม่ได้</div>` : ""}`;
   }
 
   tbody.innerHTML = rows.length ? rows.map((p) => {
