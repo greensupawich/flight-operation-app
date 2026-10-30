@@ -14,7 +14,7 @@ function crewRow(role, crew) {
                     .filter(Boolean);
   if (!names.length) return "";
   // AC มีคนเดียว → ใช้เต็มบรรทัด (ชื่อ + เบอร์ยาว ๆ ไม่ตัดขึ้นบรรทัดใหม่)
-  if (role === "AC" || role === "ผอ.เดินทาง") return `<tr><td class="lb">${role}</td><td colspan="5" class="v">${names.map(esc).join(" · ")}</td></tr>`;
+  if (role === "AC") return `<tr><td class="lb">${role}</td><td colspan="5" class="v">${names.map(esc).join(" · ")}</td></tr>`;
   const slots = Math.max(3, names.length);          // อย่างน้อย 3 ช่องให้ตรงกับกระดาน
   const cells = Array.from({length: slots}, (_, i) => `<span>${esc(names[i] || "")}</span>`).join("");
   return `<tr><td class="lb">${role}</td><td colspan="5" class="v">
@@ -62,6 +62,7 @@ export function sheetHTML(m, { planner = false } = {}) {
       <tr><td class="lb">ภารกิจ</td><td colspan="5" class="v c">${v(m.mission_name)}</td></tr>
       <tr><td class="lb">เส้นทางบิน</td><td colspan="5" class="v c">${v(m.route)}</td></tr>
       <tr><td class="lb">หน.คณะ</td><td colspan="5" class="v">${v(m.head_delegation)}</td></tr>
+      ${m.travel_director ? `<tr><td class="lb">ผอ.เดินทาง</td><td colspan="5" class="v">${esc(m.travel_director)}</td></tr>` : ""}
       ${[...PILOT_ROLES, ...OTHER_ROLES].map(r => crewRow(r, crew)).join("")}
       <tr><td class="lb">POCคณะ</td><td colspan="5" class="v">${v(poc)}</td></tr>
       <tr><td class="lb" rowspan="2">หมายเหตุ</td><td colspan="3" rowspan="2" class="v">${v(m.remark)}</td>

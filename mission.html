@@ -109,6 +109,8 @@
         <div><label>ชื่อ POC</label><input id="f_pocName" placeholder="เช่น น.ท.ธิติ สุขยอย"></div>
         <div><label>เบอร์ POC</label><input id="f_pocPhone" placeholder="09 3424 9399"></div>
       </div>
+      <label style="margin-top:12px">ผอ.เดินทาง</label>
+      <input id="f_director" placeholder="ชื่อ ผอ.เดินทาง (ถ้ามี)">
     </div>
 
     <!-- ลูกเรือ -->
@@ -200,7 +202,7 @@
     document.getElementById("crewBox").innerHTML = `
       <div class="crew-block">
         <div class="crew-title"><span class="tag">นบ.</span> นักบิน <span style="font-weight:400;color:var(--faint);font-size:11.5px">(จากทะเบียน)</span>
-          <span class="nohr">ผอ.เดินทาง · AC · N ไม่นับ ชม.บิน</span></div>
+          <span class="nohr">AC · N ไม่นับ ชม.บิน</span></div>
         <div class="crew-dyn" id="pilotRows"></div>
       </div>
       ${OTHER_ROLES.map(r => `
@@ -290,6 +292,7 @@
         $("f_parkOut").value = m.parking_out || ""; $("f_parkIn").value = m.parking_in || "";
         $("f_head").value = m.head_delegation || ""; $("f_pocName").value = m.poc_name || "";
         $("f_pocPhone").value = m.poc_phone || ""; $("f_remark").value = m.remark || "";
+        $("f_director").value = m.travel_director || "";
         $("back").href = `day.html?date=${m.mission_date}`;
 
         // เติมลูกเรือเดิมเข้า state
@@ -332,6 +335,7 @@
         head_delegation: $("f_head").value.trim(),
         poc_name: $("f_pocName").value.trim(), poc_phone: $("f_pocPhone").value.trim(),
         remark: $("f_remark").value.trim(),
+        travel_director: $("f_director").value.trim() || null,      // migration_48
       };
 
       // รวบรวมลูกเรือ + ผูก profile ถ้าชื่อตรงกับผู้ใช้ในระบบ

@@ -223,7 +223,7 @@
       if (!stbys.length) return "";
       return stbys.map(m => {
         const crew = (m.mission_crew || []);
-        const rolesOrder = ["ผอ.เดินทาง","AC","IP","P","CP","นบ.ราชฯ 1","นบ.ราชฯ 2","ตห.","N","FM","RO","LM","AH"];
+        const rolesOrder = ["AC","IP","P","CP","นบ.ราชฯ 1","นบ.ราชฯ 2","ตห.","N","FM","RO","LM","AH"];
         const lines = rolesOrder.map(r => {
           const names = crew.filter(c => (c.position||"").toUpperCase() === r)
                             .sort((a,b)=>(a.sort_order||0)-(b.sort_order||0))

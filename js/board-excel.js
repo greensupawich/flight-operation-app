@@ -109,7 +109,11 @@ function fillCard(ws, [r0, c0], m) {
   at(5, 2).value = (m.status === "cancelled" ? "(ยกเลิก) " : "") + name;
   at(7, 2).value = clean(m.route) || null;
   at(8, 2).value = clean(m.head_delegation) || null;
-  crewLayout(m.mission_crew || []).forEach(({ role, names }, i) => {
+  // ผอ.เดินทาง (missions.travel_director) → แถวบนสุดของรายชื่อในการ์ด เหมือนกระดานจริง
+  const crewRows = clean(m.travel_director)
+    ? [{ position: "ผอ.เดินทาง", crew_name: clean(m.travel_director), sort_order: -1 }, ...(m.mission_crew || [])]
+    : (m.mission_crew || []);
+  crewLayout(crewRows).forEach(({ role, names }, i) => {
     const r = 9 + i;
     at(r, 1).value = role;
     const slots = [names[0], names[1], names.slice(2).join(", ")];

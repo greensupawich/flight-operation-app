@@ -48,13 +48,14 @@ export const qualStyle = (q) => {
 };
 
 // ---------- ตำแหน่งลูกเรือ (เรียงตามฟอร์ม) ----------
-//  ผอ.เดินทาง บนสุด · นบ.ราชฯ 1/2 และ ตห. (เที่ยวบินพิเศษ) นับ ชม.บินเหมือน IP/P/CP (ผู้ใช้กำหนด 30 ต.ค. 69 · migration_47)
+//  นบ.ราชฯ 1/2 และ ตห. (เที่ยวบินพิเศษ) นับ ชม.บินเหมือน IP/P/CP (migration_47)
+//  ผอ.เดินทาง ไม่ใช่ตำแหน่งลูกเรือ — เป็นช่อง missions.travel_director ในหมวด คณะและผู้ประสานงาน (migration_48)
 export const SPECIAL_PILOT_ROLES = ["นบ.ราชฯ 1", "นบ.ราชฯ 2", "ตห."];
-export const PILOT_ROLES = ["ผอ.เดินทาง", "AC", "IP", "P", "CP", ...SPECIAL_PILOT_ROLES, "N"];
+export const PILOT_ROLES = ["AC", "IP", "P", "CP", ...SPECIAL_PILOT_ROLES, "N"];
 export const OTHER_ROLES = ["FM", "RO", "LM", "AH"];
 export const CREW_ROLES  = [...PILOT_ROLES, ...OTHER_ROLES];
-// ผอ.เดินทาง · N ไม่นับ ชม.บิน (AC นับเมื่อผูกทะเบียนนักบิน · ไม่อยู่ในทะเบียนก็ได้)
-export const NO_HOURS_ROLES = ["ผอ.เดินทาง", "N"];
+// N ไม่นับ ชม.บิน (AC นับเมื่อผูกทะเบียนนักบิน · ไม่อยู่ในทะเบียนก็ได้)
+export const NO_HOURS_ROLES = ["N"];
 
 const MISSION_SELECT =
   "*, aircraft(id,tail_number,type), mission_crew(id,position,crew_name,crew_member_id,sort_order), post_flight_reports(id,total_hours)";
@@ -123,9 +124,20 @@ export async function getMission(id) {
 //  บันทึกภารกิจ (สร้างใหม่ถ้าไม่มี id) + แทนที่รายชื่อลูกเรือทั้งชุด
 //  crew = [{ position, crew_name, crew_member_id }]
 // =====================================================================
+let _hasTD;
+async function hasTravelDirector() {
+  if (_hasTD === undefined) {
+    const { error } = await supabase.from("missions").select("travel_director").limit(1);
+    _hasTD = !error;
+  }
+  return _hasTD;
+}
+
 export async function saveMission(id, fields, crew) {
   const { data: { session } } = await supabase.auth.getSession();
   let missionId = id;
+  // ยังไม่รัน migration_48 → ไม่มีคอลัมน์ travel_director: ตัดช่องนี้ออก (ถ้าว่าง) แทนที่จะบันทึกไม่ได้ทั้งภารกิจ
+  if (!fields.travel_director && !(await hasTravelDirector())) { fields = { ...fields }; delete fields.travel_director; }
 
   if (missionId) {
     const { error } = await supabase.from("missions").update(fields).eq("id", missionId);
