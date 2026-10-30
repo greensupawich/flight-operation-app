@@ -253,7 +253,7 @@
       document.querySelector(".vip-h").hidden = false;
       // ชม.ที่เหลือ (ขาที่ไม่ติ๊กคณะวัง) → เลือกประเภทได้ · ค่าเริ่มต้น ฝึกบิน (migration_37)
       const sel = document.getElementById("restKind");
-      sel.innerHTML = ["training", "rtaf", "fcf", "palace", "dechochai"].filter(k => k !== m.kind)
+      sel.innerHTML = ["training", "rtaf", "fcf", "palace", "dechochai", "other"].filter(k => k !== m.kind)
         .map(k => `<option value="${k}">${esc(KINDS[k])}</option>`).join("");
       sel.addEventListener("change", () => recalcTotal());
       document.getElementById("restRow").hidden = false;

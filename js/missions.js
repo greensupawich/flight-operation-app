@@ -10,6 +10,7 @@ export const KINDS = {
   palace: "ภารกิจสำนักพระราชวัง",
   rtaf: "ภารกิจ ทอ.",
   training: "ฝึกบิน",
+  other: "อื่นๆ",
   stby: "STBY (Standby)",
   stby_dechochai: "STBY เดโชชัย",
 };
@@ -21,6 +22,7 @@ export const KIND_COLORS = {
   palace:    { bg: "#A5D46A", fg: "#16240A" },
   rtaf:      { bg: "#4DA3E8", fg: "#08202F" },
   training:  { bg: "#FFFFFF", fg: "#16202E" },
+  other:     { bg: "#B39DDB", fg: "#1E1033" },   // อื่นๆ = ม่วง (ผู้ใช้กำหนด 30 ต.ค. 69 · migration_42)
   stby:      { bg: "#FFFFFF", fg: "#16202E" },   // ช่อง ST ในกระดานคิวบินเป็นพื้นขาว
   stby_dechochai: { bg: "#FDE0DE", fg: "#B71C1C" },   // STBY ที่รอเรียกเป็นเดโชชัย (ชมพูอ่อน ต่างจากเดโชชัยจริง)
 };
