@@ -221,6 +221,7 @@
     let sel = null;                       // { crew, date }
     let lastKind = "rtaf", lastAc = "600";
     let target = null, aheadHol = new Set(), ranks = null;
+    let tq = null, qMaps = null;      // ข้อมูลเดือนของวันที่จัดคิว (เมื่อเปิดดูเดือนอื่น) · maps ที่ใช้คิดคิว
     let holTarget = null, holData = null, holRanks = null;      // คิววันหยุด
 
     const table = document.getElementById("q");
@@ -266,6 +267,17 @@
       const hist = target.slice(0, 7) === first.slice(0, 7)
         ? await loadHistory(addDays(target, -120), addDays(first, -1)) : { entries: [], missions: [] };
       data = { ...base, entries, hist };
+      // วันที่จัดคิวอยู่คนละเดือนกับที่เปิดดู (เช่น ดู ต.ค. แต่คิวของ 2 พ.ย.) → โหลดข้อมูลเดือนนั้นมาคิดคิวด้วย
+      tq = null;
+      if (target.slice(0, 7) !== first.slice(0, 7)) {
+        const [ty, tm] = target.split("-").map(Number);
+        const t = monthRange(ty, tm - 1);
+        const [tBase, tEntries, tHist] = await Promise.all([
+          loadQueueMonth(ty, tm - 1), loadEntries(ty, tm - 1), loadHistory(addDays(target, -120), addDays(t.first, -1)),
+        ]);
+        tq = { ...tBase, entries: tEntries, hist: tHist,
+               dates: Array.from({ length: t.days }, (_, i) => `${ty}-${pad(tm)}-${pad(i + 1)}`) };
+      }
       // คิววันหยุด: วันหยุดถัดไป (ตั้งแต่พรุ่งนี้) · นับจากประวัติทั้งหมดในระบบ
       holTarget = nextWorkingDay(todayStr, d => !(isWeekend(d) || aheadHol.has(d)));
       const [allHist, allHol, holOff, holBase, holCount] = await Promise.all([
@@ -280,14 +292,14 @@
 
     // ---------- สิ่งที่แสดงในแต่ละช่อง ----------
     let maps = {};
-    function buildMaps() {
-      const codeMap = new Map(data.airfields.map(a => [a.name, a.code]));
-      const entryMap = new Map([...(data.hist?.entries || []), ...data.entries].map(e => [`${e.crew_member_id}|${e.entry_date}`, e]));
-      const offMap = new Map(data.unavailable.map(u => [`${u.crew_member_id}|${u.off_date}`, u.note || ""]));
-      const holidayMap = new Map(data.holidays.map(h => [h.holiday_date, h.name || "วันหยุด"]));
+    function buildMaps(src = data, ym = dates[0]?.slice(0, 7)) {
+      const codeMap = new Map(src.airfields.map(a => [a.name, a.code]));
+      const entryMap = new Map([...(src.hist?.entries || []), ...src.entries].map(e => [`${e.crew_member_id}|${e.entry_date}`, e]));
+      const offMap = new Map(src.unavailable.map(u => [`${u.crew_member_id}|${u.off_date}`, u.note || ""]));
+      const holidayMap = new Map(src.holidays.map(h => [h.holiday_date, h.name || "วันหยุด"]));
       const missionCell = new Map(), seen = new Set();
       const missingCodes = new Set();
-      [...(data.hist?.missions || []), ...data.missions].forEach(ms => {
+      [...(src.hist?.missions || []), ...src.missions].forEach(ms => {
         (ms.mission_crew || []).forEach(mc => {
           if (!mc.crew_member_id || !PILOT_POSITIONS.includes(String(mc.position || "").trim().toUpperCase())) return;
           const k = `${mc.crew_member_id}|${ms.id}`;
@@ -296,25 +308,25 @@
           if (!missionCell.has(ck)) missionCell.set(ck, []);
           missionCell.get(ck).push(ms);
         });
-        if (!isStby(ms.kind) && ms.mission_date.slice(0, 7) === dates[0]?.slice(0, 7)) {
+        if (!isStby(ms.kind) && ms.mission_date.slice(0, 7) === ym) {
           const p = secondPoint(ms.route); if (p && !codeMap.has(p)) missingCodes.add(p);
         }
       });
-      maps = { codeMap, entryMap, offMap, holidayMap, missionCell, missingCodes };
+      return { codeMap, entryMap, offMap, holidayMap, missionCell, missingCodes };
     }
 
     // ช่องที่พิมพ์เอง > ข้อมูลจากภารกิจ
-    function cellItems(crewId, d) {
+    function cellItems(crewId, d, mp = maps) {
       const k = `${crewId}|${d}`;
-      const e = maps.entryMap.get(k);
-      const ms = maps.missionCell.get(k) || [];
+      const e = mp.entryMap.get(k);
+      const ms = mp.missionCell.get(k) || [];
       if (e) return { manual: true, override: ms.length > 0, missions: ms,
         items: [{ text: e.code || "", kind: e.kind, ac: e.ac_type || "600",
                   st: String(e.code || "").trim().toUpperCase() === "ST" || isStby(e.kind) && !e.code }] };
       return { manual: false, override: false, missions: ms,
         items: ms.map(m => {
           const p = secondPoint(m.route);
-          return { text: isStby(m.kind) ? "ST" : (maps.codeMap.get(p) || ""),   // ไม่มีรหัส → แสดงแต่สี
+          return { text: isStby(m.kind) ? "ST" : (mp.codeMap.get(p) || ""),   // ไม่มีรหัส → แสดงแต่สี
                    kind: m.kind, ac: /500/.test(m.aircraft?.type || "") ? "500" : "600",
                    st: isStby(m.kind),
                    cancelled: m.status === "cancelled",          // ยกเลิก → แสดงจาง ไม่นับคิว
@@ -358,13 +370,23 @@
       const y = view.getFullYear(), m = view.getMonth();
       const { days } = monthRange(y, m);
       dates = Array.from({ length: days }, (_, i) => `${y}-${pad(m + 1)}-${pad(i + 1)}`);
-      buildMaps();
-      ranks = dates.includes(target)
+      maps = buildMaps();
+      qMaps = maps;
+      let qDates = dates;
+      if (!dates.includes(target) && tq) {
+        // เดือนที่เปิดอยู่ใช้ข้อมูลสด (พิมพ์/ลบช่องแล้วคิวเปลี่ยนทันที) แทนข้อมูลย้อนหลังที่โหลดไว้
+        const ym = dates[0].slice(0, 7);
+        const hist = { entries: [...tq.hist.entries.filter(e => e.entry_date.slice(0, 7) !== ym), ...data.entries],
+                       missions: [...tq.hist.missions.filter(m => m.mission_date.slice(0, 7) !== ym), ...data.missions] };
+        qMaps = buildMaps({ ...tq, hist }, tq.dates[0].slice(0, 7));
+        qDates = tq.dates;
+      }
+      ranks = qDates.includes(target)
         ? rankQueue({
-            crew: data.crew, monthDates: dates, target,
-            isOff: d => isWeekend(d) || maps.holidayMap.has(d) || aheadHol.has(d),
-            itemsFor: (id, d) => cellItems(id, d).items.filter(it => !it.cancelled),   // ยกเลิกไม่นับคิว
-            isUnavailable: (id, d) => maps.offMap.has(`${id}|${d}`),
+            crew: data.crew, monthDates: qDates, target,
+            isOff: d => isWeekend(d) || qMaps.holidayMap.has(d) || aheadHol.has(d),
+            itemsFor: (id, d) => cellItems(id, d, qMaps).items.filter(it => !it.cancelled),   // ยกเลิกไม่นับคิว
+            isUnavailable: (id, d) => qMaps.offMap.has(`${id}|${d}`),
             historyStart: addDays(target, -120),
           })
         : null;
@@ -445,7 +467,7 @@
         return `<div class="qcol"><h4>${title} <span class="muted" style="font-weight:400">(${ranked.length} คน${offN ? ` · ไม่ว่าง ${offN}` : ""})</span></h4>
           <ol class="qlist">${ranked.map(r => {
             const c = byId.get(r.id);
-            const note = r.off ? (maps.offMap.get(`${r.id}|${target}`) || "") : "";
+            const note = r.off ? (qMaps.offMap.get(`${r.id}|${target}`) || "") : "";
             return `<li class="${r.off ? "off" : r.id === nextId ? "next" : ""}"${r.off ? ` title="ไม่ว่าง${note ? ": " + esc(note) : ""}"` : ""}>
               <span class="qno">${r.rank}</span><span class="nm" style="${r.off ? "" : qualStyle(c.position)}">${esc(c.full_name)}</span>
               ${r.off ? `<span class="offtag">ไม่ว่าง${note ? " · " + esc(note) : ""}</span>` : ""}
@@ -453,7 +475,7 @@
           }).join("") || `<li class="muted">ไม่มีผู้ที่นับคิวได้</li>`}</ol></div>`;
       };
       box.innerHTML = `<h3>คิวบิน · ${thaiLong(target)}</h3>
-        <p class="rule">บินจริงน้อยสุดก่อน (ไม่นับ ST และเที่ยวที่บินในวันหยุด ในเดือนนี้) → บินล่าสุดนานกว่าก่อน → ชื่ออยู่บนก่อน · ติ๊กหน้าชื่อเพื่อนับคิว</p>
+        <p class="rule">${dates.includes(target) ? "" : `คิดจากข้อมูลเดือน ${TH_MONTH[Number(target.slice(5, 7)) - 1]} ${Number(target.slice(0, 4)) + 543} · `}บินจริงน้อยสุดก่อน (ไม่นับ ST และเที่ยวที่บินในวันหยุด ในเดือนนั้น) → บินล่าสุดนานกว่าก่อน → ชื่ออยู่บนก่อน · ติ๊กหน้าชื่อเพื่อนับคิว</p>
         <div class="qcols">${col("IPP", "IP / P")}${col("CP", "CP")}</div>`;
     }
 
