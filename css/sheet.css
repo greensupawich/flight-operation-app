@@ -71,6 +71,12 @@ table.fm td.c{text-align:center}
        overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:60%}
 .ced-b{display:flex;flex-direction:column;gap:5px}
 .ced-b input,.ced-b select{width:100%;font-size:14px}
+.ced .btn-mini{padding:7px 11px;font-size:14px;line-height:1;border-radius:8px;border:1px solid var(--line-strong);
+               background:var(--surface);color:var(--crit);cursor:pointer;font-family:inherit;font-weight:700}
+.ced .btn-mini:hover{background:var(--crit-soft)}
+.ced-pocs{display:flex;flex-direction:column;gap:5px}
+.ced-poc{display:grid;grid-template-columns:minmax(0,1fr) 128px auto;gap:5px;align-items:center}
+@media(max-width:699px){ .ced-poc{grid-template-columns:minmax(0,1fr) 112px auto} }
 .ced-l{font-size:11.5px;color:var(--muted);font-weight:600;margin-top:3px}
 .ced-note{font-size:11.5px;color:var(--muted)}
 .ced-note.warn{color:var(--warn)}

@@ -212,6 +212,37 @@ export async function loadCrewRoster() {
   return (data || []).map((c) => ({ ...c, aliases: aliases?.get(c.id) || [] }));
 }
 
+// ---------- POC คณะ (หลายคณะ / หลายภารกิจ) ----------
+//  เก็บในคอลัมน์เดิม ไม่ต้อง migration:
+//   • 1 คน  → poc_name = ชื่อ, poc_phone = เบอร์
+//   • หลายคน → poc_name = "(1) ชื่อ เบอร์ / (2) ชื่อ เบอร์", poc_phone = "" (รูปแบบเดียวกับข้อมูลที่นำเข้าจากกระดาน)
+const PHONE_TAIL = /\s*((?:\+66|0)\d(?:[\s-]?\d){7,9})\s*$/;
+const splitPhone = (t) => {
+  const s = String(t || "").trim(), m = s.match(PHONE_TAIL);
+  return m ? { name: s.slice(0, m.index).trim(), phone: m[1] } : { name: s, phone: "" };
+};
+export function parsePoc(m) {
+  const name = String(m?.poc_name || "").trim(), phone = String(m?.poc_phone || "").trim();
+  if (!name.includes("/")) {
+    if (!name && !phone) return [];
+    return [phone ? { name, phone } : splitPhone(name)];
+  }
+  const list = name.split(/\s*\/\s*/).map((x) => x.replace(/^\(\d+\)\s*/, "")).filter(Boolean).map(splitPhone);
+  if (phone) list.push({ name: "", phone });
+  return list;
+}
+export function pocFields(list) {
+  const l = (list || []).map((p) => ({ name: String(p.name || "").trim(), phone: String(p.phone || "").trim() }))
+                       .filter((p) => p.name || p.phone);
+  if (l.length <= 1) return { poc_name: l[0]?.name || "", poc_phone: l[0]?.phone || "" };
+  return { poc_name: l.map((p, i) => `(${i + 1}) ${[p.name, p.phone].filter(Boolean).join(" ")}`).join(" / "), poc_phone: "" };
+}
+// บรรทัดที่แสดงในช่อง POC (การ์ด / Excel) · หลายคน → ขึ้นต้น (1) (2) …
+export const pocLines = (m) => {
+  const l = parsePoc(m);
+  return l.map((p, i) => `${l.length > 1 ? `(${i + 1}) ` : ""}${[p.name, p.phone].filter(Boolean).join("  ")}`);
+};
+
 // ---------- helper ----------
 export const iso = (d) =>
   `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}-${String(d.getUTCDate()).padStart(2, "0")}`;

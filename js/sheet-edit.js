@@ -7,7 +7,7 @@
 //  คู่กับ data-f / data-crew / data-crew-add / data-crew-new ใน mission-sheet.js (sheetHTML edit:true)
 // =====================================================================
 import { supabase } from "./supabase.js";
-import { PILOT_ROLES, OTHER_ROLES, QUALS, qualStyle, reportOf, esc } from "./missions.js";
+import { PILOT_ROLES, OTHER_ROLES, QUALS, qualStyle, reportOf, esc, parsePoc, pocFields } from "./missions.js";
 import { attachCombo, comboHTML } from "./combobox.js";
 
 // คอลัมน์ที่แก้ได้ → ชื่อที่แสดง · NULLABLE = เก็บ null เมื่อว่าง (เหมือนฟอร์มภารกิจ)
@@ -19,7 +19,7 @@ const FIELDS = {
   parking_out: "ที่จอด ไป", parking_in: "ที่จอด กลับ",
 };
 const NULLABLE = ["travel_director", "doc_officer"];
-const SLASH_HINT = ["remark", "poc"];          // "/" = ขึ้นบรรทัดใหม่
+const SLASH_HINT = ["remark"];                 // "/" = ขึ้นบรรทัดใหม่
 const STALE = "มีคนแก้ภารกิจนี้ไปก่อนแล้ว — โหลดข้อมูลล่าสุดให้แล้ว ลองแก้อีกครั้ง";
 const isPilot = (r) => PILOT_ROLES.includes(r);
 
@@ -134,18 +134,34 @@ export function wireSheetEdit(container, { getMission, roster = [], onSaved }) {
   // ---------- ช่องข้อความ ----------
   function editField(cell, m, col) {
     if (col === "poc") {
+      // POC หลายคณะ / หลายภารกิจ → 1 แถว = ชื่อ + เบอร์ · กด + เพิ่ม POC ได้ (เก็บแบบ pocFields ใน missions.js)
+      const rowHTML = (p = {}) => `<div class="ced-poc">
+          <input data-pn placeholder="ชื่อ POC" value="${esc(p.name || "")}">
+          <input data-pp placeholder="เบอร์โทร" value="${esc(p.phone || "")}" inputmode="tel">
+          <button type="button" class="btn-mini" data-pdel title="ลบ POC นี้">−</button></div>`;
+      const cur = parsePoc(m);
       const box = popup(cell, "POC คณะ", m, `
-        <label class="ced-l">ชื่อ</label><input data-in="poc_name" value="${esc(m.poc_name || "")}">
-        <label class="ced-l">เบอร์โทร</label><input data-in="poc_phone" value="${esc(m.poc_phone || "")}">
-        <div class="ced-note">หลายคณะ คั่นด้วย / (ขึ้นบรรทัดใหม่)</div>`, {
+        <div class="ced-pocs">${(cur.length ? cur : [{}]).map(rowHTML).join("")}</div>
+        <button type="button" class="btn sm ghost" data-padd style="align-self:flex-start">+ เพิ่ม POC</button>
+        <div class="ced-note">หลายภารกิจ / หลายคณะ → แสดงบรรทัดละคน (1) (2) … ตามลำดับ</div>`, {
         onSave: () => {
-          const patch = {};
-          box.querySelectorAll("[data-in]").forEach((i) => {
-            const v = i.value.trim();
-            if (v !== (m[i.dataset.in] || "")) patch[i.dataset.in] = v;
-          });
-          return Object.keys(patch).length ? updateMission(m, patch) : null;
+          const list = [...box.querySelectorAll(".ced-poc")].map((r) =>
+            ({ name: r.querySelector("[data-pn]").value, phone: r.querySelector("[data-pp]").value }));
+          const patch = pocFields(list);
+          if (patch.poc_name === (m.poc_name || "") && patch.poc_phone === (m.poc_phone || "")) return null;
+          return updateMission(m, patch);
         },
+      });
+      const wrap = box.querySelector(".ced-pocs");
+      box.querySelector("[data-padd]").addEventListener("click", () => {
+        wrap.insertAdjacentHTML("beforeend", rowHTML());
+        wrap.lastElementChild.querySelector("input").focus();
+      });
+      wrap.addEventListener("click", (e) => {
+        const d = e.target.closest("[data-pdel]");
+        if (!d) return;
+        if (wrap.children.length > 1) d.closest(".ced-poc").remove();
+        else d.closest(".ced-poc").querySelectorAll("input").forEach((i) => { i.value = ""; });
       });
       return;
     }

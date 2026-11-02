@@ -7,6 +7,7 @@
 //  • ไลบรารี ExcelJS โหลดเมื่อกดปุ่มเท่านั้น (pin เวอร์ชัน + SRI)
 // =====================================================================
 import { orderMissions } from "./mission-sheet.js";
+import { pocLines } from "./missions.js";
 
 const EXCELJS_URL = new URL("../vendor/exceljs-4.4.0.min.js", import.meta.url).href;   // เก็บในระบบเอง (vendor/README.md)
 const EXCELJS_SRI = "sha384-Pqp51FUN2/qzfxZxBCtF0stpc9ONI6MYZpVqmo8m20SoaQCzf+arZvACkLkirlPz";
@@ -133,9 +134,8 @@ function fillCard(ws, [r0, c0], m) {
     const slots = [names[0], names[1], names.slice(2).join(", ")];
     [2, 4, 6].forEach((c, k) => { at(r, c).value = slots[k] || null; });
   });
-  // POC หลายคณะ: ในระบบคั่นด้วย "/" → ขึ้นบรรทัดใหม่ต่อคณะ · เกิน 2 บรรทัด → ย่อตัวอักษรให้พอ 2 แถว
-  const poc = [clean(m.poc_name), clean(m.poc_phone)].filter(Boolean).join("  ")
-    .split(/\s*\/\s*/).filter(Boolean);
+  // POC หลายคณะ → บรรทัดละคน (pocLines) · เกิน 2 บรรทัด → ย่อตัวอักษรให้พอ 2 แถว
+  const poc = pocLines(m).map(clean).filter(Boolean);
   const pc = at(17, 2);
   pc.value = poc.join("\n") || null;
   const doc = clean(m.doc_officer);

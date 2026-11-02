@@ -2,7 +2,7 @@
 //  mission-sheet.js — วาดการ์ดภารกิจแบบกระดานจัดบิน (ใช้ร่วม: หน้าหลัก + หน้าภารกิจรายวัน)
 //  คู่กับ css/sheet.css
 // =====================================================================
-import { KINDS, DEFAULT_KIND, kindStyle, PILOT_ROLES, OTHER_ROLES, acLabel, esc, reportOf, deleteMission } from "./missions.js";
+import { KINDS, DEFAULT_KIND, kindStyle, PILOT_ROLES, OTHER_ROLES, acLabel, esc, reportOf, deleteMission, pocLines } from "./missions.js";
 import { supabase } from "./supabase.js";
 
 // ---------- แถวลูกเรือ ----------
@@ -31,7 +31,7 @@ export function sheetHTML(m, { planner = false, edit = false } = {}) {
   const crew = m.mission_crew || [];
   const f = (col) => edit ? ` data-f="${col}"` : "";
   const ac = m.aircraft ? acLabel(m.aircraft) : "";
-  const poc = [m.poc_name, m.poc_phone].filter(Boolean).join("  ");
+  const poc = pocLines(m);                          // หลายคณะ → บรรทัดละคน
   const v = (x) => esc(x || "") || `<span class="muted-cell">-</span>`;
   // ยกเลิก (สถานะภารกิจจากผลในรายงาน) > รายงานแล้ว > ปกติ
   const state = m.status === "cancelled" ? "cancelled" : reportOf(m) ? "reported" : "";
@@ -72,7 +72,7 @@ export function sheetHTML(m, { planner = false, edit = false } = {}) {
       ${m.travel_director ? `<tr><td class="lb">ผอ.เดินทาง</td><td colspan="5" class="v"${f("travel_director")}>${esc(m.travel_director)}</td></tr>` : ""}
       ${[...PILOT_ROLES, ...OTHER_ROLES].map(r => crewRow(r, crew, edit)).join("")}
       ${edit ? `<tr class="ed-addrow"><td colspan="6" data-crew-new>+ เพิ่มลูกเรือ / ผอ.เดินทาง / น.เอกสาร</td></tr>` : ""}
-      <tr><td class="lb">POCคณะ</td><td colspan="5" class="v"${f("poc")}>${poc ? esc(poc).split(/\s*\/\s*/).filter(Boolean).join("<br>") : v("")}</td></tr>
+      <tr><td class="lb">POCคณะ</td><td colspan="5" class="v"${f("poc")}>${poc.length ? poc.map(esc).join("<br>") : v("")}</td></tr>
       ${m.doc_officer ? `<tr><td class="lb">น.เอกสาร</td><td colspan="5" class="v"${f("doc_officer")}>${esc(m.doc_officer)}</td></tr>` : ""}
       <tr><td class="lb" rowspan="2">หมายเหตุ</td><td colspan="3" rowspan="2" class="v"${f("remark")}>${m.remark ? esc(m.remark).split(/\s*\/\s*/).filter(Boolean).join("<br>") : v("")}</td>
           <td class="lb">ไป</td><td class="v c hot"${f("parking_out")}>${v(m.parking_out)}</td></tr>

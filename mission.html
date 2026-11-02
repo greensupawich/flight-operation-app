@@ -38,6 +38,8 @@
             cursor:pointer;font-family:inherit;font-weight:700}
   .btn-mini:hover{background:var(--crit-soft)}
   .btn-add{align-self:flex-start;margin-top:4px}
+  .poc-row input.ph{flex:none;width:150px;font-family:"IBM Plex Mono",monospace}
+  @media(max-width:560px){ .poc-row input.ph{width:118px} }
   .bar{position:sticky;bottom:0;background:var(--surface);border-top:1px solid var(--line);
        padding:14px 0;display:flex;gap:10px;margin-top:8px}
   .err{color:var(--crit);font-size:13px;align-self:center}
@@ -111,10 +113,8 @@
       <h3>👤 คณะและผู้ประสานงาน</h3>
       <label>หน.คณะฯ</label>
       <input id="f_head" placeholder="เช่น พล.อ.ท.นิทัศน์ ยูประพัฒน์">
-      <div class="row r2" style="margin-top:12px">
-        <div><label>ชื่อ POC</label><input id="f_pocName" placeholder="เช่น น.ท.ธิติ สุขยอย"></div>
-        <div><label>เบอร์ POC</label><input id="f_pocPhone" placeholder="09 3424 9399"></div>
-      </div>
+      <label style="margin-top:12px">POC คณะ <span style="font-weight:400;color:var(--faint);font-size:11.5px">(หลายภารกิจ / หลายคณะ → กด + เพิ่ม POC · แสดงบรรทัดละคน)</span></label>
+      <div class="crew-dyn" id="pocRows"></div>
       <label style="margin-top:12px">ผอ.เดินทาง</label>
       <input id="f_director" placeholder="ชื่อ ผอ.เดินทาง (ถ้ามี)">
       <label style="margin-top:12px">น.เอกสาร</label>
@@ -154,7 +154,7 @@
   import { requireAuth, canPlan } from "./js/auth.js";
   import { renderTopbar } from "./js/ui.js";
   import { getMission, saveMission, loadAircraft, loadCrewRoster, acLabel,
-           KINDS, DEFAULT_KIND, KIND_COLORS, QUALS, qualStyle, PILOT_ROLES, OTHER_ROLES, esc } from "./js/missions.js";
+           KINDS, DEFAULT_KIND, KIND_COLORS, QUALS, qualStyle, PILOT_ROLES, OTHER_ROLES, esc, parsePoc, pocFields } from "./js/missions.js";
 
   const profile = await requireAuth();
   if (profile) {
@@ -292,6 +292,30 @@
 
     const renderCrew = () => { renderPilots(); OTHER_ROLES.forEach(renderOther); };
 
+    // ---- POC คณะ: 1 แถว = ชื่อ + เบอร์ · เพิ่ม/ลบได้ (เก็บแบบ pocFields ใน missions.js) ----
+    let pocs = [];
+    function renderPoc() {
+      const el = document.getElementById("pocRows");
+      el.innerHTML = pocs.map((p, i) => `
+        <div class="crew-dyn-row poc-row">
+          <input data-pn="${i}" value="${esc(p.name)}" placeholder="ชื่อ POC เช่น น.ท.ธิติ สุขยอย">
+          <input class="ph" data-pp="${i}" value="${esc(p.phone)}" placeholder="เบอร์โทร" inputmode="tel">
+          <button type="button" class="btn-mini" data-del="${i}">\u2212</button>
+        </div>`).join("") +
+        `<button type="button" class="btn sm ghost btn-add" data-add>+ เพิ่ม POC</button>`;
+      el.querySelectorAll("[data-pn]").forEach(x => x.addEventListener("input", e => { pocs[+e.target.dataset.pn].name = e.target.value; }));
+      el.querySelectorAll("[data-pp]").forEach(x => x.addEventListener("input", e => { pocs[+e.target.dataset.pp].phone = e.target.value; }));
+      el.querySelectorAll("[data-del]").forEach(b => b.addEventListener("click", () => {
+        pocs.splice(+b.dataset.del, 1);
+        if (!pocs.length) pocs = [{ name: "", phone: "" }];
+        renderPoc();
+      }));
+      el.querySelector("[data-add]").addEventListener("click", () => {
+        pocs.push({ name: "", phone: "" }); renderPoc();
+        el.querySelector(`[data-pn="${pocs.length - 1}"]`).focus();
+      });
+    }
+
     // ---- โหลดข้อมูลเดิม (โหมดแก้ไข) ----
     const $ = (id) => document.getElementById(id);
     if (missionId) {
@@ -307,8 +331,8 @@
         $("f_fuel").value = m.fuel || ""; $("f_catering").value = m.catering || ""; $("f_pax").value = m.pax || "";
         $("f_route").value = m.route || "";
         $("f_parkOut").value = m.parking_out || ""; $("f_parkIn").value = m.parking_in || "";
-        $("f_head").value = m.head_delegation || ""; $("f_pocName").value = m.poc_name || "";
-        $("f_pocPhone").value = m.poc_phone || ""; $("f_remark").value = m.remark || "";
+        $("f_head").value = m.head_delegation || ""; pocs = parsePoc(m);
+        $("f_remark").value = m.remark || "";
         $("f_director").value = m.travel_director || "";
         $("f_docOfficer").value = m.doc_officer || "";
         $("back").href = `day.html?date=${m.mission_date}`;
@@ -328,8 +352,10 @@
     // ค่าเริ่มต้น: อย่างน้อยกลุ่มละ 1 แถวว่าง ให้พร้อมกรอก
     if (!pilots.length) pilots = [{ role: "IP", name: "", crew_member_id: null }];
     OTHER_ROLES.forEach(r => { if (!others[r].length) others[r] = [""]; });
+    if (!pocs.length) pocs = [{ name: "", phone: "" }];
     paintKind();
     renderCrew();
+    renderPoc();
 
     // ---- บันทึก ----
     document.getElementById("save").addEventListener("click", async () => {
@@ -351,7 +377,7 @@
         route: $("f_route").value.trim(),
         parking_out: $("f_parkOut").value.trim(), parking_in: $("f_parkIn").value.trim(),
         head_delegation: $("f_head").value.trim(),
-        poc_name: $("f_pocName").value.trim(), poc_phone: $("f_pocPhone").value.trim(),
+        ...pocFields(pocs),
         remark: $("f_remark").value.trim(),
         travel_director: $("f_director").value.trim() || null,      // migration_48
         doc_officer: $("f_docOfficer").value.trim() || null,         // migration_49
