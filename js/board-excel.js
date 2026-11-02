@@ -7,7 +7,7 @@
 //  • ไลบรารี ExcelJS โหลดเมื่อกดปุ่มเท่านั้น (pin เวอร์ชัน + SRI)
 // =====================================================================
 import { orderMissions } from "./mission-sheet.js";
-import { pocLines } from "./missions.js";
+import { pocLines, missionNameLines } from "./missions.js";
 
 const EXCELJS_URL = new URL("../vendor/exceljs-4.4.0.min.js", import.meta.url).href;   // เก็บในระบบเอง (vendor/README.md)
 const EXCELJS_SRI = "sha384-Pqp51FUN2/qzfxZxBCtF0stpc9ONI6MYZpVqmo8m20SoaQCzf+arZvACkLkirlPz";
@@ -113,7 +113,7 @@ function fillCard(ws, [r0, c0], m) {
   at(4, 4).value = clean(m.catering) || "-";
   at(4, 7).value = clean(m.pax) || "-";
   // "(1) … / (2) …" → ขึ้นบรรทัดใหม่ต่อภารกิจย่อย (เซลล์ภารกิจสูง 2 แถว ตัดบรรทัดอัตโนมัติ)
-  const name = clean(m.mission_name).replace(/\s*\/\s*(?=\(\d+\))/g, "\n");
+  const name = missionNameLines(m).join("\n");
   at(5, 2).value = (m.status === "cancelled" ? "(ยกเลิก) " : "") + name;
   at(7, 2).value = clean(m.route) || null;
   at(8, 2).value = clean(m.head_delegation) || null;

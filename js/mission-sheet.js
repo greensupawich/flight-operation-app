@@ -2,7 +2,7 @@
 //  mission-sheet.js — วาดการ์ดภารกิจแบบกระดานจัดบิน (ใช้ร่วม: หน้าหลัก + หน้าภารกิจรายวัน)
 //  คู่กับ css/sheet.css
 // =====================================================================
-import { KINDS, DEFAULT_KIND, kindStyle, PILOT_ROLES, OTHER_ROLES, acLabel, esc, reportOf, deleteMission, pocLines } from "./missions.js";
+import { KINDS, DEFAULT_KIND, kindStyle, PILOT_ROLES, OTHER_ROLES, acLabel, esc, reportOf, deleteMission, pocLines, missionNameLines } from "./missions.js";
 import { supabase } from "./supabase.js";
 
 // ---------- แถวลูกเรือ ----------
@@ -66,7 +66,7 @@ export function sheetHTML(m, { planner = false, edit = false } = {}) {
       <tr><td class="lb">ชพ.</td><td class="v c hot"${f("fuel")}>${v(m.fuel)}</td>
           <td class="lb">จัดรับรอง</td><td class="v c hot"${f("catering")}>${v(m.catering)}</td>
           <td class="lb">PAX.</td><td class="v c hot"${f("pax")}>${v(m.pax)}</td></tr>
-      <tr><td class="lb">ภารกิจ</td><td colspan="5" class="v c"${f("mission_name")}>${v(m.mission_name)}</td></tr>
+      <tr><td class="lb">ภารกิจ</td><td colspan="5" class="v c"${f("mission_name")}>${missionNameLines(m).map(esc).join("<br>") || v("")}</td></tr>
       <tr><td class="lb">เส้นทางบิน</td><td colspan="5" class="v c"${f("route")}>${v(m.route)}</td></tr>
       <tr><td class="lb">หน.คณะ</td><td colspan="5" class="v"${f("head_delegation")}>${v(m.head_delegation)}</td></tr>
       ${m.travel_director ? `<tr><td class="lb">ผอ.เดินทาง</td><td colspan="5" class="v"${f("travel_director")}>${esc(m.travel_director)}</td></tr>` : ""}

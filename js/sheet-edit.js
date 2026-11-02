@@ -7,7 +7,7 @@
 //  คู่กับ data-f / data-crew / data-crew-add / data-crew-new ใน mission-sheet.js (sheetHTML edit:true)
 // =====================================================================
 import { supabase } from "./supabase.js";
-import { PILOT_ROLES, OTHER_ROLES, QUALS, qualStyle, reportOf, esc, parsePoc, pocFields } from "./missions.js";
+import { PILOT_ROLES, OTHER_ROLES, QUALS, qualStyle, reportOf, esc, parsePoc, pocFields, parseMissionNames, missionNameField } from "./missions.js";
 import { attachCombo, comboHTML } from "./combobox.js";
 
 // คอลัมน์ที่แก้ได้ → ชื่อที่แสดง · NULLABLE = เก็บ null เมื่อว่าง (เหมือนฟอร์มภารกิจ)
@@ -162,6 +162,35 @@ export function wireSheetEdit(container, { getMission, roster = [], onSaved }) {
         if (!d) return;
         if (wrap.children.length > 1) d.closest(".ced-poc").remove();
         else d.closest(".ced-poc").querySelectorAll("input").forEach((i) => { i.value = ""; });
+      });
+      return;
+    }
+    if (col === "mission_name") {
+      // หลายภารกิจในเที่ยวบินเดียว → 1 แถว = 1 ภารกิจ · แสดง (1) (2) … (เก็บแบบ missionNameField ใน missions.js)
+      const rowHTML = (t = "") => `<div class="ced-poc ced-one">
+          <input data-mn placeholder="ชื่อภารกิจ" value="${esc(t)}">
+          <button type="button" class="btn-mini" data-mdel title="ลบภารกิจนี้">−</button></div>`;
+      const cur = parseMissionNames(m);
+      const box = popup(cell, "ภารกิจ", m, `
+        <div class="ced-pocs">${(cur.length ? cur : [""]).map(rowHTML).join("")}</div>
+        <button type="button" class="btn sm ghost" data-madd style="align-self:flex-start">+ เพิ่มภารกิจ</button>
+        <div class="ced-note">หลายภารกิจ → แสดงบรรทัดละภารกิจ (1) (2) … ตามลำดับ</div>`, {
+        onSave: () => {
+          const v = missionNameField([...box.querySelectorAll("[data-mn]")].map((i) => i.value));
+          if (!v) return { message: "ชื่อภารกิจเว้นว่างไม่ได้" };
+          return v === (m.mission_name || "") ? null : updateMission(m, { mission_name: v });
+        },
+      });
+      const wrap = box.querySelector(".ced-pocs");
+      box.querySelector("[data-madd]").addEventListener("click", () => {
+        wrap.insertAdjacentHTML("beforeend", rowHTML());
+        wrap.lastElementChild.querySelector("input").focus();
+      });
+      wrap.addEventListener("click", (e) => {
+        const d = e.target.closest("[data-mdel]");
+        if (!d) return;
+        if (wrap.children.length > 1) d.closest(".ced-poc").remove();
+        else d.closest(".ced-poc").querySelector("input").value = "";
       });
       return;
     }

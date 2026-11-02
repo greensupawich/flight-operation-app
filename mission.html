@@ -64,7 +64,8 @@
       </div>
       <div class="row r2" style="margin-top:12px">
         <div><label>ชนิดภารกิจ</label><select id="f_kind"></select></div>
-        <div><label>ชื่อภารกิจ</label><input id="f_name" placeholder="เช่น ส่ง จก.ยก.ทอ. และคณะ"></div>
+        <div><label>ชื่อภารกิจ <span style="font-weight:400;color:var(--faint);font-size:11.5px">(หลายภารกิจ → กด + เพิ่มภารกิจ)</span></label>
+          <div class="crew-dyn" id="nameRows"></div></div>
       </div>
       <p class="hint" style="margin:8px 0 0;line-height:1.6">
         <b>STBY</b> = เตรียมพร้อมทั่วไป (แสดงในช่อง STBY ใต้แผงสถานภาพเครื่อง) ·
@@ -154,7 +155,7 @@
   import { requireAuth, canPlan } from "./js/auth.js";
   import { renderTopbar } from "./js/ui.js";
   import { getMission, saveMission, loadAircraft, loadCrewRoster, acLabel,
-           KINDS, DEFAULT_KIND, KIND_COLORS, QUALS, qualStyle, PILOT_ROLES, OTHER_ROLES, esc, parsePoc, pocFields } from "./js/missions.js";
+           KINDS, DEFAULT_KIND, KIND_COLORS, QUALS, qualStyle, PILOT_ROLES, OTHER_ROLES, esc, parsePoc, pocFields, parseMissionNames, missionNameField } from "./js/missions.js";
 
   const profile = await requireAuth();
   if (profile) {
@@ -292,6 +293,25 @@
 
     const renderCrew = () => { renderPilots(); OTHER_ROLES.forEach(renderOther); };
 
+    // ---- ชื่อภารกิจ: หลายภารกิจในเที่ยวบินเดียว → 1 แถว = 1 ภารกิจ (เก็บแบบ missionNameField ใน missions.js) ----
+    let names = [""];
+    function renderNames() {
+      const el = document.getElementById("nameRows");
+      el.innerHTML = names.map((t, i) => `
+        <div class="crew-dyn-row">
+          ${names.length > 1 ? `<span style="font-family:'IBM Plex Mono',monospace;color:var(--muted);font-size:12px;min-width:22px">(${i + 1})</span>` : ""}
+          <input data-mn="${i}" value="${esc(t)}" placeholder="เช่น ส่ง จก.ยก.ทอ. และคณะ">
+          ${names.length > 1 ? `<button type="button" class="btn-mini" data-del="${i}">\u2212</button>` : ""}
+        </div>`).join("") +
+        `<button type="button" class="btn sm ghost btn-add" data-add>+ เพิ่มภารกิจ</button>`;
+      el.querySelectorAll("[data-mn]").forEach(x => x.addEventListener("input", e => { names[+e.target.dataset.mn] = e.target.value; }));
+      el.querySelectorAll("[data-del]").forEach(b => b.addEventListener("click", () => { names.splice(+b.dataset.del, 1); renderNames(); }));
+      el.querySelector("[data-add]").addEventListener("click", () => {
+        names.push(""); renderNames();
+        el.querySelector(`[data-mn="${names.length - 1}"]`).focus();
+      });
+    }
+
     // ---- POC คณะ: 1 แถว = ชื่อ + เบอร์ · เพิ่ม/ลบได้ (เก็บแบบ pocFields ใน missions.js) ----
     let pocs = [];
     function renderPoc() {
@@ -324,7 +344,7 @@
       if (m) {
         $("f_date").value = m.mission_date || ""; fillAircraft(m.aircraft_id);
         $("f_callsign").value = m.callsign || ""; $("f_kind").value = KINDS[m.kind] ? m.kind : DEFAULT_KIND;
-        $("f_name").value = m.mission_name || "";
+        names = parseMissionNames(m); if (!names.length) names = [""];
         $("f_showtime").value = m.showtime || ""; $("f_brief").value = m.brief_time || "";
         $("f_step").value = m.step_time || ""; $("f_taxi").value = m.taxi_time || "";
         $("f_to").value = m.takeoff_time || "";
@@ -356,17 +376,18 @@
     paintKind();
     renderCrew();
     renderPoc();
+    renderNames();
 
     // ---- บันทึก ----
     document.getElementById("save").addEventListener("click", async () => {
       const err = document.getElementById("err");
       err.textContent = "";
       if (!$("f_date").value) { err.textContent = "กรุณาเลือกวันที่"; return; }
-      if (!$("f_name").value.trim()) { err.textContent = "กรุณากรอกชื่อภารกิจ"; return; }
+      if (!missionNameField(names)) { err.textContent = "กรุณากรอกชื่อภารกิจ"; return; }
 
       const fields = {
         mission_date: $("f_date").value,
-        mission_name: $("f_name").value.trim(),
+        mission_name: missionNameField(names),
         aircraft_id: $("f_aircraft").value || null,
         callsign: $("f_callsign").value.trim(),
         kind: $("f_kind").value,

@@ -76,6 +76,7 @@ table.fm td.c{text-align:center}
 .ced .btn-mini:hover{background:var(--crit-soft)}
 .ced-pocs{display:flex;flex-direction:column;gap:5px}
 .ced-poc{display:grid;grid-template-columns:minmax(0,1fr) 128px auto;gap:5px;align-items:center}
+.ced-poc.ced-one{grid-template-columns:minmax(0,1fr) auto}
 @media(max-width:699px){ .ced-poc{grid-template-columns:minmax(0,1fr) 112px auto} }
 .ced-l{font-size:11.5px;color:var(--muted);font-weight:600;margin-top:3px}
 .ced-note{font-size:11.5px;color:var(--muted)}

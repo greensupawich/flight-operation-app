@@ -212,6 +212,24 @@ export async function loadCrewRoster() {
   return (data || []).map((c) => ({ ...c, aliases: aliases?.get(c.id) || [] }));
 }
 
+// ---------- ชื่อภารกิจ (หลายภารกิจในเที่ยวบินเดียว) ----------
+//  "/" อยู่ในชื่อปกติได้ (เช่น VTBD-xxx/xxx) → แยกเฉพาะรูปแบบมีเลข "(1) … / (2) …" (เหมือนข้อมูลจากกระดาน)
+export function parseMissionNames(m) {
+  const s = String(m?.mission_name || "").trim();
+  if (!s) return [];
+  if (!/^\(\d+\)/.test(s)) return [s];
+  return s.split(/\s*\/\s*(?=\(\d+\))/).map((x) => x.replace(/^\(\d+\)\s*/, "").trim()).filter(Boolean);
+}
+export function missionNameField(list) {
+  const l = (list || []).map((x) => String(x || "").trim()).filter(Boolean);
+  return l.length <= 1 ? (l[0] || "") : l.map((x, i) => `(${i + 1}) ${x}`).join(" / ");
+}
+// บรรทัดที่แสดงในช่องภารกิจ (การ์ด / Excel) · หลายภารกิจ → ขึ้นต้น (1) (2) …
+export const missionNameLines = (m) => {
+  const l = parseMissionNames(m);
+  return l.length > 1 ? l.map((x, i) => `(${i + 1}) ${x}`) : l;
+};
+
 // ---------- POC คณะ (หลายคณะ / หลายภารกิจ) ----------
 //  เก็บในคอลัมน์เดิม ไม่ต้อง migration:
 //   • 1 คน  → poc_name = ชื่อ, poc_phone = เบอร์
