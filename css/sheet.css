@@ -50,3 +50,38 @@ table.fm td.c{text-align:center}
                 box-shadow:0 12px 32px -10px rgba(0,0,0,.45);position:relative;z-index:5}
 .order-reset{margin-inline-start:8px;vertical-align:middle}
 @media print{ .drag-h,.order-reset{display:none!important} }
+
+/* ---------- แก้ทีละช่องบนการ์ด (หน้าหลัก · js/sheet-edit.js) ---------- */
+.sheet [data-f],.sheet [data-crew],.sheet [data-crew-add]{cursor:pointer}
+.sheet [data-f]:hover,.sheet .ed-c:hover{background:var(--primary-soft);box-shadow:inset 0 0 0 1px var(--primary)}
+.sheet .ed-on{background:var(--accent-soft)!important;box-shadow:inset 0 0 0 2px var(--accent)!important}
+.sheet .ed-c{display:inline-block;min-width:24px;min-height:16px;border-radius:2px}
+.crewgrid .ed-c{display:block}
+.ed-addrow td{cursor:pointer;text-align:center;color:var(--faint);font-size:10px!important;padding:2px!important;
+              border-style:dashed!important}
+.ed-addrow td:hover{color:var(--primary);background:var(--primary-soft)}
+.ced-bg{position:fixed;inset:0;z-index:60;background:transparent}
+.ced{position:absolute;z-index:61;background:var(--surface);border:1px solid var(--line-strong);border-radius:10px;
+     box-shadow:0 14px 40px -12px rgba(0,0,0,.45);padding:10px 12px;font-size:14px;color:var(--ink)}
+.ced.sheet-mode{position:fixed;inset-inline:0;bottom:0;top:auto;border-radius:14px 14px 0 0;
+                padding:14px 16px calc(14px + env(safe-area-inset-bottom))}
+.ced.sheet-mode .cb-list{top:auto;bottom:calc(100% + 4px);max-height:min(230px,40vh)}   /* แผ่นล่างจอ → รายชื่อเปิดขึ้นบน */
+.ced-h{display:flex;align-items:baseline;gap:8px;margin-bottom:8px;font-size:13px}
+.ced-k{font-family:"IBM Plex Mono",monospace;color:var(--muted);font-size:12px;margin-inline-start:auto;
+       overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:60%}
+.ced-b{display:flex;flex-direction:column;gap:5px}
+.ced-b input,.ced-b select{width:100%;font-size:14px}
+.ced-l{font-size:11.5px;color:var(--muted);font-weight:600;margin-top:3px}
+.ced-note{font-size:11.5px;color:var(--muted)}
+.ced-note.warn{color:var(--warn)}
+.ced-err{color:var(--crit);font-size:12.5px;margin-top:6px}
+.ced-f{display:flex;align-items:center;gap:6px;margin-top:10px}
+.ced-hint{margin-inline-end:auto;font-size:11px;color:var(--faint)}
+.ced-f [data-x] + .ced-hint{margin-inline-start:4px}
+.ced select.flash{animation:cedFlash 1.2s ease}
+@keyframes cedFlash{0%,40%{background:var(--accent-soft);border-color:var(--accent)}}
+@media(max-width:699px){ .ced-hint{display:none} .ced-f [data-c]{margin-inline-start:auto} }
+@media print{
+  .ed-addrow{display:none!important}
+  .sheet [data-f],.sheet .ed-c{background:none!important;box-shadow:none!important}
+}

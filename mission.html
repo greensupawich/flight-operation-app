@@ -154,7 +154,7 @@
   import { requireAuth, canPlan } from "./js/auth.js";
   import { renderTopbar } from "./js/ui.js";
   import { getMission, saveMission, loadAircraft, loadCrewRoster, acLabel,
-           KINDS, DEFAULT_KIND, KIND_COLORS, qualStyle, PILOT_ROLES, OTHER_ROLES, esc } from "./js/missions.js";
+           KINDS, DEFAULT_KIND, KIND_COLORS, QUALS, qualStyle, PILOT_ROLES, OTHER_ROLES, esc } from "./js/missions.js";
 
   const profile = await requireAuth();
   if (profile) {
@@ -253,15 +253,24 @@
     }));
 
     function wireCombo(row, i) {
+      let ready = false;                 // ข้ามรอบแรก (combobox เรียก onChange ตอนวาด)
       attachCombo(row.querySelector(".cb"), comboItems(), {
         value: pilots[i].name || "",
         id: pilots[i].crew_member_id,
         emptyHtml: `ไม่พบในทะเบียน — <a href="crew.html" target="_blank">เปิดทะเบียนนักบินเพื่อเพิ่ม</a>`,
         onChange: ({ text, item }) => {
+          const changed = ready && item && item.id !== pilots[i].crew_member_id;
           pilots[i].name = text;
           pilots[i].crew_member_id = item ? item.id : null;
+          // เลือกนักบิน → หน้าที่ปรับตามศักย์การบิน (IP/P/CP) · ตำแหน่งพิเศษ (AC/นบ.ราชฯ/ตห./N) ไม่เปลี่ยน
+          const q = changed && roster.find(p => p.id === item.id)?.position;
+          if (q && QUALS.includes(q) && QUALS.includes(pilots[i].role) && q !== pilots[i].role) {
+            pilots[i].role = q;
+            row.querySelector("select[data-i]").value = q;
+          }
         },
       });
+      ready = true;
     }
 
     function renderOther(role) {

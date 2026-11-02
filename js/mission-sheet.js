@@ -7,25 +7,29 @@ import { supabase } from "./supabase.js";
 
 // ---------- แถวลูกเรือ ----------
 // ตำแหน่งที่ไม่มีคน → ไม่แสดงแถวเลย
-function crewRow(role, crew) {
-  const names = crew.filter(c => (c.position||"").toUpperCase() === role)
-                    .sort((a,b)=>(a.sort_order||0)-(b.sort_order||0))
-                    .map(c => (c.crew_name || "").trim())
-                    .filter(Boolean);
-  if (!names.length) return "";
+//  edit = หน้าหลักโหมดแก้ทีละช่อง → ชื่อแต่ละคนมี data-crew (id แถว mission_crew) · ช่องว่างมี data-crew-add (ตำแหน่ง)
+function crewRow(role, crew, edit = false) {
+  const list = crew.filter(c => (c.position||"").toUpperCase() === role && (c.crew_name || "").trim())
+                   .sort((a,b)=>(a.sort_order||0)-(b.sort_order||0));
+  if (!list.length) return "";
+  const nm = (c) => edit ? `<span class="ed-c" data-crew="${c.id}">${esc(c.crew_name.trim())}</span>` : esc(c.crew_name.trim());
   // นบ.ราชฯ → 1 คน = 1 แถว (เหมือนกระดานจริง)
   if (role === "นบ.ราชฯ 1" || role === "นบ.ราชฯ 2")
-    return names.map(n => `<tr><td class="lb">${role}</td><td colspan="5" class="v">${esc(n)}</td></tr>`).join("");
+    return list.map(c => `<tr><td class="lb">${role}</td><td colspan="5" class="v">${nm(c)}</td></tr>`).join("");
   // AC มีคนเดียว → ใช้เต็มบรรทัด (ชื่อ + เบอร์ยาว ๆ ไม่ตัดขึ้นบรรทัดใหม่)
-  if (role === "AC") return `<tr><td class="lb">${role}</td><td colspan="5" class="v">${names.map(esc).join(" · ")}</td></tr>`;
-  const slots = Math.max(3, names.length);          // อย่างน้อย 3 ช่องให้ตรงกับกระดาน
-  const cells = Array.from({length: slots}, (_, i) => `<span>${esc(names[i] || "")}</span>`).join("");
+  if (role === "AC") return `<tr><td class="lb">${role}</td><td colspan="5" class="v">${list.map(nm).join(" · ")}</td></tr>`;
+  const slots = Math.max(3, list.length);          // อย่างน้อย 3 ช่องให้ตรงกับกระดาน
+  const cells = Array.from({length: slots}, (_, i) => list[i]
+    ? (edit ? `<span class="ed-c" data-crew="${list[i].id}">${esc(list[i].crew_name.trim())}</span>` : `<span>${esc(list[i].crew_name.trim())}</span>`)
+    : (edit ? `<span class="ed-c" data-crew-add="${role}"></span>` : `<span></span>`)).join("");
   return `<tr><td class="lb">${role}</td><td colspan="5" class="v">
             <div class="crewgrid">${cells}</div></td></tr>`;
 }
 
-export function sheetHTML(m, { planner = false } = {}) {
+//  edit = true (หน้าหลัก · ผู้วางแผน) → คลิกช่องเพื่อแก้ได้ (js/sheet-edit.js) · data-f = ชื่อคอลัมน์ใน missions
+export function sheetHTML(m, { planner = false, edit = false } = {}) {
   const crew = m.mission_crew || [];
+  const f = (col) => edit ? ` data-f="${col}"` : "";
   const ac = m.aircraft ? acLabel(m.aircraft) : "";
   const poc = [m.poc_name, m.poc_phone].filter(Boolean).join("  ");
   const v = (x) => esc(x || "") || `<span class="muted-cell">-</span>`;
@@ -53,25 +57,26 @@ export function sheetHTML(m, { planner = false } = {}) {
       <colgroup><col style="width:17%"><col style="width:16%"><col style="width:17%">
                 <col style="width:16%"><col style="width:17%"><col style="width:17%"></colgroup>
       <tr><td class="lb">A/C No.</td><td colspan="2" class="v c mono">${v(ac)}</td>
-          <td class="lb">Callsign</td><td colspan="2" class="v c mono">${v(m.callsign)}</td></tr>
-      <tr><td class="lb">SHOWTIME</td><td colspan="2" class="v c mono">${v(m.showtime)}</td>
-          <td class="lb">BRIEF</td><td colspan="2" class="v c mono">${v(m.brief_time)}</td></tr>
-      <tr><td class="lb">STEP</td><td class="v c mono">${v(m.step_time)}</td>
-          <td class="lb">TAXI</td><td class="v c mono">${v(m.taxi_time)}</td>
-          <td class="lb">T/O</td><td class="v c mono">${v(m.takeoff_time)}</td></tr>
-      <tr><td class="lb">ชพ.</td><td class="v c hot">${v(m.fuel)}</td>
-          <td class="lb">จัดรับรอง</td><td class="v c hot">${v(m.catering)}</td>
-          <td class="lb">PAX.</td><td class="v c hot">${v(m.pax)}</td></tr>
-      <tr><td class="lb">ภารกิจ</td><td colspan="5" class="v c">${v(m.mission_name)}</td></tr>
-      <tr><td class="lb">เส้นทางบิน</td><td colspan="5" class="v c">${v(m.route)}</td></tr>
-      <tr><td class="lb">หน.คณะ</td><td colspan="5" class="v">${v(m.head_delegation)}</td></tr>
-      ${m.travel_director ? `<tr><td class="lb">ผอ.เดินทาง</td><td colspan="5" class="v">${esc(m.travel_director)}</td></tr>` : ""}
-      ${[...PILOT_ROLES, ...OTHER_ROLES].map(r => crewRow(r, crew)).join("")}
-      <tr><td class="lb">POCคณะ</td><td colspan="5" class="v">${poc ? esc(poc).split(/\s*\/\s*/).filter(Boolean).join("<br>") : v("")}</td></tr>
-      ${m.doc_officer ? `<tr><td class="lb">น.เอกสาร</td><td colspan="5" class="v">${esc(m.doc_officer)}</td></tr>` : ""}
-      <tr><td class="lb" rowspan="2">หมายเหตุ</td><td colspan="3" rowspan="2" class="v">${m.remark ? esc(m.remark).split(/\s*\/\s*/).filter(Boolean).join("<br>") : v("")}</td>
-          <td class="lb">ไป</td><td class="v c hot">${v(m.parking_out)}</td></tr>
-      <tr><td class="lb">กลับ</td><td class="v c hot">${v(m.parking_in)}</td></tr>
+          <td class="lb">Callsign</td><td colspan="2" class="v c mono"${f("callsign")}>${v(m.callsign)}</td></tr>
+      <tr><td class="lb">SHOWTIME</td><td colspan="2" class="v c mono"${f("showtime")}>${v(m.showtime)}</td>
+          <td class="lb">BRIEF</td><td colspan="2" class="v c mono"${f("brief_time")}>${v(m.brief_time)}</td></tr>
+      <tr><td class="lb">STEP</td><td class="v c mono"${f("step_time")}>${v(m.step_time)}</td>
+          <td class="lb">TAXI</td><td class="v c mono"${f("taxi_time")}>${v(m.taxi_time)}</td>
+          <td class="lb">T/O</td><td class="v c mono"${f("takeoff_time")}>${v(m.takeoff_time)}</td></tr>
+      <tr><td class="lb">ชพ.</td><td class="v c hot"${f("fuel")}>${v(m.fuel)}</td>
+          <td class="lb">จัดรับรอง</td><td class="v c hot"${f("catering")}>${v(m.catering)}</td>
+          <td class="lb">PAX.</td><td class="v c hot"${f("pax")}>${v(m.pax)}</td></tr>
+      <tr><td class="lb">ภารกิจ</td><td colspan="5" class="v c"${f("mission_name")}>${v(m.mission_name)}</td></tr>
+      <tr><td class="lb">เส้นทางบิน</td><td colspan="5" class="v c"${f("route")}>${v(m.route)}</td></tr>
+      <tr><td class="lb">หน.คณะ</td><td colspan="5" class="v"${f("head_delegation")}>${v(m.head_delegation)}</td></tr>
+      ${m.travel_director ? `<tr><td class="lb">ผอ.เดินทาง</td><td colspan="5" class="v"${f("travel_director")}>${esc(m.travel_director)}</td></tr>` : ""}
+      ${[...PILOT_ROLES, ...OTHER_ROLES].map(r => crewRow(r, crew, edit)).join("")}
+      ${edit ? `<tr class="ed-addrow"><td colspan="6" data-crew-new>+ เพิ่มลูกเรือ / ผอ.เดินทาง / น.เอกสาร</td></tr>` : ""}
+      <tr><td class="lb">POCคณะ</td><td colspan="5" class="v"${f("poc")}>${poc ? esc(poc).split(/\s*\/\s*/).filter(Boolean).join("<br>") : v("")}</td></tr>
+      ${m.doc_officer ? `<tr><td class="lb">น.เอกสาร</td><td colspan="5" class="v"${f("doc_officer")}>${esc(m.doc_officer)}</td></tr>` : ""}
+      <tr><td class="lb" rowspan="2">หมายเหตุ</td><td colspan="3" rowspan="2" class="v"${f("remark")}>${m.remark ? esc(m.remark).split(/\s*\/\s*/).filter(Boolean).join("<br>") : v("")}</td>
+          <td class="lb">ไป</td><td class="v c hot"${f("parking_out")}>${v(m.parking_out)}</td></tr>
+      <tr><td class="lb">กลับ</td><td class="v c hot"${f("parking_in")}>${v(m.parking_in)}</td></tr>
     </table>
     </div>
   </div>`;
