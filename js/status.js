@@ -20,7 +20,7 @@ export async function loadAircraft() {
   const { data, error } = await supabase
     .from("aircraft")
     .select("id,tail_number,type,status,status_note,status_updated_at,total_hours")
-    .order("tail_number");
+    .order("type").order("tail_number");      // -500 ก่อน -600 เหมือนกระดาน: 313 315 316 301 302 303
   if (error) { console.error(error); return []; }
   return data || [];
 }
