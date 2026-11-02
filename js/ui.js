@@ -10,6 +10,7 @@ const escHtml = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;"
 const LINKS = [
   { href: "home.html",      label: "หน้าหลัก" },
   { href: "dashboard.html", label: "ภารกิจ" },
+  { href: "daily-report.html", label: "รายงานประจำวัน" },
   { href: "queue.html",     label: "คิวบิน" },
   { href: "crew.html",      label: "ทะเบียนนักบิน" },
   { href: "pilot-month.html", label: "พ." },
