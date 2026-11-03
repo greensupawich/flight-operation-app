@@ -104,7 +104,10 @@
     <div class="fyt" id="fyt"></div>
     <div class="chart" id="chart"><div class="chart-empty">กำลังโหลด…</div></div>
 
-    <h3 class="sec">ชั่วโมงบินแยกประเภทภารกิจ — รายวัน / รวมเดือน</h3>
+    <div class="stat-head" style="margin:26px 0 8px">
+      <h3 class="sec" style="margin:0">ชั่วโมงบินแยกประเภทภารกิจ — รายวัน / รวมเดือน</h3>
+      <button class="btn sm" id="mtExport" title="ดาวน์โหลดตารางนี้ของเดือนที่เลือกเป็นไฟล์ Excel">⬇ Export Excel</button>
+    </div>
     <div class="tablewrap"><div id="mtable"><div class="empty">กำลังโหลด…</div></div></div>
     <div class="legend" id="legend"></div>
 
@@ -218,6 +221,7 @@
   const TH_MON=["ม.ค.","ก.พ.","มี.ค.","เม.ย.","พ.ค.","มิ.ย.","ก.ค.","ส.ค.","ก.ย.","ต.ค.","พ.ย.","ธ.ค."];
   const r1=(v)=>Math.round(v*10)/10;
 
+  let lastMonth=null;                               // ข้อมูลตารางแยกประเภทที่แสดงอยู่ — ใช้ตอน Export Excel
   function renderMonth(ym){
     const [y,m]=ym.split("-").map(Number);
     const nd=daysIn(y,m);
@@ -282,6 +286,7 @@
       `<td class="tot">${Math.round(monthTotal*10)/10}</td></tr>`;
 
     box.innerHTML=`<table class="mt"><thead>${head}</thead><tbody>${body}${sumF}${sumH}</tbody></table>`;
+    lastMonth={ y, m, nd, kindsShown, perKindF, perKindH, perDayF, perDay, monthTotal, tableFlights };
 
     document.getElementById("legend").innerHTML=kindsShown.map(k=>{
       const c=KIND_COLORS[k]||KIND_COLORS[DEFAULT_KIND];
@@ -403,6 +408,87 @@
     chart.innerHTML=fySvg(Math.max(640,(chart.clientWidth||900)-24),230);
     chart.querySelector("svg").style.width=chart.querySelector("svg").getAttribute("width")+"px";
   }
+
+  // ---------- Export ตารางแยกประเภทภารกิจ (เดือนที่เลือก) → Excel ----------
+  //  หน้าตาเดียวกับบนเว็บ: ประเภทละ 2 แถว (เที่ยว / ชม.) · สีประเภท · เสาร์-อาทิตย์หัวเทา · แถวรวม/วัน + คอลัมน์รวมเดือน
+  const TH_MONTH_FULL=["มกราคม","กุมภาพันธ์","มีนาคม","เมษายน","พฤษภาคม","มิถุนายน","กรกฎาคม","สิงหาคม","กันยายน","ตุลาคม","พฤศจิกายน","ธันวาคม"];
+  async function exportMonthTable(btn){
+    if(!lastMonth) return;
+    const { y, m, nd, kindsShown, perKindF, perKindH, perDayF, perDay, monthTotal, tableFlights } = lastMonth;
+    btn.disabled=true; const t0=btn.textContent; btn.textContent="กำลังสร้าง…";
+    try{
+      const ExcelJS=await loadExcelJS();
+      const wb=new ExcelJS.Workbook();
+      const title=`${TH_MON[m-1]}${String(y+543).slice(-2)}`;
+      const ws=wb.addWorksheet(title,{ views:[{ state:"frozen", xSplit:2, ySplit:3, showGridLines:false }],
+        pageSetup:{ paperSize:9, orientation:"landscape", fitToPage:true, fitToWidth:1, fitToHeight:0,
+                    margins:{ left:0.3, right:0.3, top:0.4, bottom:0.4, header:0.2, footer:0.2 } } });
+      const argb=(hex)=>"FF"+hex.replace("#","").toUpperCase();
+      const font=(o={})=>({ name:"Tahoma", size:10, ...o });
+      const thin={ style:"thin", color:{ argb:"FFB8C2CF" } }, thick={ style:"medium", color:{ argb:"FF5D6B7E" } };
+      const last=3+nd;                                 // คอลัมน์ "รวมเดือน"
+      ws.getColumn(1).width=20; ws.getColumn(2).width=6;
+      for(let c=3;c<=2+nd;c++) ws.getColumn(c).width=5.2;
+      ws.getColumn(last).width=10;
+
+      ws.mergeCells(1,1,1,last);
+      ws.getCell(1,1).value=`ชั่วโมงบินแยกประเภทภารกิจ — รายวัน / รวมเดือน · ${TH_MONTH_FULL[m-1]} ${y+543} · ฝูง.603 บน.6`;
+      ws.getCell(1,1).font=font({ size:14, bold:true });
+      ws.mergeCells(2,1,2,last);
+      ws.getCell(2,1).value=`รวม ${r1(monthTotal)} ชม. · ${tableFlights} เที่ยว (นับส่วนที่แตกจากภารกิจวัง/เดโชชัยด้วย) · ข้อมูล ณ ${new Date().toLocaleString("th-TH")}`;
+      ws.getCell(2,1).font=font({ size:9, color:{ argb:"FF5D6B7E" } });
+
+      // ใส่ค่าทีละเซลล์ (row.values ที่ช่องแรกว่างจะถูกตีความเป็น sparse array → เลื่อนคอลัมน์)
+      const put=(row,arr)=>arr.forEach((v,i)=>{ ws.getCell(row,i+1).value=v; });
+      const each=(row,fn)=>{ for(let c=1;c<=last;c++) fn(ws.getCell(row,c),c); };
+      put(3,["ประเภทภารกิจ","",...Array.from({length:nd},(_,i)=>i+1),"รวมเดือน"]);
+      const hr=ws.getRow(3);
+      each(3,(cell,c)=>{
+        const dow=c>=3&&c<=2+nd ? new Date(y,m-1,c-2).getDay() : -1;
+        cell.font=font({ bold:true, size:9, color:{ argb:(dow===0||dow===6)?"FF9AA4B2":"FF16202E" } });
+        cell.fill={ type:"pattern", pattern:"solid", fgColor:{ argb:"FFEEF1F5" } };
+        cell.alignment={ horizontal:c===1?"left":"center", vertical:"middle" };
+        cell.border={ top:thin, left:thin, right:thin, bottom:thick };
+      });
+      hr.height=18;
+
+      let r=4;
+      const addPair=(label, fArr, hArr, fTot, hTot, style)=>{
+        put(r,[label,"เที่ยว",...Array.from({length:nd},(_,i)=>fArr[i+1]>0?fArr[i+1]:null),fTot]);
+        put(r+1,[null,"ชม.",...Array.from({length:nd},(_,i)=>hArr[i+1]>0?r1(hArr[i+1]):null),r1(hTot)]);
+        ws.mergeCells(r,1,r+1,1);
+        [r,r+1].forEach((row,k)=>each(row,(cell,c)=>{
+          const sum=style.sum||c===last;
+          cell.font=font({ size:c===1?10:9, bold:sum||c===1, color:{ argb:c===2?"FF5D6B7E":"FF16202E" } });
+          cell.alignment={ horizontal:c===1?"left":"center", vertical:"middle", wrapText:c===1 };
+          cell.border={ top:k===0?thick:thin, left:thin, right:thin, bottom:thin };
+          if(k===1&&c>=3) cell.numFmt="0.0";
+          if(c===1&&style.bg) { cell.fill={ type:"pattern", pattern:"solid", fgColor:{ argb:argb(style.bg) } };
+                                cell.font=font({ bold:true, color:{ argb:argb(style.fg) } }); }
+          else if(sum) cell.fill={ type:"pattern", pattern:"solid", fgColor:{ argb:"FFEEF1F5" } };
+          else if(style.tint&&cell.value!=null&&c>=3) cell.fill={ type:"pattern", pattern:"solid", fgColor:{ argb:argb(style.tint) } };
+        }));
+        r+=2;
+      };
+      // สีอ่อน (20% ของสีประเภท ผสมขาว) เหมือนบนเว็บ
+      const tint=(hex)=>{ const n=parseInt(hex.slice(1),16), mix=(v)=>Math.round(v*0.2+255*0.8);
+        return "#"+[n>>16,(n>>8)&255,n&255].map(v=>mix(v).toString(16).padStart(2,"0")).join(""); };
+      const zeros=Array(nd+1).fill(0);
+      for(const k of kindsShown){
+        const c=KIND_COLORS[k]||KIND_COLORS[DEFAULT_KIND];
+        const fArr=perKindF.get(k)||zeros, hArr=perKindH.get(k)||zeros;
+        addPair(KINDS[k], fArr, hArr, fArr.reduce((a,b)=>a+b,0), hArr.reduce((a,b)=>a+b,0), { bg:c.bg, fg:c.fg, tint:tint(c.bg) });
+      }
+      addPair("รวม/วัน", perDayF, perDay, tableFlights, monthTotal, { sum:true });
+
+      const buf=await wb.xlsx.writeBuffer();
+      const url=URL.createObjectURL(new Blob([buf],{type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"}));
+      const a=document.createElement("a"); a.href=url; a.download=`ชั่วโมงบินแยกประเภทภารกิจ ${title}.xlsx`;
+      document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(url),30000);
+    }catch(e){ alert("Export ไม่สำเร็จ: "+(e.message||e)); }
+    finally{ btn.disabled=false; btn.textContent=t0; }
+  }
+  document.getElementById("mtExport").addEventListener("click",(e)=>exportMonthTable(e.currentTarget));
 
   // ---------- Export กราฟ → Excel (ไฟล์มีแค่กราฟนี้ เป็นภาพคมชัด) ----------
   const EXPORT_CSS=`text{font-family:Tahoma,"Leelawadee UI","Thonburi",sans-serif}
