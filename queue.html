@@ -90,6 +90,9 @@
   .qpanel{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:12px 16px;margin-bottom:12px;
           box-shadow:var(--shadow)}
   .qpanel h3{font-family:"Bai Jamjuree",sans-serif;font-weight:600;font-size:15px;margin:0 0 2px}
+  .hol-h{display:flex;align-items:center;flex-wrap:wrap;gap:6px 10px}
+  .hol-nav{display:inline-flex;align-items:center;gap:6px;margin-inline-start:auto;font-family:"IBM Plex Sans Thai",sans-serif;font-size:12.5px;font-weight:400}
+  .qpanel.loading{opacity:.55;pointer-events:none}
   .qpanel .rule{font-size:12px;color:var(--faint);margin:0 0 10px}
   .qcols{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
   .qcols.with-ref{grid-template-columns:repeat(4,minmax(0,1fr))}
@@ -243,6 +246,7 @@
     let tq = null, qMaps = null;      // ข้อมูลเดือนของวันที่จัดคิว (เมื่อเปิดดูเดือนอื่น) · maps ที่ใช้คิดคิว
     let prevRef = null, ranksPrev = null, needRef = new Set();   // คิวอ้างอิงที่นับต่อจากเดือนก่อน · needRef = กลุ่มที่ยังมีคนบิน 0 เที่ยว
     let holTarget = null, holData = null, holRanks = null;      // คิววันหยุด
+    let holDays = [], holIdx = 0;     // วันหยุดข้างหน้า (60 วัน) · holIdx = วันที่เลือกดู (0 = วันหยุดถัดไป) — เลื่อนดูคนไม่ว่างวันถัด ๆ ไปได้
 
     const table = document.getElementById("q");
     if (planner) {
@@ -310,8 +314,15 @@
                     holidays: new Set(prevHol.map(h => h.holiday_date)),
                     dates: Array.from({ length: pr.days }, (_, i) => `${pd.getFullYear()}-${pad(pd.getMonth() + 1)}-${pad(i + 1)}`) };
       }
-      // คิววันหยุด: วันหยุดถัดไป (ตั้งแต่พรุ่งนี้) · นับจากประวัติทั้งหมดในระบบ
-      holTarget = nextWorkingDay(todayStr, d => !(isWeekend(d) || aheadHol.has(d)));
+      // คิววันหยุด: วันหยุดถัดไป (ตั้งแต่พรุ่งนี้) หรือวันหยุดที่เลื่อนไปดู · นับจากประวัติทั้งหมดในระบบ
+      holDays = Array.from({ length: 60 }, (_, i) => addDays(todayStr, i + 1)).filter(d => isWeekend(d) || aheadHol.has(d));
+      await loadHoliday();
+      render();
+    }
+    // โหลดข้อมูลคิววันหยุดของ holDays[holIdx] · ประวัติถึงวันนั้น (เที่ยววันหยุดที่จัดไว้ก่อนหน้านับรวมด้วย) · คนไม่ว่างวันนั้น
+    async function loadHoliday() {
+      holIdx = Math.max(0, Math.min(holIdx, holDays.length - 1));
+      holTarget = holDays[holIdx] || nextWorkingDay(todayStr, d => !(isWeekend(d) || aheadHol.has(d)));
       const [allHist, allHol, holOff, holBase, holCount] = await Promise.all([
         loadHistory(HOLIDAY_QUEUE_START, holTarget), loadHolidaysBetween(HOLIDAY_QUEUE_START, holTarget), loadUnavailableOn(holTarget),
         loadDuty("holiday"),                         // ข้อมูลตั้งต้นจากไฟล์ "นจบ." ชีตวันหยุด (migration_34)
@@ -319,7 +330,15 @@
       ]);
       holData = { hist: allHist, holidays: new Set([...allHol.map(h => h.holiday_date), ...aheadHol]),
                   off: new Map(holOff.map(u => [u.crew_member_id, u.note || ""])), base: holBase.days, count: holCount.base };
-      render();
+    }
+    async function shiftHoliday(step) {
+      const want = step === 0 ? 0 : holIdx + step;
+      if (want < 0 || want >= holDays.length || want === holIdx) return;
+      holIdx = want;
+      document.getElementById("hpanel").classList.add("loading");
+      await loadHoliday();
+      holRanks = computeHolidayRanks();
+      renderHolidayPanel();
     }
 
     // ---------- สิ่งที่แสดงในแต่ละช่อง ----------
@@ -628,7 +647,14 @@
           }).join("") || `<li class="muted">ไม่มีผู้ที่นับคิวได้</li>`}</ol></div>`;
       };
       const holName = holData.holidays.has(holTarget) ? (data.holidays.find(h => h.holiday_date === holTarget)?.name || "") : "";
-      box.innerHTML = `<h3>คิววันหยุด · ${thaiLong(holTarget)}${holName ? ` <span class="muted" style="font-weight:400">(${esc(holName)})</span>` : ""}</h3>
+      box.classList.remove("loading");
+      box.innerHTML = `<h3 class="hol-h">คิววันหยุด · ${thaiLong(holTarget)}${holName ? ` <span class="muted" style="font-weight:400">(${esc(holName)})</span>` : ""}
+          <span class="hol-nav">
+            <button type="button" class="btn sm ghost" data-hol="-1" ${holIdx <= 0 ? "disabled" : ""} title="วันหยุดก่อนหน้า">‹</button>
+            <span class="muted">${holIdx ? `วันหยุดที่ ${holIdx + 1} ข้างหน้า` : "วันหยุดถัดไป"}</span>
+            <button type="button" class="btn sm ghost" data-hol="1" ${holIdx >= holDays.length - 1 ? "disabled" : ""} title="วันหยุดถัดไป">›</button>
+            ${holIdx ? `<button type="button" class="btn sm ghost" data-hol="0">กลับวันหยุดถัดไป</button>` : ""}
+          </span></h3>
         <p class="rule">${holData.count
           ? `เรียงตามจำนวนครั้งที่บินวันหยุด — น้อยสุดอยู่คิวแรก · เท่ากัน → ชื่ออยู่บนก่อน (ไม่ใช้วันล่าสุด) · เฉพาะที่ติ๊ก ·
              แทคเลขหลังชื่อ = จำนวนครั้ง เทียบกับคนที่บินน้อยสุดในกลุ่ม (น้อยสุด = 0) · จำนวนครั้งตามตารางคิววันหยุด + เที่ยวจริงในวันหยุด/เสาร์-อาทิตย์หลังจากนั้น
@@ -636,6 +662,7 @@
           : `เรียงตามวันหยุดล่าสุดที่บิน — บินมานานที่สุดอยู่คิวแรก · บินล่าสุดอยู่คิวสุดท้าย · ไม่เคยบินวันหยุด = อยู่หน้าสุด (เฉพาะที่ติ๊ก) ·
              วันล่าสุดคิดจากข้อมูลไฟล์ "นจบ." (ชีตวันหยุด) รวมกับเที่ยวจริงในวันหยุด/เสาร์-อาทิตย์ในระบบตั้งแต่ ${thaiShort(HOLIDAY_QUEUE_START)} ${Number(HOLIDAY_QUEUE_START.slice(0, 4)) + 543} (ไม่นับ ST)`}</p>
         <div class="qcols">${col("IPP", "IP / P")}${col("CP", "CP")}</div>`;
+      box.querySelectorAll("[data-hol]").forEach(b => b.addEventListener("click", () => shiftHoliday(Number(b.dataset.hol))));
     }
 
     // ---------- เลือกช่อง ----------
