@@ -111,11 +111,22 @@
     <div class="tablewrap"><div id="mtable"><div class="empty">กำลังโหลด…</div></div></div>
     <div class="legend" id="legend"></div>
 
-    <h3 class="sec">ชั่วโมงบินสะสม — รายเครื่อง</h3>
-    <div class="tablewrap">
-      <table><thead><tr><th>ทะเบียน</th><th>แบบ</th><th style="text-align:end">ชม.รวม</th></tr></thead>
-      <tbody id="ac"><tr><td colspan="3" class="empty">กำลังโหลด…</td></tr></tbody></table>
+    <div class="stat-head" style="margin:26px 0 8px">
+      <h3 class="sec" style="margin:0">ชั่วโมงบิน — รายเครื่อง</h3>
+      <div class="ds-range">
+        <label for="acFrom" style="margin:0">ตั้งแต่</label><input type="date" id="acFrom">
+        <label for="acTo" style="margin:0">ถึง</label><input type="date" id="acTo">
+        <button class="btn sm ghost" id="acMonth" title="ใช้เดือนที่เลือกด้านบน">เดือนที่เลือก</button>
+        <button class="btn sm ghost" id="acFy" title="1 ต.ค. – วันนี้">ปีงบนี้</button>
+        <button class="btn sm ghost" id="acAll" title="ทุกวันที่มีข้อมูล">ทั้งหมด</button>
+      </div>
     </div>
+    <div class="tablewrap">
+      <table><thead><tr><th>ทะเบียน</th><th>แบบ</th><th style="text-align:end">เที่ยว</th><th style="text-align:end">ชม.บิน (ช่วงที่เลือก)</th>
+        <th style="text-align:end" title="ชม.สะสมของเครื่องทั้งหมด (รวมยอดยกมา) — ไม่ขึ้นกับช่วงวันที่">ชม.สะสมทั้งหมด</th></tr></thead>
+      <tbody id="ac"><tr><td colspan="5" class="empty">กำลังโหลด…</td></tr></tbody></table>
+    </div>
+    <div class="legend" id="acNote"></div>
 
     <div class="stat-head" style="margin:26px 0 8px">
       <h3 class="sec" style="margin:0">ข้อขัดข้อง — รายเครื่อง</h3>
@@ -537,11 +548,57 @@
   mon.addEventListener("change",()=>renderMonth(mon.value||mon.max));
   renderMonth(mon.value);
 
-  // ---------- ตารางสะสม (ไม่ขึ้นกับเดือน) ----------
-  const { data: ac } = await supabase.from("aircraft").select("*").order("total_hours",{ascending:false});
-  document.getElementById("ac").innerHTML = (ac&&ac.length)
-    ? ac.map(a=>`<tr><td class="mono">${esc(a.tail_number)}</td><td>${esc(a.type||"-")}</td><td class="num">${a.total_hours}</td></tr>`).join("")
-    : `<tr><td colspan="3" class="empty">ยังไม่มีข้อมูล</td></tr>`;
+  // ---------- ชั่วโมงบินรายเครื่อง — เลือกช่วงวันที่ (ผู้ใช้ขอ 3 พ.ย. 69) ----------
+  //  เที่ยว = รายงานหลังบิน 1 ฉบับ (ไม่นับภารกิจยกเลิก) · ชม. = total_hours · วันที่ = วันของภารกิจ
+  //  เดือนที่เคลียร์ข้อมูลดิบแล้ว → ใช้ stats_aircraft_monthly (นับทั้งเดือน ถ้าเดือนนั้นอยู่ในช่วง)
+  //  ชม.สะสมทั้งหมด = aircraft.total_hours (ยอดยกมา + ทุกรายงาน) ไม่ขึ้นกับช่วง
+  const [{ data: ac }, { data: acReps, error: acErr }, { data: acMon }] = await Promise.all([
+    supabase.from("aircraft").select("id,tail_number,type,total_hours").order("type").order("tail_number"),
+    supabase.from("post_flight_reports").select("total_hours, result, missions(mission_date, aircraft_id, status)"),
+    supabase.from("stats_aircraft_monthly").select("ym,aircraft_id,flights,hours"),
+  ]);
+  if (acErr) console.warn("aircraft reports:", acErr.message);
+  const acRaw=(acReps||[]).filter(r=>r.missions?.mission_date && r.missions.aircraft_id)
+    .map(r=>({ date:String(r.missions.mission_date).slice(0,10), id:r.missions.aircraft_id, h:fx(r.total_hours),
+               f:(r.missions.status==="cancelled"||r.result==="CANCELLED") ? 0 : 1 }));
+  const acRawMonths=new Set(acRaw.map(r=>r.date.slice(0,7)));
+  const acArch=(acMon||[]).map(x=>({ ym:String(x.ym).slice(0,7), id:x.aircraft_id, h:fx(x.hours), f:Number(x.flights)||0 }))
+    .filter(x=>!acRawMonths.has(x.ym));
+  const acFrom=document.getElementById("acFrom"), acTo=document.getElementById("acTo");
+  const acFyStart=()=>{ const t=new Date(), y=t.getMonth()>=9 ? t.getFullYear() : t.getFullYear()-1; return `${y}-10-01`; };
+  acFrom.value=acFyStart(); acTo.value=ymd(new Date());
+  function renderAc(){
+    let a=acFrom.value, b=acTo.value;
+    if (a && b && a>b) { [a,b]=[b,a]; acFrom.value=a; acTo.value=b; }
+    const per=new Map((ac||[]).map(x=>[x.id,{ f:0, h:0 }]));
+    const add=(id,f,h)=>{ if(!per.has(id)) per.set(id,{ f:0, h:0 }); const p=per.get(id); p.f+=f; p.h+=h; };
+    for (const r of acRaw) if ((!a||r.date>=a)&&(!b||r.date<=b)) add(r.id,r.f,r.h);
+    let archUsed=false;
+    for (const x of acArch) if ((!a||x.ym>=a.slice(0,7))&&(!b||x.ym<=b.slice(0,7))) { add(x.id,x.f,x.h); archUsed=true; }
+    let tf=0, th=0;
+    const rowsHTML=(ac||[]).map(x=>{ const p=per.get(x.id); tf+=p.f; th+=p.h;
+      return `<tr><td class="mono">${esc(x.tail_number)}</td><td>${esc(x.type||"-")}</td>
+        <td class="num">${p.f||"·"}</td><td class="num">${p.h?r1(p.h).toFixed(1):"·"}</td>
+        <td class="num muted">${Number(x.total_hours||0).toFixed(1)}</td></tr>`; }).join("");
+    document.getElementById("ac").innerHTML = (ac&&ac.length)
+      ? rowsHTML + `<tr style="font-weight:700;background:var(--surface-2)"><td colspan="2">รวมทุกเครื่อง</td>
+          <td class="num">${tf}</td><td class="num">${r1(th).toFixed(1)}</td>
+          <td class="num muted">${r1((ac||[]).reduce((s,x)=>s+Number(x.total_hours||0),0)).toFixed(1)}</td></tr>`
+      : `<tr><td colspan="5" class="empty">ยังไม่มีข้อมูล</td></tr>`;
+    document.getElementById("acNote").textContent =
+      `เที่ยว = รายงานหลังบิน (ไม่นับภารกิจยกเลิก) · ชม. จากรายงานหลังบิน ตามวันที่ภารกิจ ${a?thDate(a):"ต้นข้อมูล"} – ${b?thDate(b):"ล่าสุด"}`
+      + (archUsed ? " · เดือนที่เคลียร์ข้อมูลดิบแล้วนับทั้งเดือน" : "");
+  }
+  const thDate=(s)=>{ const [y,m,d]=s.split("-").map(Number); return `${d} ${TH_MON[m-1]}${String(y+543).slice(-2)}`; };
+  acFrom.addEventListener("change", renderAc);
+  acTo.addEventListener("change", renderAc);
+  document.getElementById("acFy").addEventListener("click", ()=>{ acFrom.value=acFyStart(); acTo.value=ymd(new Date()); renderAc(); });
+  document.getElementById("acAll").addEventListener("click", ()=>{ acFrom.value=""; acTo.value=""; renderAc(); });
+  document.getElementById("acMonth").addEventListener("click", ()=>{
+    const ym=document.getElementById("mon").value; if (!ym) return;
+    const [y,m]=ym.split("-").map(Number);
+    acFrom.value=`${ym}-01`; acTo.value=`${ym}-${String(daysIn(y,m)).padStart(2,"0")}`; renderAc(); });
+  renderAc();
 
   const { data: d } = await supabase.from("discrepancies")
     .select("*, aircraft(tail_number), missions(mission_date)").order("reported_date",{ascending:false});
