@@ -1,5 +1,5 @@
 // =====================================================================
-//  daily-report.js — ข้อความรายงานภารกิจประจำวัน (คัดลอกไปรายงานต่อ)
+//  daily-report.js — ข้อความรายงานภารกิจประจำวัน (คัดลอกไปรายงานต่อ) · popup ในหน้าหลัก
 //   • ภารกิจ = การ์ดในหน้าหลัก (ไม่นับ STBY ทั่วไป) เรียงลำดับเดียวกับหน้าหลัก
 //   • รายงานหลังบินแล้ว → ปฏิบัติภารกิจเรียบร้อย · ยังไม่รายงาน → อยู่ระหว่างปฏิบัติภารกิจ · ยกเลิก → ยกเลิกภารกิจ
 // =====================================================================
@@ -39,4 +39,43 @@ export function buildDailyReport(dateIso, all) {
     ].join("\n");
   });
   return [...head, `ทั้งหมด ${list.length} ภารกิจ`, ``, blocks.join("\n\n"), ``, `ครับ`].join("\n");
+}
+
+// ---------- หน้าต่าง popup ในหน้าหลัก (แก้ข้อความก่อนคัดลอกได้) · ใช้ CSS .dsh-* ของ home.html ----------
+export function openDailyReport({ date, title, missions }) {
+  const list = reportMissions(missions);
+  const n = { done: 0, pending: 0, cancelled: 0 };
+  list.forEach((m) => n[resultOf(m)]++);
+  const bg = document.createElement("div");
+  bg.className = "dsh-bg";
+  bg.innerHTML = `
+    <div class="dsh drp" role="dialog" aria-label="รายงานประจำวัน">
+      <div class="dsh-h"><b>📝 รายงานประจำวัน</b><span class="muted">${title}</span>
+        <button type="button" class="btn sm ghost" data-close style="margin-inline-start:auto">ปิด</button></div>
+      <p class="dsh-hint">${list.length ? `เรียบร้อย ${n.done} · ระหว่างปฏิบัติ ${n.pending}${n.cancelled ? ` · ยกเลิก ${n.cancelled}` : ""} · ` : ""}
+        รายงานหลังบินแล้ว → <b>-ปฏิบัติภารกิจเรียบร้อย</b> · ยังไม่รายงาน → <b>-อยู่ระหว่างปฏิบัติภารกิจ</b> · แก้ข้อความก่อนคัดลอกได้</p>
+      <textarea class="drp-txt" spellcheck="false" aria-label="ข้อความรายงาน"></textarea>
+      <div class="dsh-f">
+        <span class="dsh-msg" data-msg style="margin-inline-end:auto"></span>
+        <button type="button" class="btn ghost" data-reset title="สร้างข้อความใหม่จากข้อมูลล่าสุด (ล้างที่แก้เอง)">↻ สร้างใหม่</button>
+        <button type="button" class="btn primary" data-copy>📋 คัดลอกข้อความ</button>
+      </div>
+    </div>`;
+  document.body.appendChild(bg);
+  const txt = bg.querySelector(".drp-txt");
+  txt.value = buildDailyReport(date, missions);
+  const close = () => { bg.remove(); removeEventListener("keydown", onKey); };
+  const onKey = (e) => { if (e.key === "Escape") close(); };
+  addEventListener("keydown", onKey);
+  bg.addEventListener("click", (e) => { if (e.target === bg) close(); });
+  bg.querySelector("[data-close]").addEventListener("click", close);
+  bg.querySelector("[data-reset]").addEventListener("click", () => { txt.value = buildDailyReport(date, missions); });
+  bg.querySelector("[data-copy]").addEventListener("click", async () => {
+    let ok = true;
+    try { await navigator.clipboard.writeText(txt.value); }
+    catch { txt.select(); ok = document.execCommand("copy"); }          // เบราว์เซอร์ที่ไม่ให้ใช้ clipboard API
+    const msg = bg.querySelector("[data-msg]");
+    msg.textContent = ok ? "✓ คัดลอกแล้ว" : "คัดลอกไม่สำเร็จ — เลือกข้อความแล้วกด Ctrl/Cmd+C เอง";
+    msg.classList.toggle("err", !ok);
+  });
 }
