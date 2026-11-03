@@ -59,6 +59,15 @@
   .dsys label.none:has(input:checked){border-color:var(--good);background:var(--good-soft)}
   .dsys input{width:18px;height:18px;margin:0;accent-color:var(--primary);flex-shrink:0}
   .dsys.missing label{border-color:var(--crit)}
+  .land-list{display:flex;flex-direction:column;gap:6px}
+  .land-row{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:10px;align-items:center;
+            padding:6px 8px;border:1px solid var(--line);border-radius:8px;background:var(--surface)}
+  .land-row .role{font-family:"IBM Plex Mono",monospace;font-size:12px;font-weight:700;color:var(--muted);min-width:64px}
+  .land-row .nm{font-weight:600;font-size:14px}
+  .land-row .num{display:flex;align-items:center;gap:4px}
+  .land-row .num input{width:58px;text-align:center;font-size:16px;font-weight:700;padding:6px 4px}
+  .land-row .num button{width:34px;height:34px;padding:0;font-size:18px;line-height:1}
+  .land-row.nolink{opacity:.65}
   .result-grid{display:grid;grid-template-columns:1.3fr 1fr 1fr;gap:12px;align-items:end}
   @media(max-width:640px){ .result-grid{grid-template-columns:1fr} }
   .result-grid label{margin:0 0 5px}
@@ -156,6 +165,13 @@
         <select id="restKind"></select></label>
     </div>
 
+    <!-- จำนวน landing รายนักบิน (migration_51) -->
+    <div class="panel" style="margin-top:16px">
+      <h3>🛬 จำนวน Landing</h3>
+      <p class="hint">กรอกจำนวนครั้งที่แต่ละคน landing ในเที่ยวบินนี้ (ไม่มี = เว้นว่าง / 0) · แสดงในหน้า พ. แถว <b>Land</b></p>
+      <div id="landBox" class="land-list"><div class="hint">กำลังโหลด…</div></div>
+    </div>
+
     <!-- หมายเหตุ -->
     <div class="panel" style="margin-top:16px">
       <h3>📝 หมายเหตุ</h3>
@@ -217,10 +233,10 @@
   import { renderTopbar } from "./js/ui.js";
   import { getMission, routeToLegs, loadLegs, replaceLegs, saveReport, getReport, DEFECT_SYSTEMS,
            loadDiscrepancies, addDiscrepancy, deleteDiscrepancy,
-           loadSafety, saveSafety } from "./js/reports.js";
+           loadSafety, saveSafety, loadLandings, saveLandings } from "./js/reports.js";
   import { loadMissionMedia, uploadMany, deleteMedia, thumbsHtml, bindThumbs, pickFiles,
            checkFile, fmtSize } from "./js/media.js";
-  import { esc, KINDS } from "./js/missions.js";
+  import { esc, KINDS, PILOT_ROLES } from "./js/missions.js";
 
   const profile = await requireAuth();
   if (profile) {
@@ -543,6 +559,37 @@
       refreshDisc();
     });
 
+    // ---------- จำนวน landing รายนักบิน (migration_51) ----------
+    //  นักบินในลูกเรือที่ผูกทะเบียน (ไม่นับ N) · 1 คน 1 แถว · ชื่อไม่อยู่ในทะเบียน → แสดงแต่กรอกไม่ได้
+    const LAND_ROLES = PILOT_ROLES.filter(r => r !== "N");
+    const landPilots = [];
+    (m.mission_crew || []).filter(c => LAND_ROLES.includes((c.position || "").toUpperCase()) && (c.crew_name || "").trim())
+      .sort((a, b) => LAND_ROLES.indexOf(a.position.toUpperCase()) - LAND_ROLES.indexOf(b.position.toUpperCase()) || (a.sort_order || 0) - (b.sort_order || 0))
+      .forEach(c => { if (!c.crew_member_id || !landPilots.some(p => p.id === c.crew_member_id))
+        landPilots.push({ id: c.crew_member_id || null, role: c.position, name: c.crew_name.trim() }); });
+    const landMap = await loadLandings(missionId);            // null = ยังไม่ได้รัน migration_51
+    const landBox = document.getElementById("landBox");
+    if (landMap === null) landBox.innerHTML = `<div class="hint">ยังบันทึกจำนวน landing ไม่ได้ — ต้องรัน db/migration_51_mission_landings.sql ก่อน</div>`;
+    else if (!landPilots.length) landBox.innerHTML = `<div class="hint">ภารกิจนี้ยังไม่มีนักบินในลูกเรือ</div>`;
+    else {
+      landBox.innerHTML = landPilots.map((p, i) => `
+        <div class="land-row${p.id ? "" : " nolink"}">
+          <span class="role">${esc(p.role)}</span>
+          <span class="nm">${esc(p.name)}${p.id ? "" : ` <span class="hint" style="margin:0">(ไม่อยู่ในทะเบียน — ไม่เก็บ)</span>`}</span>
+          ${p.id ? `<span class="num">
+            <button type="button" class="btn ghost" data-ld="${i}" data-d="-1" aria-label="ลด">−</button>
+            <input type="number" min="0" max="99" step="1" inputmode="numeric" data-land="${i}" value="${landMap.get(p.id) || ""}" placeholder="0">
+            <button type="button" class="btn ghost" data-ld="${i}" data-d="1" aria-label="เพิ่ม">+</button>
+          </span>` : "<span></span>"}
+        </div>`).join("");
+      landBox.querySelectorAll("[data-ld]").forEach(b => b.addEventListener("click", () => {
+        const inp = landBox.querySelector(`[data-land="${b.dataset.ld}"]`);
+        inp.value = Math.max(0, Math.min(99, (parseInt(inp.value, 10) || 0) + Number(b.dataset.d))) || "";
+      }));
+    }
+    const landList = () => [...landBox.querySelectorAll("[data-land]")]
+      .map(inp => ({ crew_member_id: landPilots[+inp.dataset.land].id, landings: parseInt(inp.value, 10) || 0 }));
+
     // ---------- รายงานอันตราย (safety) ----------
     document.getElementById("sfDate").textContent = m.mission_date || "-";
     const pilotNames = (m.mission_crew || [])
@@ -638,6 +685,12 @@
       });
       if (repErr && !repErr.warning) { btn.disabled = false; btn.textContent = "บันทึกรายงาน";
         msg.className = "msg err"; msg.textContent = "บันทึกรายงานไม่สำเร็จ: " + why(repErr); return; }
+
+      if (landMap !== null) {
+        const ldErr = await saveLandings(missionId, landList());
+        if (ldErr) { btn.disabled = false; btn.textContent = "บันทึกรายงาน";
+          msg.className = "msg err"; msg.textContent = "บันทึก ชม.แล้ว แต่จำนวน landing ไม่สำเร็จ: " + why(ldErr); return; }
+      }
 
       const { error: sfErr, ids } = await saveSafety(missionId, safety);
       if (sfErr) { btn.disabled = false; btn.textContent = "บันทึกรายงาน";

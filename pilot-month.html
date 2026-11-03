@@ -56,7 +56,7 @@
   <div class="wrap">
     <div class="page-head">
       <h1>พ.</h1>
-      <div class="sub">นักบินทุกคน (IP · P · CP) × วันในเดือน — แต่ละคน 4 แถว: จำนวนเที่ยว · เลขเครื่อง · ชม.บินแต่ละเที่ยว · หมายเหตุ</div>
+      <div class="sub">นักบินทุกคน (IP · P · CP) × วันในเดือน — แต่ละคน 5 แถว: จำนวนเที่ยว · เลขเครื่อง · ชม.บินแต่ละเที่ยว · จำนวน landing · หมายเหตุ</div>
     </div>
 
     <div class="bar">
@@ -99,8 +99,9 @@
       document.getElementById("monthLabel").textContent = `${TH_MONTH[m0]} ${y + 543}`;
       document.getElementById("monthPick").value = `${y}-${String(m0 + 1).padStart(2, "0")}`;
       document.getElementById("legend").textContent =
-        `${pilots.length} คน · นับเที่ยวจากภารกิจที่มีชื่อในตำแหน่งนักบิน (ไม่รวม STBY / ยกเลิก) · ชม. จากรายงานหลังบิน ("-" = ยังไม่รายงาน)` +
+        `${pilots.length} คน · นับเที่ยวจากภารกิจที่มีชื่อในตำแหน่งนักบิน (ไม่รวม STBY / ยกเลิก) · ชม. / Land จากรายงานหลังบิน ("-" = ยังไม่รายงาน)` +
         (planner ? " · คลิกช่องหมายเหตุเพื่อพิมพ์ (บันทึกอัตโนมัติ)" : "");
+      if (data.landingsMissing) say("ยังไม่มีข้อมูล Land — ต้องรัน db/migration_51_mission_landings.sql ก่อน", "err");
       if (data.notesMissing) say("ยังกรอกหมายเหตุไม่ได้ — ต้องรัน db/migration_33_crew_day_notes.sql ก่อน", "err");
 
       const wrap = document.getElementById("wrap");

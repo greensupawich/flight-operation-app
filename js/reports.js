@@ -8,7 +8,7 @@ import { removeFiles } from "./media.js";
 export async function getMission(id) {
   const { data } = await supabase
     .from("missions")
-    .select("*, aircraft(tail_number,type), mission_crew(position, crew_name, sort_order)")
+    .select("*, aircraft(tail_number,type), mission_crew(position, crew_name, crew_member_id, sort_order)")
     .eq("id", id).single();
   return data;
 }
@@ -116,6 +116,32 @@ export async function getReport(missionId) {
   const { data } = await supabase.from("post_flight_reports")
     .select("*").eq("mission_id", missionId).maybeSingle();
   return data;
+}
+
+// ---------- จำนวน landing รายนักบิน (migration_51) ----------
+//  คืน Map(crew_member_id → จำนวน) · null = ยังไม่ได้รัน migration_51
+export async function loadLandings(missionId) {
+  const { data, error } = await supabase.from("mission_landings")
+    .select("crew_member_id, landings").eq("mission_id", missionId);
+  if (error) { console.warn("mission_landings:", error.message); return null; }
+  return new Map((data || []).map((r) => [r.crew_member_id, r.landings]));
+}
+// list = [{ crew_member_id, landings }] · เก็บเฉพาะที่ > 0 · คนที่เป็น 0 / ไม่อยู่ในรายการแล้ว → ลบแถว
+export async function saveLandings(missionId, list) {
+  const keep = (list || []).filter((x) => x.crew_member_id && Number(x.landings) > 0)
+    .map((x) => ({ mission_id: missionId, crew_member_id: x.crew_member_id, landings: Math.min(99, Math.round(Number(x.landings))) }));
+  const { data: old, error: oldErr } = await supabase.from("mission_landings").select("id, crew_member_id").eq("mission_id", missionId);
+  if (oldErr) return oldErr;
+  const gone = (old || []).filter((r) => !keep.some((k) => k.crew_member_id === r.crew_member_id)).map((r) => r.id);
+  if (gone.length) {
+    const { error } = await supabase.from("mission_landings").delete().in("id", gone);
+    if (error) return error;
+  }
+  if (keep.length) {
+    const { error } = await supabase.from("mission_landings").upsert(keep, { onConflict: "mission_id,crew_member_id" });
+    if (error) return error;
+  }
+  return null;
 }
 
 // ---------- ข้อขัดข้อง ----------
