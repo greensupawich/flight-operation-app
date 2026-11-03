@@ -158,6 +158,7 @@
     monthInp.value = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
     monthInp.addEventListener("change", () => refresh());
 
+    let contactOk = true;
     async function refresh() {
       const [yy, mm] = (monthInp.value || monthInp.defaultValue).split("-").map(Number);
       document.getElementById("monthLabel").textContent = `(${TH_MONTH[mm - 1]} ${yy + 543})`;
@@ -169,6 +170,9 @@
         c.last_500_date = latest(c.last_500_date, flown[c.id]?.["500"]);
         c.last_600_date = latest(c.last_600_date, flown[c.id]?.["600"]);
       });
+      // ยังไม่ได้รัน migration_52 → ช่องนามสกุล/Callsign/เบอร์โทร แก้ไม่ได้ และไม่ส่งไปบันทึก
+      contactOk = !list.length || "last_name" in list[0];
+      const cEdit = planner && contactOk ? "" : `disabled${planner ? ' title="ต้องรัน db/migration_52_crew_contact.sql ก่อน"' : ""}`;
       const tb = document.getElementById("rows");
       if (!list.length) {
         tb.innerHTML = `<tr><td colspan="12" class="empty">ยังไม่มีรายชื่อนักบิน${planner ? " · เพิ่มด้านบนได้เลย" : ""}</td></tr>`;
@@ -178,9 +182,9 @@
         <tr data-id="${c.id}" class="${c.active ? "" : "inactive"}">
           <td><input data-f="code" value="${esc(c.code)}" class="code" ${planner ? "" : "disabled"}></td>
           <td><input data-f="full_name" value="${esc(c.full_name)}" style="${qualStyle(c.position)};font-weight:600" ${planner ? "" : "disabled"}></td>
-          <td><input data-f="last_name" value="${esc(c.last_name)}" placeholder="—" ${planner ? "" : "disabled"}></td>
-          <td><input data-f="callsign" value="${esc(c.callsign)}" class="code" placeholder="—" ${planner ? "" : "disabled"}></td>
-          <td><input data-f="phone" value="${esc(c.phone)}" class="code" inputmode="tel" placeholder="—" ${planner ? "" : "disabled"}></td>
+          <td><input data-f="last_name" value="${esc(c.last_name)}" placeholder="—" ${cEdit}></td>
+          <td><input data-f="callsign" value="${esc(c.callsign)}" class="code" placeholder="—" ${cEdit}></td>
+          <td><input data-f="phone" value="${esc(c.phone)}" class="code" inputmode="tel" placeholder="—" ${cEdit}></td>
           <td><select data-f="position" data-qual style="${qualStyle(c.position)};font-weight:700" ${planner ? "" : "disabled"}>
                 ${["", ...QUALS, ...(c.position && !QUALS.includes(c.position) ? [c.position] : [])]
                   .map(r=>`<option value="${r}" ${r===(c.position||"")?"selected":""}>${r||"—"}</option>`).join("")}
@@ -227,7 +231,7 @@
           const opt = (f) => get(f).trim() || null;
           const err = await updateCrew(tr.dataset.id, {
             code, full_name,
-            last_name: opt("last_name"), phone: opt("phone"), callsign: opt("callsign"),     // migration_52
+            ...(contactOk ? { last_name: opt("last_name"), phone: opt("phone"), callsign: opt("callsign") } : {}),   // migration_52
             position: get("position").trim() || null,
             active: get("active") === "true",
             can_fly_500: chk("can_fly_500"), can_fly_600: chk("can_fly_600"),
@@ -255,8 +259,8 @@
       const position = document.getElementById("n_pos").value.trim();
       msg.className = "msg";
       if (!code || !full_name) { msg.className = "msg err"; msg.textContent = "กรุณากรอกรหัสและชื่อ"; return; }
-      const err = await addCrew({ code, full_name, position, last_name: document.getElementById("n_last").value,
-        callsign: document.getElementById("n_cs").value, phone: document.getElementById("n_phone").value });
+      const val = (id) => contactOk ? document.getElementById(id).value : "";
+      const err = await addCrew({ code, full_name, position, last_name: val("n_last"), callsign: val("n_cs"), phone: val("n_phone") });
       if (err) {
         msg.className = "msg err";
         msg.textContent = err.message.includes("duplicate")
