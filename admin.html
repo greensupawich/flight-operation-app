@@ -129,7 +129,7 @@
       const [profiles, invites, crew] = await Promise.all([loadProfiles(), loadInvites(), loadCrew()]);
       renderRequests(card, reqTb, cnt, profiles, refresh);
       renderInvites(ivTb, invites, profiles, refresh);
-      renderUsers(userTb, profiles, refresh, crew);
+      renderUsers(userTb, profiles, refresh, crew, profile.id);
       const n = profiles.filter(p => p.role === "admin").length;
       const q = document.getElementById("adminQuota");
       q.textContent = `ผู้ดูแลระบบ ${n}/${MAX_ADMINS}`;

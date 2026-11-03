@@ -49,6 +49,14 @@ export async function updateUser(id, role, status, crewId) {
   return error;
 }
 
+// ---------- ลบบัญชีผู้ใช้ (migration_53) — ข้อมูลที่บัญชีนี้บันทึกไว้ยังอยู่ ----------
+export async function deleteUser(id) {
+  const { error } = await supabase.rpc("admin_delete_user", { p_id: id });
+  if (error && /admin_delete_user|schema cache|Could not find/i.test(error.message || ""))
+    return { message: "ยังลบบัญชีไม่ได้ — ต้องรัน db/migration_53_admin_delete_user.sql ก่อน" };
+  return error;
+}
+
 // ชื่อในทะเบียน (ตัดยศ เช่น "ร.ท.วิทวัส" → "วิทวัส") ตรงกับคำแรกของชื่อบัญชี → แนะนำให้ผูก
 const bareName = (s) => String(s || "").replace(/^.*\./, "").replace(/\s*\(.*\)\s*$/, "").trim();
 function suggestCrew(p, crew) {
@@ -108,7 +116,8 @@ export function renderRequests(card, tbody, countEl, profiles, onDone) {
 // =====================================================================
 //  วาดตาราง "ผู้ใช้ทั้งหมด"
 // =====================================================================
-export function renderUsers(tbody, profiles, onDone, crew = []) {
+//  selfId = บัญชีที่ล็อกอินอยู่ (ลบตัวเองไม่ได้)
+export function renderUsers(tbody, profiles, onDone, crew = [], selfId = null) {
   const hasLink = profiles.some((p) => "crew_member_id" in p);       // รัน migration_45 แล้ว
   const linked = new Map(profiles.filter((p) => p.crew_member_id).map((p) => [p.crew_member_id, p.id]));
   const rows = profiles.filter((p) => p.status !== "pending")
@@ -145,7 +154,8 @@ export function renderUsers(tbody, profiles, onDone, crew = []) {
       <td>${hasLink ? crewCell(p) : `<span class="muted" style="font-size:12px">ต้องรัน migration_45</span>`}</td>
       <td><select data-role ${locked ? "disabled" : ""}>${roleOpts}</select></td>
       <td><select data-status ${locked ? "disabled" : ""}>${STATUS.map(s=>`<option value="${s}" ${s===p.status?"selected":""}>${s}</option>`).join("")}</select></td>
-      <td>${locked ? `<span class="muted" style="font-size:12px">ล็อก</span>` : `<button class="btn sm" data-save>บันทึก</button>`}</td>
+      <td style="white-space:nowrap"><button class="btn sm" data-save ${locked ? 'title="ผู้ดูแลหลัก: แก้ได้เฉพาะชื่อในทะเบียนนักบิน (สิทธิ์/สถานะล็อก)"' : ""}>บันทึก</button>
+          ${locked || p.id === selfId ? "" : `<button class="btn sm" data-deluser style="color:var(--crit)" title="ลบบัญชีนี้">ลบ</button>`}</td>
     </tr>`;
   }).join("")
     : `<tr><td colspan="6" class="empty">ยังไม่มีผู้ใช้ที่อนุมัติแล้ว</td></tr>`;
@@ -163,6 +173,16 @@ export function renderUsers(tbody, profiles, onDone, crew = []) {
         cs ? (cs.value || null) : undefined);
       b.disabled = false; b.textContent = err ? "บันทึก" : "✓";
       if (err) alert("ไม่สำเร็จ: " + err.message); else onDone && onDone();
+    }));
+  tbody.querySelectorAll("[data-deluser]").forEach((b) =>
+    b.addEventListener("click", async (e) => {
+      const tr = e.target.closest("tr");
+      const p = profiles.find((x) => x.id === tr.dataset.id);
+      if (!p || !confirm(`ลบบัญชี ${p.full_name || ""} (${p.email})?\n\n• เข้าใช้งานไม่ได้ทันที\n• ภารกิจ/รายงานที่บัญชีนี้บันทึกไว้ยังอยู่ครบ\n• ถ้าล็อกอินใหม่ จะกลับมาเป็นคำขอใช้งาน ต้องอนุมัติอีกครั้ง\n\nถ้าแค่ต้องการพักการใช้งาน ให้ตั้งสถานะเป็น disabled แทน`)) return;
+      b.disabled = true; b.textContent = "…";
+      const err = await deleteUser(p.id);
+      if (err) { alert("ลบไม่สำเร็จ: " + err.message); b.disabled = false; b.textContent = "ลบ"; }
+      else onDone && onDone();
     }));
 }
 
