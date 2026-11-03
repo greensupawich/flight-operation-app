@@ -11,6 +11,7 @@
   --good:#2f7d5b; --good-soft:#e2f0ea;
   --warn:#b26a12; --crit:#b23b3b; --crit-soft:#f6e2e2;
   --radius:12px; --shadow:0 1px 2px rgba(22,32,46,.05),0 8px 24px -12px rgba(22,32,46,.18);
+  color-scheme:light;      /* ช่องวันที่/เดือน (ไอคอนปฏิทิน) · scrollbar · dropdown ของเบราว์เซอร์ ใช้สีตามธีม */
 }
 @media (prefers-color-scheme:dark){ :root:not([data-theme="light"]){
   --ground:#0d141d; --surface:#141d28; --surface-2:#0f1822;
@@ -21,6 +22,7 @@
   --good:#5cbf94; --good-soft:#12241c;
   --warn:#d99a3f; --crit:#e07b7b; --crit-soft:#2a1717;
   --shadow:0 1px 2px rgba(0,0,0,.3),0 10px 30px -14px rgba(0,0,0,.6);
+  color-scheme:dark;
 }}
 :root[data-theme="dark"]{
   --ground:#0d141d; --surface:#141d28; --surface-2:#0f1822;
@@ -31,6 +33,7 @@
   --good:#5cbf94; --good-soft:#12241c;
   --warn:#d99a3f; --crit:#e07b7b; --crit-soft:#2a1717;
   --shadow:0 1px 2px rgba(0,0,0,.3),0 10px 30px -14px rgba(0,0,0,.6);
+  color-scheme:dark;
 }
 
 *{box-sizing:border-box}

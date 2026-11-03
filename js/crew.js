@@ -13,10 +13,14 @@ export async function loadCrew(includeInactive = true) {
 }
 
 // เพิ่มคนใหม่ — รหัสห้ามซ้ำ
-export async function addCrew({ code, full_name, position, note }) {
-  const { error } = await supabase.from("crew_members")
-    .insert({ code: code.trim(), full_name: full_name.trim(),
-              position: (position || "").trim() || null, note: (note || "").trim() || null });
+//  นามสกุล / เบอร์โทร / Callsign (migration_52) — ชื่อที่แสดงในจัดบินใช้ full_name (ยศ + ชื่อ) อย่างเดียว
+export async function addCrew({ code, full_name, position, note, last_name, phone, callsign }) {
+  const opt = (v) => (v || "").trim() || null;
+  const row = { code: code.trim(), full_name: full_name.trim(), position: opt(position), note: opt(note) };
+  if (opt(last_name)) row.last_name = opt(last_name);
+  if (opt(phone)) row.phone = opt(phone);
+  if (opt(callsign)) row.callsign = opt(callsign);
+  const { error } = await supabase.from("crew_members").insert(row);
   return error;
 }
 
