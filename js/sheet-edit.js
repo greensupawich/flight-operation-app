@@ -5,6 +5,7 @@
 //   • กันเขียนทับกัน: อัปเดตเฉพาะเมื่อค่าในฐานยังเท่าค่าที่เห็นอยู่ ไม่งั้นแจ้งให้โหลดใหม่
 //   • ชม.บินคำนวณใหม่อัตโนมัติเมื่อลูกเรือเปลี่ยน (trigger trg_rc_crew → recompute_all_hours)
 //  คู่กับ data-f / data-crew / data-crew-add / data-crew-new ใน mission-sheet.js (sheetHTML edit:true)
+//  และช่อง STBY ในหน้าหลัก (home.html stbyBlock · กล่องมี data-mid = id ภารกิจ)
 // =====================================================================
 import { supabase } from "./supabase.js";
 import { PILOT_ROLES, OTHER_ROLES, QUALS, qualStyle, reportOf, esc, parsePoc, pocFields, parseMissionNames, missionNameField } from "./missions.js";
@@ -56,7 +57,7 @@ export function wireSheetEdit(container, { getMission, roster = [], onSaved }) {
   container.addEventListener("click", (e) => {
     const cell = e.target.closest("[data-f],[data-crew],[data-crew-add],[data-crew-new]");
     if (!cell || !container.contains(cell) || container.classList.contains("reordering")) return;
-    const m = getMission(cell.closest(".sheet")?.dataset.id);
+    const m = getMission(cell.closest(".sheet, [data-mid]")?.dataset.id || cell.closest("[data-mid]")?.dataset.mid);
     if (!m) return;
     e.preventDefault();
     if (open) open.close();
