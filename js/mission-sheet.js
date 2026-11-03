@@ -2,16 +2,16 @@
 //  mission-sheet.js — วาดการ์ดภารกิจแบบกระดานจัดบิน (ใช้ร่วม: หน้าหลัก + หน้าภารกิจรายวัน)
 //  คู่กับ css/sheet.css
 // =====================================================================
-import { KINDS, DEFAULT_KIND, kindStyle, PILOT_ROLES, OTHER_ROLES, acLabel, esc, reportOf, deleteMission, pocLines, missionNameLines } from "./missions.js";
+import { KINDS, DEFAULT_KIND, kindStyle, PILOT_ROLES, OTHER_ROLES, acLabel, esc, reportOf, deleteMission, pocLines, missionNameLines, DEFAULT_CREW_SLOTS } from "./missions.js";
 import { supabase } from "./supabase.js";
 
 // ---------- แถวลูกเรือ ----------
-// ตำแหน่งที่ไม่มีคน → ไม่แสดงแถวเลย
+// ตำแหน่งที่ไม่มีคน → ไม่แสดงแถว ยกเว้นแถวตั้งต้น (DEFAULT_CREW_SLOTS) ที่แสดงช่องว่างไว้เสมอ
 //  edit = หน้าหลักโหมดแก้ทีละช่อง → ชื่อแต่ละคนมี data-crew (id แถว mission_crew) · ช่องว่างมี data-crew-add (ตำแหน่ง)
 function crewRow(role, crew, edit = false) {
   const list = crew.filter(c => (c.position||"").toUpperCase() === role && (c.crew_name || "").trim())
                    .sort((a,b)=>(a.sort_order||0)-(b.sort_order||0));
-  if (!list.length) return "";
+  if (!list.length && !DEFAULT_CREW_SLOTS.includes(role)) return "";
   const nm = (c) => edit ? `<span class="ed-c" data-crew="${c.id}">${esc(c.crew_name.trim())}</span>` : esc(c.crew_name.trim());
   // นบ.ราชฯ → 1 คน = 1 แถว (เหมือนกระดานจริง)
   if (role === "นบ.ราชฯ 1" || role === "นบ.ราชฯ 2")

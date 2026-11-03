@@ -57,6 +57,8 @@ export const SPECIAL_PILOT_ROLES = ["นบ.ราชฯ 1", "นบ.ราช�
 export const PILOT_ROLES = ["AC", "IP", "P", "CP", ...SPECIAL_PILOT_ROLES, "N"];
 export const OTHER_ROLES = ["FM", "RO", "LM", "AH"];
 export const CREW_ROLES  = [...PILOT_ROLES, ...OTHER_ROLES];
+// ช่องลูกเรือตั้งต้น: ฟอร์มเพิ่มภารกิจมีช่องว่างไว้ให้ · การ์ดหน้าหลักแสดงแถวเหล่านี้เสมอ (ว่างก็คลิกเพิ่มได้) · AH ไม่ตั้งไว้
+export const DEFAULT_CREW_SLOTS = ["IP", "CP", "FM", "RO", "LM"];
 // N ไม่นับ ชม.บิน (AC นับเมื่อผูกทะเบียนนักบิน · ไม่อยู่ในทะเบียนก็ได้)
 export const NO_HOURS_ROLES = ["N"];
 

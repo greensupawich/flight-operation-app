@@ -155,7 +155,7 @@
   import { requireAuth, canPlan } from "./js/auth.js";
   import { renderTopbar } from "./js/ui.js";
   import { getMission, saveMission, loadAircraft, loadCrewRoster, acLabel,
-           KINDS, DEFAULT_KIND, KIND_COLORS, QUALS, qualStyle, PILOT_ROLES, OTHER_ROLES, esc, parsePoc, pocFields, parseMissionNames, missionNameField } from "./js/missions.js";
+           KINDS, DEFAULT_KIND, KIND_COLORS, QUALS, qualStyle, PILOT_ROLES, OTHER_ROLES, DEFAULT_CREW_SLOTS, esc, parsePoc, pocFields, parseMissionNames, missionNameField } from "./js/missions.js";
 
   const profile = await requireAuth();
   if (profile) {
@@ -369,9 +369,10 @@
       if (presetDate) $("back").href = `day.html?date=${presetDate}`;
     }
 
-    // ค่าเริ่มต้น: อย่างน้อยกลุ่มละ 1 แถวว่าง ให้พร้อมกรอก
-    if (!pilots.length) pilots = [{ role: "IP", name: "", crew_member_id: null }];
-    OTHER_ROLES.forEach(r => { if (!others[r].length) others[r] = [""]; });
+    // ช่องว่างตั้งต้น (DEFAULT_CREW_SLOTS): นักบิน IP + CP · FM / RO / LM อย่างละ 1 ช่อง · AH ไม่ตั้ง (กด + เพิ่มเอง)
+    if (!pilots.length) pilots = DEFAULT_CREW_SLOTS.filter(r => PILOT_ROLES.includes(r))
+                                   .map(role => ({ role, name: "", crew_member_id: null }));
+    OTHER_ROLES.forEach(r => { if (!others[r].length && DEFAULT_CREW_SLOTS.includes(r)) others[r] = [""]; });
     if (!pocs.length) pocs = [{ name: "", phone: "" }];
     paintKind();
     renderCrew();
