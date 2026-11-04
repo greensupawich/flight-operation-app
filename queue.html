@@ -18,6 +18,8 @@
 
   main .wrap{max-width:1500px}
   .q-head{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:6px 0 12px}
+  .q-future{display:inline-flex;align-items:center;gap:6px;margin:0 0 0 auto;font-size:13px;font-weight:500;cursor:pointer}
+  .q-future input{width:auto;margin:0}
   .q-title{font-family:"Bai Jamjuree",sans-serif;font-weight:700;font-size:20px;min-width:170px;text-align:center}
   .legend{display:flex;flex-wrap:wrap;gap:6px 14px;align-items:center;font-size:12px;color:var(--muted);margin-bottom:10px}
   .legend .sw{display:inline-block;min-width:34px;padding:1px 6px;border-radius:4px;text-align:center;
@@ -161,6 +163,8 @@
       <div class="q-title" id="title">—</div>
       <button class="btn sm" id="next">→</button>
       <button class="btn sm ghost" id="thisMonth">เดือนนี้</button>
+      <label class="q-future" title="ติ๊ก = นับเที่ยวที่จัดล่วงหน้า (หลังวันนี้) ด้วย · ไม่ติ๊ก = นับถึงวันนี้เท่านั้น">
+        <input type="checkbox" id="countFuture"> นับเที่ยวที่จัดล่วงหน้า</label>
     </div>
 
     <div class="legend" id="legend"></div>
@@ -246,6 +250,14 @@
     let tq = null, qMaps = null;      // ข้อมูลเดือนของวันที่จัดคิว (เมื่อเปิดดูเดือนอื่น) · maps ที่ใช้คิดคิว
     let prevRef = null, ranksPrev = null, needRef = new Set();   // คิวอ้างอิงที่นับต่อจากเดือนก่อน · needRef = กลุ่มที่ยังมีคนบิน 0 เที่ยว
     let holTarget = null, holData = null, holRanks = null;      // คิววันหยุด
+    // นับเที่ยวที่จัดล่วงหน้าไหม (ผู้ใช้ขอ 4 พ.ย. 69) · จำค่าไว้ในเบราว์เซอร์ของแต่ละคน · ค่าเริ่มต้น = ไม่นับ (นับถึงวันนี้)
+    const futureBox = document.getElementById("countFuture");
+    try { futureBox.checked = localStorage.getItem("fo.queue.countFuture") === "1"; } catch {}
+    const countUntil = () => futureBox.checked ? null : todayStr;
+    futureBox.addEventListener("change", () => {
+      try { localStorage.setItem("fo.queue.countFuture", futureBox.checked ? "1" : "0"); } catch {}
+      render();
+    });
     let holDays = [], holIdx = 0;     // วันหยุดข้างหน้า (60 วัน) · holIdx = วันที่เลือกดู (0 = วันหยุดถัดไป) — เลื่อนดูคนไม่ว่างวันถัด ๆ ไปได้
 
     const table = document.getElementById("q");
@@ -439,7 +451,7 @@
             itemsFor: (id, d) => cellItems(id, d, qMaps).items.filter(it => !it.cancelled),   // ยกเลิกไม่นับคิว
             isUnavailable: (id, d) => qMaps.offMap.has(`${id}|${d}`),
             historyStart: addDays(target, -120),
-            until: todayStr,                                  // นับถึงวันนี้ · เที่ยวที่จัดล่วงหน้าไม่นับ
+            until: countUntil(),                              // ไม่ติ๊ก = นับถึงวันนี้ · ติ๊ก = รวมเที่ยวที่จัดล่วงหน้า
           })
         : null;
       // คิวอ้างอิง: นับเที่ยวตั้งแต่ต้นเดือนก่อนจนถึงวันก่อนวันจัดคิว (เหมือนไม่ได้เริ่มนับใหม่ต้นเดือน)
@@ -452,7 +464,7 @@
             itemsFor: (id, d) => cellItems(id, d, qMaps).items.filter(it => !it.cancelled),
             isUnavailable: (id, d) => qMaps.offMap.has(`${id}|${d}`),
             historyStart: addDays(target, -120),
-            until: todayStr,                                  // นับถึงวันนี้ · เที่ยวที่จัดล่วงหน้าไม่นับ
+            until: countUntil(),                              // ไม่ติ๊ก = นับถึงวันนี้ · ติ๊ก = รวมเที่ยวที่จัดล่วงหน้า
           })
         : null;
 
@@ -541,7 +553,7 @@
           }).join("") || `<li class="muted">ไม่มีผู้ที่นับคิวได้</li>`}</ol></div>`;
       };
       box.innerHTML = `<h3>คิวบิน · ${thaiLong(target)}</h3>
-        <p class="rule">${dates.includes(target) ? "" : `คิดจากข้อมูลเดือน ${TH_MONTH[Number(target.slice(5, 7)) - 1]} ${Number(target.slice(0, 4)) + 543} · `}บินจริงน้อยสุดก่อน (ไม่นับ ST และเที่ยวที่บินในวันหยุด ในเดือนนั้น · นับถึงวันนี้ ไม่นับเที่ยวที่จัดล่วงหน้า) → บินล่าสุดนานกว่าก่อน → ชื่ออยู่บนก่อน · ติ๊กหน้าชื่อเพื่อนับคิว</p>
+        <p class="rule">${dates.includes(target) ? "" : `คิดจากข้อมูลเดือน ${TH_MONTH[Number(target.slice(5, 7)) - 1]} ${Number(target.slice(0, 4)) + 543} · `}บินจริงน้อยสุดก่อน (ไม่นับ ST และเที่ยวที่บินในวันหยุด ในเดือนนั้น · ${futureBox.checked ? "รวมเที่ยวที่จัดล่วงหน้า" : "นับถึงวันนี้ ไม่นับเที่ยวที่จัดล่วงหน้า"}) → บินล่าสุดนานกว่าก่อน → ชื่ออยู่บนก่อน · ติ๊กหน้าชื่อเพื่อนับคิว</p>
         ${ranksPrev ? `<p class="rule" style="margin-top:-6px">คอลัมน์ <b>อ้างอิง</b> = นับเที่ยวต่อจากเดือน ${prevRef.label} (เดือนก่อน + เดือนนี้ก่อนวันจัดคิว) ไว้ประกอบการจัดลำดับ · แสดงจนกว่าทุกคนในกลุ่มจะบินครบ 1 ครั้งในเดือนนี้</p>` : ""}
         <div class="qcols${ranksPrev ? (needRef.size === 2 ? " with-ref" : " with-ref3") : ""}">${col("IPP", "IP / P")}${ranksPrev && needRef.has("IPP") ? col("IPP", `IP / P · อ้างอิง ${prevRef.label}`, ranksPrev, true) : ""}${col("CP", "CP")}${ranksPrev && needRef.has("CP") ? col("CP", `CP · อ้างอิง ${prevRef.label}`, ranksPrev, true) : ""}</div>`;
     }
@@ -582,7 +594,7 @@
         isUnavailable: (id) => off.has(id),
         baselineDays: holData.base,
         baselineCount: holData.count,
-        until: todayStr,                                      // นับถึงวันนี้ · วันหยุดที่จัดล่วงหน้าไม่นับ
+        until: countUntil(),                                  // ไม่ติ๊ก = นับถึงวันนี้ · ติ๊ก = รวมวันหยุดที่จัดล่วงหน้า
       });
     }
 
@@ -661,7 +673,7 @@
         <p class="rule">${holData.count
           ? `เรียงตามจำนวนครั้งที่บินวันหยุด — น้อยสุดอยู่คิวแรก · เท่ากัน → ชื่ออยู่บนก่อน (ไม่ใช้วันล่าสุด) · เฉพาะที่ติ๊ก ·
              แทคเลขหลังชื่อ = จำนวนครั้ง เทียบกับคนที่บินน้อยสุดในกลุ่ม (น้อยสุด = 0) · จำนวนครั้งตามตารางคิววันหยุด + เที่ยวจริงในวันหยุด/เสาร์-อาทิตย์หลังจากนั้น
-             (ไม่นับ ST · บินติดกันหลายวัน = 1 ครั้ง · นับถึงวันนี้ ไม่นับวันหยุดที่จัดล่วงหน้า)`
+             (ไม่นับ ST · บินติดกันหลายวัน = 1 ครั้ง · ${futureBox.checked ? "รวมวันหยุดที่จัดล่วงหน้า" : "นับถึงวันนี้ ไม่นับวันหยุดที่จัดล่วงหน้า"})`
           : `เรียงตามวันหยุดล่าสุดที่บิน — บินมานานที่สุดอยู่คิวแรก · บินล่าสุดอยู่คิวสุดท้าย · ไม่เคยบินวันหยุด = อยู่หน้าสุด (เฉพาะที่ติ๊ก) ·
              วันล่าสุดคิดจากข้อมูลไฟล์ "นจบ." (ชีตวันหยุด) รวมกับเที่ยวจริงในวันหยุด/เสาร์-อาทิตย์ในระบบตั้งแต่ ${thaiShort(HOLIDAY_QUEUE_START)} ${Number(HOLIDAY_QUEUE_START.slice(0, 4)) + 543} (ไม่นับ ST)`}</p>
         <div class="qcols">${col("IPP", "IP / P")}${col("CP", "CP")}</div>`;
