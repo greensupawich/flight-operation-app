@@ -201,8 +201,9 @@ function fillPanel(ws, aircraft, defMap, chkMap, stLabel) {
       const A = ws.getCell(rr, 1), B = ws.getCell(rr, 2), D = ws.getCell(rr, 4), E = ws.getCell(rr, 5);
       A.value = k === 0 ? tail3(b.a.tail_number) : k === 1 ? st : null;
       B.value = lines[k] || null;
-      D.value = b.chks[k] ? clean(b.chks[k].name) : null;
-      E.value = b.chks[k] ? clean(b.chks[k].due_text) : null;
+      // ช่องที่ไม่มีข้อมูลต้องว่างจริง (null) — ถ้าเขียน "" Excel ถือว่ามีข้อมูล ข้อความยาวช่องข้างๆ (เช่น HANGAR QUEEN) จะล้นมาแสดงไม่ได้
+      D.value = (b.chks[k] && clean(b.chks[k].name)) || null;
+      E.value = (b.chks[k] && clean(b.chks[k].due_text)) || null;
       const top = rr === first ? MED : undefined, bottom = rr === last ? MED : undefined;
       restyle(A, { fill: fill ? { type: "pattern", pattern: "solid", fgColor: { argb: fill } } : undefined,
                    alignment: { horizontal: "center", vertical: "middle" },
