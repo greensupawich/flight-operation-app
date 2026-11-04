@@ -18,7 +18,9 @@
 
   main .wrap{max-width:1500px}
   .q-head{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:6px 0 12px}
-  .q-future{display:inline-flex;align-items:center;gap:6px;margin:0 0 0 auto;font-size:13px;font-weight:500;cursor:pointer}
+  .q-h{display:flex;align-items:center;flex-wrap:wrap;gap:6px 14px}
+  .q-future{display:inline-flex;align-items:center;gap:6px;font-family:"IBM Plex Sans Thai",sans-serif;font-size:13px;font-weight:500;
+            cursor:pointer;color:var(--muted);border:1px solid var(--line);border-radius:7px;padding:3px 9px;background:var(--surface-2)}
   .q-future input{width:auto;margin:0}
   .q-title{font-family:"Bai Jamjuree",sans-serif;font-weight:700;font-size:20px;min-width:170px;text-align:center}
   .legend{display:flex;flex-wrap:wrap;gap:6px 14px;align-items:center;font-size:12px;color:var(--muted);margin-bottom:10px}
@@ -163,8 +165,6 @@
       <div class="q-title" id="title">—</div>
       <button class="btn sm" id="next">→</button>
       <button class="btn sm ghost" id="thisMonth">เดือนนี้</button>
-      <label class="q-future" title="ติ๊ก = นับเที่ยวที่จัดล่วงหน้า (หลังวันนี้) ด้วย · ไม่ติ๊ก = นับถึงวันนี้เท่านั้น">
-        <input type="checkbox" id="countFuture"> นับเที่ยวที่จัดล่วงหน้า</label>
     </div>
 
     <div class="legend" id="legend"></div>
@@ -251,7 +251,12 @@
     let prevRef = null, ranksPrev = null, needRef = new Set();   // คิวอ้างอิงที่นับต่อจากเดือนก่อน · needRef = กลุ่มที่ยังมีคนบิน 0 เที่ยว
     let holTarget = null, holData = null, holRanks = null;      // คิววันหยุด
     // นับเที่ยวที่จัดล่วงหน้าไหม (ผู้ใช้ขอ 4 พ.ย. 69) · จำค่าไว้ในเบราว์เซอร์ของแต่ละคน · ค่าเริ่มต้น = ไม่นับ (นับถึงวันนี้)
-    const futureBox = document.getElementById("countFuture");
+    //  ช่องติ๊กอยู่ต่อท้ายหัวข้อ "คิวบิน · วันที่" — renderQueuePanel ย้าย element เดิมมาใส่ทุกครั้งที่วาด (ค่าไม่หาย)
+    const futureLabel = document.createElement("label");
+    futureLabel.className = "q-future";
+    futureLabel.title = "ติ๊ก = นับเที่ยวที่จัดล่วงหน้า (หลังวันนี้) ด้วย · ไม่ติ๊ก = นับถึงวันนี้เท่านั้น";
+    futureLabel.innerHTML = `<input type="checkbox" id="countFuture"> นับเที่ยวที่จัดล่วงหน้า`;
+    const futureBox = futureLabel.querySelector("input");
     try { futureBox.checked = localStorage.getItem("fo.queue.countFuture") === "1"; } catch {}
     const countUntil = () => futureBox.checked ? null : todayStr;
     futureBox.addEventListener("change", () => {
@@ -529,9 +534,10 @@
       box.hidden = false;
       if (!ranks) {
         const [ty, tm] = target.split("-").map(Number);
-        box.innerHTML = `<h3>คิวบิน · ${thaiLong(target)}</h3>
+        box.innerHTML = `<h3 class="q-h">คิวบิน · ${thaiLong(target)}</h3>
           <p class="rule" style="margin:0">ลำดับคิวจะแสดงเมื่อเปิดเดือน ${TH_MONTH[tm - 1]} ${ty + 543} <button class="btn sm ghost" id="goTarget">ไปเดือนนั้น</button></p>`;
         document.getElementById("goTarget").addEventListener("click", () => go(new Date(ty, tm - 1, 1)));
+        box.querySelector(".q-h").append(futureLabel);
         return;
       }
       const byId = new Map(data.crew.map(c => [c.id, c]));
@@ -552,10 +558,11 @@
               <span class="meta">บิน ${r.flights} · ล่าสุด ${r.last ? thaiShort(r.last) : "—"}</span></li>`;
           }).join("") || `<li class="muted">ไม่มีผู้ที่นับคิวได้</li>`}</ol></div>`;
       };
-      box.innerHTML = `<h3>คิวบิน · ${thaiLong(target)}</h3>
+      box.innerHTML = `<h3 class="q-h">คิวบิน · ${thaiLong(target)}</h3>
         <p class="rule">${dates.includes(target) ? "" : `คิดจากข้อมูลเดือน ${TH_MONTH[Number(target.slice(5, 7)) - 1]} ${Number(target.slice(0, 4)) + 543} · `}บินจริงน้อยสุดก่อน (ไม่นับ ST และเที่ยวที่บินในวันหยุด ในเดือนนั้น · ${futureBox.checked ? "รวมเที่ยวที่จัดล่วงหน้า" : "นับถึงวันนี้ ไม่นับเที่ยวที่จัดล่วงหน้า"}) → บินล่าสุดนานกว่าก่อน → ชื่ออยู่บนก่อน · ติ๊กหน้าชื่อเพื่อนับคิว</p>
         ${ranksPrev ? `<p class="rule" style="margin-top:-6px">คอลัมน์ <b>อ้างอิง</b> = นับเที่ยวต่อจากเดือน ${prevRef.label} (เดือนก่อน + เดือนนี้ก่อนวันจัดคิว) ไว้ประกอบการจัดลำดับ · แสดงจนกว่าทุกคนในกลุ่มจะบินครบ 1 ครั้งในเดือนนี้</p>` : ""}
         <div class="qcols${ranksPrev ? (needRef.size === 2 ? " with-ref" : " with-ref3") : ""}">${col("IPP", "IP / P")}${ranksPrev && needRef.has("IPP") ? col("IPP", `IP / P · อ้างอิง ${prevRef.label}`, ranksPrev, true) : ""}${col("CP", "CP")}${ranksPrev && needRef.has("CP") ? col("CP", `CP · อ้างอิง ${prevRef.label}`, ranksPrev, true) : ""}</div>`;
+      box.querySelector(".q-h").append(futureLabel);
     }
 
     // ---------- คิววันหยุด ----------
