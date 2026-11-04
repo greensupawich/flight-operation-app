@@ -439,6 +439,7 @@
             itemsFor: (id, d) => cellItems(id, d, qMaps).items.filter(it => !it.cancelled),   // ยกเลิกไม่นับคิว
             isUnavailable: (id, d) => qMaps.offMap.has(`${id}|${d}`),
             historyStart: addDays(target, -120),
+            until: todayStr,                                  // นับถึงวันนี้ · เที่ยวที่จัดล่วงหน้าไม่นับ
           })
         : null;
       // คิวอ้างอิง: นับเที่ยวตั้งแต่ต้นเดือนก่อนจนถึงวันก่อนวันจัดคิว (เหมือนไม่ได้เริ่มนับใหม่ต้นเดือน)
@@ -451,6 +452,7 @@
             itemsFor: (id, d) => cellItems(id, d, qMaps).items.filter(it => !it.cancelled),
             isUnavailable: (id, d) => qMaps.offMap.has(`${id}|${d}`),
             historyStart: addDays(target, -120),
+            until: todayStr,                                  // นับถึงวันนี้ · เที่ยวที่จัดล่วงหน้าไม่นับ
           })
         : null;
 
@@ -539,7 +541,7 @@
           }).join("") || `<li class="muted">ไม่มีผู้ที่นับคิวได้</li>`}</ol></div>`;
       };
       box.innerHTML = `<h3>คิวบิน · ${thaiLong(target)}</h3>
-        <p class="rule">${dates.includes(target) ? "" : `คิดจากข้อมูลเดือน ${TH_MONTH[Number(target.slice(5, 7)) - 1]} ${Number(target.slice(0, 4)) + 543} · `}บินจริงน้อยสุดก่อน (ไม่นับ ST และเที่ยวที่บินในวันหยุด ในเดือนนั้น) → บินล่าสุดนานกว่าก่อน → ชื่ออยู่บนก่อน · ติ๊กหน้าชื่อเพื่อนับคิว</p>
+        <p class="rule">${dates.includes(target) ? "" : `คิดจากข้อมูลเดือน ${TH_MONTH[Number(target.slice(5, 7)) - 1]} ${Number(target.slice(0, 4)) + 543} · `}บินจริงน้อยสุดก่อน (ไม่นับ ST และเที่ยวที่บินในวันหยุด ในเดือนนั้น · นับถึงวันนี้ ไม่นับเที่ยวที่จัดล่วงหน้า) → บินล่าสุดนานกว่าก่อน → ชื่ออยู่บนก่อน · ติ๊กหน้าชื่อเพื่อนับคิว</p>
         ${ranksPrev ? `<p class="rule" style="margin-top:-6px">คอลัมน์ <b>อ้างอิง</b> = นับเที่ยวต่อจากเดือน ${prevRef.label} (เดือนก่อน + เดือนนี้ก่อนวันจัดคิว) ไว้ประกอบการจัดลำดับ · แสดงจนกว่าทุกคนในกลุ่มจะบินครบ 1 ครั้งในเดือนนี้</p>` : ""}
         <div class="qcols${ranksPrev ? (needRef.size === 2 ? " with-ref" : " with-ref3") : ""}">${col("IPP", "IP / P")}${ranksPrev && needRef.has("IPP") ? col("IPP", `IP / P · อ้างอิง ${prevRef.label}`, ranksPrev, true) : ""}${col("CP", "CP")}${ranksPrev && needRef.has("CP") ? col("CP", `CP · อ้างอิง ${prevRef.label}`, ranksPrev, true) : ""}</div>`;
     }
@@ -580,6 +582,7 @@
         isUnavailable: (id) => off.has(id),
         baselineDays: holData.base,
         baselineCount: holData.count,
+        until: todayStr,                                      // นับถึงวันนี้ · วันหยุดที่จัดล่วงหน้าไม่นับ
       });
     }
 
@@ -658,7 +661,7 @@
         <p class="rule">${holData.count
           ? `เรียงตามจำนวนครั้งที่บินวันหยุด — น้อยสุดอยู่คิวแรก · เท่ากัน → ชื่ออยู่บนก่อน (ไม่ใช้วันล่าสุด) · เฉพาะที่ติ๊ก ·
              แทคเลขหลังชื่อ = จำนวนครั้ง เทียบกับคนที่บินน้อยสุดในกลุ่ม (น้อยสุด = 0) · จำนวนครั้งตามตารางคิววันหยุด + เที่ยวจริงในวันหยุด/เสาร์-อาทิตย์หลังจากนั้น
-             (ไม่นับ ST · บินติดกันหลายวัน = 1 ครั้ง)`
+             (ไม่นับ ST · บินติดกันหลายวัน = 1 ครั้ง · นับถึงวันนี้ ไม่นับวันหยุดที่จัดล่วงหน้า)`
           : `เรียงตามวันหยุดล่าสุดที่บิน — บินมานานที่สุดอยู่คิวแรก · บินล่าสุดอยู่คิวสุดท้าย · ไม่เคยบินวันหยุด = อยู่หน้าสุด (เฉพาะที่ติ๊ก) ·
              วันล่าสุดคิดจากข้อมูลไฟล์ "นจบ." (ชีตวันหยุด) รวมกับเที่ยวจริงในวันหยุด/เสาร์-อาทิตย์ในระบบตั้งแต่ ${thaiShort(HOLIDAY_QUEUE_START)} ${Number(HOLIDAY_QUEUE_START.slice(0, 4)) + 543} (ไม่นับ ST)`}</p>
         <div class="qcols">${col("IPP", "IP / P")}${col("CP", "CP")}</div>`;
