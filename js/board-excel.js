@@ -212,7 +212,10 @@ function fillPanel(ws, aircraft, defMap, chkMap, stLabel) {
                    alignment: { horizontal: "left", vertical: "middle", shrinkToFit: true },
                    border: { left: MED, top, bottom } });
       restyle(ws.getCell(rr, 3), { border: { right: MED, top, bottom } });
-      restyle(D, { border: { left: MED, top, bottom } });
+      // มีแค่ชื่อรายการ ไม่มีกำหนด (เช่น HANGAR QUEEN) → รวมช่อง D:E ให้ข้อความแสดงเต็ม
+      const wide = !!D.value && !E.value;
+      if (wide) ws.mergeCells(rr, 4, rr, 5);
+      restyle(D, { border: { left: MED, top, bottom, ...(wide ? { right: MED } : {}) } });
       restyle(E, { border: { right: MED, top, bottom } });
     }
     r = last + 1;
