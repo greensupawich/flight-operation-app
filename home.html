@@ -362,18 +362,20 @@
       document.getElementById("sub").appendChild(b);
     }
 
-    let lastData = null;
-    let histInfo = null;          // ข้อมูลประวัติของวันที่ย้อนหลัง (boardAsOf) · null = วันนี้/อนาคต
+    let lastData = null;          // ข้อมูลกระดานที่แสดงอยู่ — ใช้ตอน Export Excel
+    // แผงสถานภาพ บ. ของกระดานวันที่ D = สถานภาพ ณ วันก่อนหน้า (D−1) — กระดานจัดทำล่วงหน้าจากสถานภาพเมื่อวาน
+    let histInfo = null;          // ประวัติ ณ วัน D−1 (boardAsOf) · null = D−1 คือวันนี้/อนาคต → ข้อมูลปัจจุบัน
+    let acDay = null;             // วันที่ของสถานภาพที่แสดง (Date)
     function histNote() {
-      if (!histInfo) return "";
-      const all = aircraftCount();
-      if (histInfo.missing && histInfo.missing >= all) return `<div class="t4 warn">ไม่มีประวัติสถานภาพของวันนี้ — แสดงข้อมูลปัจจุบัน</div>`;
-      const parts = ["สถานภาพ ณ วันนั้น (ประวัติ)"];
+      const lb = `สถานภาพ ณ ${shortTH(acDay)}`;
+      if (!histInfo) return `<div class="t4">${lb} (ปัจจุบัน)</div>`;
+      if (histInfo.missing && histInfo.missing >= histInfo.aircraft.length)
+        return `<div class="t4 warn">ไม่มีประวัติสถานภาพ ณ ${shortTH(acDay)} — แสดงข้อมูลปัจจุบัน</div>`;
+      const parts = [lb];
       if (histInfo.legacy) parts.push("ข้อขัดข้อง/เช็คเป็นข้อมูลปัจจุบัน");
       if (histInfo.missing) parts.push(`${histInfo.missing} เครื่องไม่มีประวัติ แสดงข้อมูลปัจจุบัน`);
       return `<div class="t4">${parts.join(" · ")}</div>`;
     }
-    const aircraftCount = () => histInfo?.aircraft.length || 0;          // ข้อมูลกระดานที่แสดงอยู่ — ใช้ตอน Export Excel
 
     // ผู้วางแผน: คลิกช่องบนการ์ดเพื่อแก้ทีละช่อง (บันทึกลงภารกิจตรง ๆ) — js/sheet-edit.js
     if (planner) {
@@ -389,11 +391,13 @@
         loadMissionsByDate(date), loadAircraft(), loadDefects(), loadChecks(),
         loadDayNote(date), loadDayNote(nextDate)
       ]);
-      // วันที่ผ่านมาแล้ว → แผงสถานภาพ บ. ใช้ประวัติของวันนั้น (migration_54) · วันนี้/อนาคต → ข้อมูลปัจจุบัน
+      // แผงสถานภาพ บ. = สถานภาพ ณ วันก่อนหน้า (เช่น กระดานวันที่ 4 → สถานภาพวันที่ 3) จากประวัติ (migration_54)
+      //  วันก่อนหน้าเป็นวันนี้/อนาคต (= กระดานพรุ่งนี้ขึ้นไป) → ข้อมูลปัจจุบัน
       let aircraft = aircraftNow, defMap = defNow, chkMap = chkNow;
+      acDay = new Date(view.getFullYear(), view.getMonth(), view.getDate() - 1);
       histInfo = null;
-      if (date < ymd(new Date())) {
-        histInfo = await boardAsOf(date, aircraftNow, defNow, chkNow);
+      if (ymd(acDay) < ymd(new Date())) {
+        histInfo = await boardAsOf(ymd(acDay), aircraftNow, defNow, chkNow);
         ({ aircraft, defMap, chkMap } = histInfo);
       }
       // ช่อง STBY ล่างแผงสถานภาพ = เฉพาะชนิด "stby" อันสุดท้าย (สร้างล่าสุด) · STBY เดโชชัย / STBY (ภารกิจ) วางเป็นการ์ดเหมือนภารกิจปกติ
