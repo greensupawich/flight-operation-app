@@ -1,6 +1,7 @@
 // =====================================================================
 //  duty-ui.js — แท็บ ค้างคืน / เดโชชัย / STBY เดโชชัย / RTAF (ติดตั้งในหน้าคิวบิน)
-//  mountDutyTabs({ host, mainEl, mainLabel, planner, loadCrew })
+//  mountDutyTabs({ host, mainEl, mainLabel, planner, loadCrew, exportSheets, extraTabs })
+//   • extraTabs = [{ key, label, el, after, onShow }] แท็บที่หน้าติดตั้งวาดเอง (เช่น 🏖 วันหยุด ในหน้าคิวบิน) · after = วางต่อจากแท็บ key นั้น
 //   • host   = ที่วางแถบแท็บ + เนื้อหาแท็บใหม่ (ใต้หัวหน้า)
 //   • mainEl = เนื้อหาเดิมของหน้า (แท็บแรก) — ซ่อนเมื่อเปิดแท็บอื่น
 //  ข้อมูล: js/duty.js (migration_34) · แท็บจำใน URL hash เช่น queue.html#overnight
@@ -50,10 +51,10 @@ const CSS = `
   table.dgrid td.dg-note{min-width:150px;padding:0 4px}
   table.dgrid td.dg-note input{width:100%;font-size:12px;padding:3px 5px;margin:0}`;
 
-const HTML = (mainLabel) => `
+const HTML = (mainLabel, tabs) => `
   <nav class="dtabs" id="dtabs">
     <a href="#" data-tab="">${mainLabel}</a>
-    ${TABS.map(([k, l]) => `<a href="#${k}" data-tab="${k}">${l}</a>`).join("")}
+    ${tabs.map(([k, l]) => `<a href="#${k}" data-tab="${k}">${l}</a>`).join("")}
     <button class="btn sm ghost" id="dtExport" style="margin-inline-start:auto;align-self:center;white-space:nowrap"
       title="ดาวน์โหลดตารางทุกแท็บเป็นไฟล์ Excel (แยกชีต) — ไม่รวมลำดับคิว">⬇️ Export Excel</button>
   </nav>
@@ -120,11 +121,17 @@ const HEAD = (v, extra = {}) => ({ v, bg: "#F6F8FB", fg: "#5B6675", bold: true, 
 const nameCell = (c) => { const q = QUAL_COLORS[c.position]; return { v: c.full_name, bg: q?.bg, fg: q?.fg, bold: true, align: "left" }; };
 
 //  exportSheets: async () => ({ name: "ชื่อไฟล์", sheets: [sheet] }) — ชีตของแท็บแรก (จากหน้าที่ติดตั้ง · รูปแบบดู buildWorkbook)
-export function mountDutyTabs({ host, mainEl, mainLabel = "หน้าหลัก", planner, loadCrew, exportSheets }) {
+export function mountDutyTabs({ host, mainEl, mainLabel = "หน้าหลัก", planner, loadCrew, exportSheets, extraTabs = [] }) {
   if (!document.getElementById("duty-ui-css")) {
     const st = document.createElement("style"); st.id = "duty-ui-css"; st.textContent = CSS; document.head.appendChild(st);
   }
-  host.innerHTML = HTML(mainLabel);
+  const tabs = [...TABS];
+  extraTabs.forEach((x) => {
+    const at = tabs.findIndex(([k]) => k === x.after);
+    tabs.splice(at < 0 ? tabs.length : at + 1, 0, [x.key, x.label]);
+  });
+  host.innerHTML = HTML(mainLabel, tabs);
+  extraTabs.forEach((x) => { x.el.hidden = true; host.appendChild(x.el); x.el.addEventListener("keydown", (e) => e.stopPropagation()); });
   const $ = (id) => host.querySelector("#" + id);
   // กันคีย์บอร์ดในแท็บใหม่ไม่ให้ไปถึงตัวดักคีย์ของหน้าเดิม (เช่น Delete ลบช่องในตารางคิวที่เลือกค้างไว้)
   ["dt-duty", "dt-rtaf"].forEach((id) => $(id).addEventListener("keydown", (e) => e.stopPropagation()));
@@ -134,11 +141,12 @@ export function mountDutyTabs({ host, mainEl, mainLabel = "หน้าหลั
 
   function showTab() {
     const t = location.hash.slice(1);
-    const tab = TABS.some(([k]) => k === t) ? t : "";
+    const tab = tabs.some(([k]) => k === t) ? t : "";
     host.querySelectorAll("#dtabs a").forEach((a) => a.classList.toggle("on", a.dataset.tab === tab));
     mainEl.hidden = tab !== "";
     $("dt-duty").hidden = !(tab in DUTY_CATS);
     $("dt-rtaf").hidden = tab !== "rtaf";
+    extraTabs.forEach((x) => { x.el.hidden = tab !== x.key; if (tab === x.key) x.onShow?.(); });
     if (tab in DUTY_CATS) openDuty(tab);
     if (tab === "rtaf") openRtaf();
   }

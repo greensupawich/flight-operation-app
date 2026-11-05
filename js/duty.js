@@ -18,25 +18,31 @@ const friendly = (error) => error && /does not exist|schema cache|Could not find
   ? { ...error, message: NEED_MIGRATION } : error;
 
 // ---------- บันทึกรายคน ----------
-//  คืน { days: Map(crewId -> [YYYY-MM-DD เรียงเก่า→ใหม่]), notes: Map(crewId -> text), error }
+//  คืน { days: Map(crewId -> [YYYY-MM-DD เรียงเก่า→ใหม่]), notes: Map(crewId -> text), manual: Map(crewId -> Set(date)), error }
+//  manual = แถวที่ผู้วางแผนเพิ่มเองในเว็บ (created_by มีค่า) · แถวนำเข้าจากไฟล์ "นจบ." created_by = null
 export async function loadDuty(category) {
-  const days = new Map(), notes = new Map();
+  const days = new Map(), notes = new Map(), manual = new Map();
   const PAGE = 1000;
   for (let from = 0; ; from += PAGE) {
     const { data, error } = await supabase.from("crew_duty_log")
-      .select("crew_member_id, duty_date").eq("category", category)
+      .select("crew_member_id, duty_date, created_by").eq("category", category)
       .order("duty_date").range(from, from + PAGE - 1);
-    if (error) return { days, notes, error: friendly(error) };
+    if (error) return { days, notes, manual, error: friendly(error) };
     (data || []).forEach((r) => {
+      const d = String(r.duty_date).slice(0, 10);
       if (!days.has(r.crew_member_id)) days.set(r.crew_member_id, []);
-      days.get(r.crew_member_id).push(String(r.duty_date).slice(0, 10));
+      days.get(r.crew_member_id).push(d);
+      if (r.created_by) {
+        if (!manual.has(r.crew_member_id)) manual.set(r.crew_member_id, new Set());
+        manual.get(r.crew_member_id).add(d);
+      }
     });
     if (!data || data.length < PAGE) break;
   }
   const { data: nd, error: ne } = await supabase.from("crew_duty_note")
     .select("crew_member_id, note").eq("category", category);
   if (!ne) (nd || []).forEach((r) => notes.set(r.crew_member_id, r.note || ""));
-  return { days, notes, error: null };
+  return { days, notes, manual, error: null };
 }
 
 // ---------- คิววันหยุด: จำนวนครั้งตั้งต้น (migration_41) ----------
