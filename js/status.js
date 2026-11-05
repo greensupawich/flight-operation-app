@@ -16,6 +16,25 @@ export const AC_STATUS_COLORS = {
   NMC: { bg: "#C0392B", fg: "#ffffff" },   // แดง
 };
 
+// NMCS (Not Mission Capable – Supply) — ฐานข้อมูลเก็บเป็น NMC + หมายเหตุขึ้นต้น "สถานภาพเดิม: NMCS" (แบบเดียวกับ status-import / หน้าหลัก)
+//  ตัวเลือกในหน้าเว็บ: FMC / PMC / NMC / NMCS · หมายเหตุที่ผู้ใช้กรอกต่อท้ายด้วย " · "
+export const AC_STATUS_UI = ["FMC", "PMC", "NMC", "NMCS"];
+export const AC_STATUS_UI_LABEL = { ...AC_STATUS_LABEL, NMCS: "NMCS · ไม่พร้อมบิน (รอพัสดุ)" };
+const NMCS_MARK = /^\s*สถานภาพเดิม:\s*NMCS\s*(?:·\s*)?/;
+// แยกค่าจากฐานข้อมูล → { st: "FMC"|"PMC"|"NMC"|"NMCS", note: หมายเหตุที่ผู้ใช้กรอก }
+export function statusParts(status, note) {
+  const n = String(note || "");
+  if (status === "NMC" && NMCS_MARK.test(n)) return { st: "NMCS", note: n.replace(NMCS_MARK, "").trim() };
+  if (status === "NMC" && /^\s*NMCS\b/.test(n)) return { st: "NMCS", note: n.replace(/^\s*NMCS\b\s*(?:·\s*)?/, "").trim() };
+  return { st: status, note: n.trim() };
+}
+// ค่าที่เลือกในหน้าเว็บ → { status, note } สำหรับบันทึก
+export function statusFields(st, note) {
+  const n = String(note || "").trim();
+  if (st === "NMCS") return { status: "NMC", note: n ? `สถานภาพเดิม: NMCS · ${n}` : "สถานภาพเดิม: NMCS" };
+  return { status: st, note: n || null };
+}
+
 export async function loadAircraft() {
   const { data, error } = await supabase
     .from("aircraft")

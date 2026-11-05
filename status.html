@@ -92,7 +92,7 @@
   import { renderTopbar } from "./js/ui.js";
   import { loadAircraft, setAircraftStatus, setAircraftStatusOn, loadRecentDiscrepancies, boardAsOf,
            loadDefects, saveDefects, loadChecks, saveChecks,
-           AC_STATUS, AC_STATUS_LABEL, AC_STATUS_COLORS } from "./js/status.js";
+           AC_STATUS, AC_STATUS_LABEL, AC_STATUS_COLORS, AC_STATUS_UI, AC_STATUS_UI_LABEL, statusParts, statusFields } from "./js/status.js";
 
   const profile = await requireAuth();
   if (profile) {
@@ -109,8 +109,9 @@
     if (planner) document.getElementById("importBtn").hidden = false;
     let discMap = new Map(), defMap = new Map(), chkMap = new Map();
 
-    const badge = (st) => { const c = AC_STATUS_COLORS[st] || AC_STATUS_COLORS.FMC;
-      return `<span class="ac-badge" style="background:${c.bg};color:${c.fg}">${st}</span>`; };
+    // ป้ายสถานภาพ: สีตามค่าในฐานข้อมูล (NMCS = สีแดงของ NMC) · ข้อความแสดง NMCS ถ้ามี
+    const badge = (a) => { const c = AC_STATUS_COLORS[a.status] || AC_STATUS_COLORS.FMC;
+      return `<span class="ac-badge" style="background:${c.bg};color:${c.fg}">${statusParts(a.status, a.status_note).st}</span>`; };
 
     function flightsHTML(flights) {
       if (!flights || !flights.length) return `<div class="none">✓ ไม่มีข้อขัดข้องหลังบิน</div>`;
@@ -122,16 +123,17 @@
     }
 
     function card(a) {
+      const sp = statusParts(a.status, a.status_note);
       const defs = defMap.get(a.id) || [];
       const chks = chkMap.get(a.id) || [];
       return `
       <div class="ac s-${a.status}" data-id="${a.id}">
         <div class="ac-head">
           <div class="ac-id"><div class="type">${esc(a.type || "-")}</div><div class="tail">${esc(a.tail_number)}</div></div>
-          ${badge(a.status)}
+          ${badge(a)}
         </div>
         <div class="ac-body">
-          ${a.status_note ? `<div class="note"><b>หมายเหตุ:</b> ${esc(a.status_note)}</div>` : ""}
+          ${sp.note ? `<div class="note"><b>หมายเหตุ:</b> ${esc(sp.note)}</div>` : ""}
           ${a.status_updated_at ? `<div class="updated">อัปเดตสถานภาพ: ${thDate(a.status_updated_at)}</div>` : ""}
 
           <h4>รายการข้อขัดข้อง</h4>
@@ -153,9 +155,9 @@
               : "บันทึกเป็นข้อมูลของวันนั้นเท่านั้น ไม่กระทบข้อมูลปัจจุบัน"}</div>` : ""}
           <div class="ed-lbl">สถานภาพ</div>
           <div class="ed-row">
-            <select data-f-status style="flex:1">${AC_STATUS.map(s=>`<option value="${s}" ${s===a.status?"selected":""}>${AC_STATUS_LABEL[s]}</option>`).join("")}</select>
+            <select data-f-status style="flex:1">${AC_STATUS_UI.map(s=>`<option value="${s}" ${s===sp.st?"selected":""}>${AC_STATUS_UI_LABEL[s]}</option>`).join("")}</select>
           </div>
-          <input data-f-note value="${esc(a.status_note || "")}" placeholder="หมายเหตุสถานภาพ (ถ้ามี)">
+          <input data-f-note value="${esc(sp.note)}" placeholder="หมายเหตุสถานภาพ (ถ้ามี)">
           ${!(curIsPast && histLegacy) ? `
           <div class="ed-lbl">รายการข้อขัดข้อง</div>
           <div data-defs></div>
@@ -190,8 +192,7 @@
       el.addEventListener("click", (e) => { if (e.target.matches("[data-rm]")) e.target.closest(".ed-row").remove(); });
       el.querySelector("[data-save]").addEventListener("click", async (e) => {
         const b = e.target; b.disabled = true; b.textContent = "…";
-        const status = el.querySelector("[data-f-status]").value;
-        const note = el.querySelector("[data-f-note]").value;
+        const { status, note } = statusFields(el.querySelector("[data-f-status]").value, el.querySelector("[data-f-note]").value);
         let err;
         const defs = [...el.querySelectorAll("[data-def]")].map(i => i.value.trim()).filter(Boolean);
         const chks = [...el.querySelectorAll("[data-checks] .ed-row")].map(r => ({
@@ -220,13 +221,14 @@
       discMap = disc;
       const cnt = { FMC:0, PMC:0, NMC:0 };
       list.forEach(a => cnt[a.status] = (cnt[a.status]||0)+1);
+      const nmcsN = list.filter(a => statusParts(a.status, a.status_note).st === "NMCS").length;
       const bar = document.getElementById("histbar");
       if (!curIsPast) bar.hidden = true;
       else { bar.hidden = false; bar.textContent = `กำลังดู/แก้สถานภาพย้อนหลัง ณ ${thDate(viewDate)} · ${planner ? "แก้ไขได้" : "อ่านอย่างเดียว"}`
         + (histMissing ? ` · ${histMissing >= list.length ? "ไม่มีประวัติของวันนี้" : `${histMissing} เครื่องไม่มีประวัติ`} — แสดงข้อมูลปัจจุบัน` : "")
         + (histLegacy ? " · ข้อขัดข้อง/เช็คเป็นข้อมูลปัจจุบัน" : ""); }
       document.getElementById("sub").textContent = list.length
-        ? `${list.length} เครื่อง · FMC ${cnt.FMC} · PMC ${cnt.PMC} · NMC ${cnt.NMC}` : "ยังไม่มีเครื่องในระบบ";
+        ? `${list.length} เครื่อง · FMC ${cnt.FMC} · PMC ${cnt.PMC} · NMC ${cnt.NMC}${nmcsN ? ` (NMCS ${nmcsN})` : ""}` : "ยังไม่มีเครื่องในระบบ";
       const grid = document.getElementById("grid");
       grid.innerHTML = list.length ? list.map(card).join("") : `<div class="empty" style="grid-column:1/-1">ยังไม่มีเครื่องในระบบ</div>`;
       grid.querySelectorAll(".ac").forEach(wireCard);
