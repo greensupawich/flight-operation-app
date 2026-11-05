@@ -33,7 +33,7 @@ const CSS = `
   .rtaf td{padding:4px 5px}
   .rtaf .cs{width:110px} .rtaf .dt{width:150px}
   .msgline{font-size:12.5px;min-height:16px;margin-top:6px}
-  .gridwrap{max-height:72vh;overflow:auto}
+  .gridwrap{overflow-x:auto}                     /* แสดงทุกแถวเต็มหน้า (ผู้ใช้ขอ 5 พ.ย. 69) — เลื่อนแนวนอนได้อย่างเดียว */
   table.dgrid{border-collapse:separate;border-spacing:0;font-size:12px;min-width:100%}
   table.dgrid th,table.dgrid td{border-right:1px solid var(--line);border-bottom:1px solid var(--line);padding:0;
        text-align:center;white-space:nowrap;height:30px}

@@ -55,7 +55,7 @@ export async function setAircraftStatus(id, status, note) {
 export async function setAircraftStatusOn(id, dateStr, status, note, defs, chks) {
   const row = { aircraft_id: id, log_date: dateStr, status,
                 note: (note || "").trim() || null, updated_at: new Date().toISOString() };
-  if (defs) row.defects = defs.map((t) => String(t).trim()).filter(Boolean);
+  if (defs) row.defects = defs.map(cleanDefect).filter(Boolean);
   if (chks) row.checks = chks.map((c) => ({ name: (c.name || "").trim(), due_text: (c.due_text || "").trim() || null })).filter((c) => c.name);
   const { error } = await supabase.from("aircraft_status_history").upsert(row, { onConflict: "aircraft_id,log_date" });
   return error;
@@ -127,7 +127,7 @@ export async function boardAsOf(dateStr, aircraft, defMap, chkMap) {
   const list = aircraft.map((a) => {
     const h = board.get(a.id);
     if (!h || !h.log_date) { missing++; return a; }
-    if (h.defects) dm.set(a.id, h.defects.slice());
+    if (h.defects) dm.set(a.id, h.defects.map(cleanDefect).filter(Boolean));
     if (h.checks) cm.set(a.id, h.checks.map((c) => ({ name: c.name, due_text: c.due_text || "" })));
     return { ...a, status: h.status, status_note: h.note, status_updated_at: null, hist_date: h.log_date };
   });
@@ -135,19 +135,21 @@ export async function boardAsOf(dateStr, aircraft, defMap, chkMap) {
 }
 
 // ---------- รายการข้อขัดข้อง (รายการค้างของเครื่อง) ----------
+// ตัดเลขข้อที่พิมพ์มากับข้อความ ("1. จอ ADU" → "จอ ADU") — หน้าเว็บ/Excel ใส่เลขข้อให้เอง ไม่ให้ขึ้นซ้ำ "1. 1."
+export const cleanDefect = (t) => String(t ?? "").replace(/^\s*\(?\d{1,2}\s*[.)](?!\d)\s*/, "").trim();
 export async function loadDefects() {
   const { data, error } = await supabase.from("aircraft_defects")
     .select("aircraft_id,seq,description").order("aircraft_id").order("seq");
   const map = new Map();
   if (!error) (data || []).forEach(d => {
     if (!map.has(d.aircraft_id)) map.set(d.aircraft_id, []);
-    map.get(d.aircraft_id).push(d.description);
+    map.get(d.aircraft_id).push(cleanDefect(d.description));
   });
   return map;
 }
 export async function saveDefects(aircraftId, descriptions) {
   await supabase.from("aircraft_defects").delete().eq("aircraft_id", aircraftId);
-  const rows = (descriptions || []).map((t,i) => ({ aircraft_id: aircraftId, seq: i+1, description: t }))
+  const rows = (descriptions || []).map((t,i) => ({ aircraft_id: aircraftId, seq: i+1, description: cleanDefect(t) }))
     .filter(r => r.description);
   if (!rows.length) return null;
   const { error } = await supabase.from("aircraft_defects").insert(rows);
