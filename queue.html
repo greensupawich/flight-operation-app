@@ -199,7 +199,7 @@
 </main>
 
 <script type="module">
-  import { requireAuth, canPlan } from "./js/auth.js";
+  import { requireAuth, canPlan, isAdmin } from "./js/auth.js";
   import { renderTopbar } from "./js/ui.js";
   import { KINDS, KIND_COLORS, QUAL_COLORS, qualStyle, esc, isStby } from "./js/missions.js";
   import { loadQueueMonth, loadEntries, saveEntry, deleteEntry, monthRange, secondPoint, airfieldKey,
@@ -214,6 +214,9 @@
   if (profile) {
     renderTopbar(profile);
     const planner = canPlan(profile);
+    // จำนวนครั้งตั้งต้นคิววันหยุด (ช่องว่างข้างหน้า / แทคเลข) แก้ได้เฉพาะ admin (ผู้ใช้กำหนด 5 พ.ย. 69 · RLS migration_56)
+    //  ผู้วางแผนเพิ่ม/แก้วันที่ manual ได้ตามเดิม
+    const baseAdmin = isAdmin(profile);
     // แท็บ ค้างคืน / เดโชชัย / STBY เดโชชัย / RTAF (แท็บแรก = คิวบินเดิม)
     // แท็บ 🏖 วันหยุด = ใบรายชื่อคิววันหยุด (แบบตารางค้างคืน) — วาดในหน้านี้เพราะใช้ข้อมูลคิววันหยุด (renderHolSheet)
     const holSheetEl = document.createElement("section");
@@ -225,7 +228,7 @@
         <thead id="hsHead"></thead><tbody id="hsRows"><tr><td class="empty">กำลังโหลด…</td></tr></tbody></table></div>
       <div class="msgline" id="hsMsg"></div>
       <p class="muted" style="font-size:12px;line-height:1.6">ช่องสีเทา = จำนวนครั้งที่บินวันหยุด (นับแบบเดียวกับแทคเลขในคิววันหยุด · บินติดกันหลายวัน = 1 ช่อง) ·
-        ช่องเทาเปล่าข้างหน้า = จำนวนครั้งตั้งต้นตามตารางคิววันหยุด (ไม่มีวันที่)${planner ? " — กด − / + ที่คอลัมน์ ช่องว่าง เพื่อเพิ่ม/ลดช่องว่าง" : ""} ·
+        ช่องเทาเปล่าข้างหน้า = จำนวนครั้งตั้งต้นตามตารางคิววันหยุด (ไม่มีวันที่)${baseAdmin ? " — admin กด − / + ที่คอลัมน์ ช่องว่าง เพื่อเพิ่ม/ลดช่องว่าง" : ""} ·
         ช่องเทาวันที่แรก = วันบินวันหยุดล่าสุดตามข้อมูลตั้งต้นในฐานข้อมูล · ช่องเทามีวันที่ถัดไป = เที่ยวจริงในวันหยุด/เสาร์-อาทิตย์จากระบบ ·
         <span class="hs-legend-man">มุมแดง</span> = วันที่เพิ่มเอง (manual)${planner ? " — คลิกช่อง + เพื่อเพิ่มวันที่บิน · คลิกช่องมุมแดงเพื่อแก้/ลบ" : ""}</p>`;
     mountDutyTabs({ host: document.getElementById("dutyHost"), mainEl: document.getElementById("queueMain"),
@@ -640,8 +643,8 @@
     }
 
     // ---------- admin แก้แทคเลขคิววันหยุด: เลขใหม่ − เลขเดิม → บวก/ลบที่จำนวนครั้งตั้งต้น (crew_holiday_base) ----------
-    // แก้แทคเลข/จำนวนครั้งตั้งต้น: ผู้วางแผน (ผู้ใช้ขอ 5 พ.ย. 69 · ต้องรัน migration_55 — เดิม admin เท่านั้น)
-    const admin = planner;
+    // แก้แทคเลข/จำนวนครั้งตั้งต้น: admin เท่านั้น (baseAdmin)
+    const admin = baseAdmin;
     if (admin) document.getElementById("hpanel").addEventListener("click", (e) => {
       const tag = e.target.closest(".xtag.xed"); if (!tag || !holRanks || !holData?.count) return;
       const id = tag.dataset.id, r = holRanks.get(id); if (!r || r.tag == null) return;
@@ -728,7 +731,7 @@
         while (cells.length < ncol) cells.push(`<td class="dg-c"></td>`);
         const note = holData.notes.get(c.id) || "";
         return `<tr data-id="${c.id}"${r.inQueue ? "" : ' class="hs-out"'}><td class="dg-nm">${r.rank ? `<span class="hs-no">${r.rank}</span>` : ""}<span style="${qualStyle(c.position) || ""}">${esc(c.full_name)}</span>${r.inQueue ? "" : ` <span class="muted" title="ไม่ได้ติ๊กนับคิว">· ไม่นับคิว</span>`}</td>
-          <td class="dg-sum hs-base" title="ช่องเทาว่างข้างหน้า · ตั้งต้นรวม ${r.base} ครั้ง${b.last ? ` (ล่าสุด ${thS(b.last)})` : ""}">${planner ? `<button type="button" data-b="-1" ${blanks ? "" : "disabled"} aria-label="ลดช่องว่างข้างหน้า">−</button>` : ""}<b>${blanks}</b>${planner ? `<button type="button" data-b="1" aria-label="เพิ่มช่องว่างข้างหน้า">+</button>` : ""}</td>
+          <td class="dg-sum hs-base" title="ช่องเทาว่างข้างหน้า · ตั้งต้นรวม ${r.base} ครั้ง${b.last ? ` (ล่าสุด ${thS(b.last)})` : ""}">${baseAdmin ? `<button type="button" data-b="-1" ${blanks ? "" : "disabled"} aria-label="ลดช่องว่างข้างหน้า">−</button>` : ""}<b>${blanks}</b>${baseAdmin ? `<button type="button" data-b="1" aria-label="เพิ่มช่องว่างข้างหน้า">+</button>` : ""}</td>
           ${cells.join("")}
           <td class="dg-sum">${r.count}</td><td class="dg-sum">${r.tag ?? "-"}</td>
           <td class="dg-sum dg-last">${r.last ? thS(r.last) : ""}</td>
@@ -761,15 +764,15 @@
     if (planner) {
       const hsMsg = (t, ok) => { const el = document.getElementById("hsMsg"); el.style.color = ok ? "var(--good)" : "var(--crit)"; el.textContent = t; };
       holSheetEl.addEventListener("input", (e) => { if (e.target.id === "hsFind") renderHolSheet(); });
-      // − / + จำนวนครั้งตั้งต้น
+      // − / + จำนวนครั้งตั้งต้น (admin)
       holSheetEl.addEventListener("click", async (e) => {
-        const btn = e.target.closest("[data-b]"); if (!btn) return;
+        const btn = e.target.closest("[data-b]"); if (!btn || !baseAdmin) return;
         const id = btn.closest("tr").dataset.id, b = holData.count.get(id) || { count: 0, last: null };
         const next = b.count + Number(btn.dataset.b);
         if (next < (b.last ? 1 : 0)) return;                 // ลดได้แค่ช่องว่าง — ช่องวันล่าสุดคงไว้
         btn.disabled = true;
         const err = await saveHolidayBaseCount(id, next, b.last);
-        if (err) { btn.disabled = false; return hsMsg("บันทึกไม่สำเร็จ: " + err.message + (/row-level|policy/i.test(err.message) ? " — ต้องรัน migration_55" : ""), false); }
+        if (err) { btn.disabled = false; return hsMsg("บันทึกไม่สำเร็จ: " + err.message + (/row-level|policy/i.test(err.message) ? " — เฉพาะ admin" : ""), false); }
         holData.count.set(id, { ...b, count: next });
         hsMsg(`ช่องว่างข้างหน้า ${b.last ? next - 1 : next} ช่อง · ตั้งต้นรวม ${next} ครั้ง`, true);
         render();
@@ -799,7 +802,7 @@
           if (v) {
             const b = holData.count.get(id) || { last: null }, r = holRanks.get(id);
             const why = v > todayStr ? "เพิ่มได้ถึงวันนี้เท่านั้น"
-              : b.last && v <= b.last ? `วันที่นี้อยู่ในจำนวนตั้งต้นแล้ว (ตั้งต้นถึง ${thS(b.last)}) — ใช้ − / + ที่คอลัมน์ ช่องว่าง แทน`
+              : b.last && v <= b.last ? `วันที่นี้อยู่ในจำนวนตั้งต้นแล้ว (ตั้งต้นถึง ${thS(b.last)}) — ${baseAdmin ? "ใช้ − / + ที่คอลัมน์ ช่องว่าง แทน" : "ให้ admin ปรับจำนวนช่องว่างแทน"}`
               : (holData.base.get(id) || []).includes(v) || r.trips.some(t => t.includes(v)) ? `มีวันที่ ${thS(v)} อยู่แล้ว` : "";
             if (why) { hsMsg(why, false); return renderHolSheet(); }
           }
