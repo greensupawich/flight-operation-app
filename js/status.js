@@ -31,12 +31,14 @@ export async function setAircraftStatus(id, status, note) {
   return error;
 }
 
-// แก้สถานภาพย้อนหลัง: เขียนลงประวัติของวันนั้นโดยตรง (ไม่แตะสถานภาพปัจจุบัน)
-export async function setAircraftStatusOn(id, dateStr, status, note) {
-  const { error } = await supabase.from("aircraft_status_history")
-    .upsert({ aircraft_id: id, log_date: dateStr, status,
-              note: (note || "").trim() || null, updated_at: new Date().toISOString() },
-            { onConflict: "aircraft_id,log_date" });
+// แก้ย้อนหลัง: เขียนลงประวัติของวันนั้นโดยตรง (ไม่แตะข้อมูลปัจจุบัน)
+//  defs (ข้อความ[]) / chks ([{name,due_text}]) ใส่มาด้วย = บันทึกข้อขัดข้อง/เช็คของวันนั้น (migration_54) · ไม่ใส่ = แก้เฉพาะสถานภาพ
+export async function setAircraftStatusOn(id, dateStr, status, note, defs, chks) {
+  const row = { aircraft_id: id, log_date: dateStr, status,
+                note: (note || "").trim() || null, updated_at: new Date().toISOString() };
+  if (defs) row.defects = defs.map((t) => String(t).trim()).filter(Boolean);
+  if (chks) row.checks = chks.map((c) => ({ name: (c.name || "").trim(), due_text: (c.due_text || "").trim() || null })).filter((c) => c.name);
+  const { error } = await supabase.from("aircraft_status_history").upsert(row, { onConflict: "aircraft_id,log_date" });
   return error;
 }
 
@@ -78,6 +80,39 @@ export async function loadStatusOn(dateStr) {
   const map = new Map();
   (data || []).forEach((r) => map.set(r.aircraft_id, { status: r.status, note: r.note, log_date: r.log_date }));
   return map;
+}
+
+// ทั้งแผง (สถานภาพ + หมายเหตุ + ข้อขัดข้อง + เช็ค) ณ วันที่กำหนด — migration_54
+//  คืน Map(aircraftId -> { status, note, log_date, defects, checks }) · ยังไม่รัน migration_54 → null
+export async function loadBoardOn(dateStr) {
+  const { data, error } = await supabase.rpc("aircraft_board_on", { p_date: dateStr });
+  if (error) return null;
+  const map = new Map();
+  (data || []).forEach((r) => map.set(r.aircraft_id, r));
+  return map;
+}
+
+// แปลงข้อมูลปัจจุบัน → ข้อมูล "ณ วันนั้น" (ไม่แก้ของเดิม) สำหรับวันที่ย้อนหลัง
+//  เครื่องที่ไม่มีประวัติเลย (ก่อนเริ่มเก็บ) → คงข้อมูลปัจจุบัน และนับใน missing
+//  legacy = ยังไม่รัน migration_54 → ย้อนได้เฉพาะสถานภาพ (migration_18) ข้อขัดข้อง/เช็คเป็นของปัจจุบัน
+export async function boardAsOf(dateStr, aircraft, defMap, chkMap) {
+  let board = await loadBoardOn(dateStr), legacy = false;
+  if (!board) {
+    legacy = true;
+    const st = await loadStatusOn(dateStr);
+    board = new Map();
+    if (st) st.forEach((h, id) => board.set(id, { status: h.status, note: h.note, log_date: h.log_date, defects: null, checks: null }));
+  }
+  let missing = 0;
+  const dm = new Map(defMap), cm = new Map(chkMap);
+  const list = aircraft.map((a) => {
+    const h = board.get(a.id);
+    if (!h || !h.log_date) { missing++; return a; }
+    if (h.defects) dm.set(a.id, h.defects.slice());
+    if (h.checks) cm.set(a.id, h.checks.map((c) => ({ name: c.name, due_text: c.due_text || "" })));
+    return { ...a, status: h.status, status_note: h.note, status_updated_at: null, hist_date: h.log_date };
+  });
+  return { aircraft: list, defMap: dm, chkMap: cm, missing, legacy };
 }
 
 // ---------- รายการข้อขัดข้อง (รายการค้างของเครื่อง) ----------
