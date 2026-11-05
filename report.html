@@ -72,6 +72,8 @@
   @media(max-width:640px){ .result-grid{grid-template-columns:1fr} }
   .result-grid label{margin:0 0 5px}
   .result-grid .big{font-family:"Bai Jamjuree",sans-serif;font-weight:700;font-size:18px}
+  .result-grid .sum-ro{background:var(--surface-2);border-style:dashed;cursor:default;color:var(--ink)}
+  .result-grid .sum-ro:focus{outline:none;box-shadow:none}
   #resultSel.mcp{background:var(--good-soft);border-color:var(--good);color:var(--good);font-weight:700}
   #resultSel.bad{background:var(--crit-soft);border-color:var(--crit);color:var(--crit);font-weight:700}
   .plan-note{font-size:11.5px;color:var(--faint);margin-top:4px}
@@ -130,12 +132,13 @@
             <option value="CANCELLED">ยกเลิก</option>
           </select></div>
         <div><label for="totalInput">ชม.บินรวม</label>
-          <input id="totalInput" class="big" type="number" step="0.1" min="0" placeholder="0.0"></div>
+          <input id="totalInput" class="big sum-ro" type="text" readonly tabindex="-1" placeholder="0.0"
+                 title="คิดจากผลรวม ชม.รายขาด้านล่าง — กรอกที่ ชม.รายขา"></div>
         <div><label for="parkRet">จุดจอดขากลับ</label>
           <input id="parkRet" class="big" placeholder="เช่น N15" style="text-transform:uppercase">
           <div class="plan-note" id="parkPlan"></div></div>
       </div>
-      <p class="hint" id="totalHint" style="margin:10px 0 0">กรอก ชม.บินรวมได้เลย หรือกรอก ชม.รายขาด้านล่าง ระบบจะรวมให้</p>
+      <p class="hint" id="totalHint" style="margin:10px 0 0">ชม.บินรวม = ผลรวม ชม.รายขาด้านล่าง (กรอกที่ ชม.รายขา)</p>
     </div>
 
     <!-- ขาการบิน -->
@@ -319,8 +322,9 @@
     const fmt = (n) => (Math.round(n * 10) / 10).toFixed(1);
 
     const totalInput = document.getElementById("totalInput");
-    let manualTotal = "";                               // ยอดรวมที่กรอกเอง (คืนค่าเมื่อล้าง ชม.รายขา)
-    totalInput.addEventListener("input", () => { if (!totalInput.readOnly) manualTotal = totalInput.value; });
+    // ชม.บินรวม = ผลรวม ชม.รายขาเท่านั้น (ผู้ใช้ขอ 5 พ.ย. 69 — ไม่ให้กรอกเอง)
+    //  legacyTotal = รายงานเก่าที่บันทึกยอดรวมไว้โดยไม่มี ชม.รายขา → แสดง/คงค่าเดิมจนกว่าจะกรอก ชม.รายขา
+    let legacyTotal = 0;
     function recalcTotal() {
       const t = legs.reduce((s, l) => s + (Number(l.hours) || 0), 0);
       document.getElementById("totalVal").textContent = fmt(t);
@@ -333,14 +337,13 @@
           ? `<span>👑 ${VIP_KINDS[m.kind]} <b>${fmt(vh)}</b> ชม.</span><span>${esc(KINDS[restSel.value] || "ฝึกบิน")} <b>${fmt(Math.max(t - vh, 0))}</b> ชม.</span>`
           : `<span>ยังไม่ได้ติ๊กขาที่มีคณะวัง — ตอนนี้นับทั้งหมดเป็น${VIP_KINDS[m.kind]}</span>`;
       }
-      if (t > 0) {                                     // มี ชม.รายขา → ใช้ผลรวมรายขา
-        totalInput.value = fmt(t);
-        totalInput.readOnly = true;
-        document.getElementById("totalHint").textContent = "ชม.บินรวมคิดจากผลรวม ชม.รายขา — ถ้าจะกรอกยอดรวมเอง ให้ลบ ชม.รายขาเป็น 0";
+      const hint = document.getElementById("totalHint");
+      if (t <= 0 && legacyTotal > 0) {
+        totalInput.value = fmt(legacyTotal);
+        hint.textContent = "ยอดรวมเดิมของรายงานนี้ (ไม่มี ชม.รายขา) — กรอก ชม.รายขาด้านล่าง ระบบจะใช้ผลรวมรายขาแทน";
       } else {
-        if (totalInput.readOnly) totalInput.value = manualTotal;   // เพิ่งล้างรายขา → กลับเป็นยอดที่กรอกเอง
-        totalInput.readOnly = false;
-        document.getElementById("totalHint").textContent = "กรอก ชม.บินรวมได้เลย หรือกรอก ชม.รายขาด้านล่าง ระบบจะรวมให้";
+        totalInput.value = t > 0 ? fmt(t) : "";
+        hint.textContent = "ชม.บินรวม = ผลรวม ชม.รายขาด้านล่าง (กรอกที่ ชม.รายขา)";
       }
       return t;
     }
@@ -429,7 +432,7 @@
       if (vipMode && existing.rest_kind && restSel.querySelector(`option[value="${existing.rest_kind}"]`)) {
         restSel.value = existing.rest_kind; recalcTotal();
       }
-      if (!legs.some(l => Number(l.hours)) && Number(existing.total_hours)) totalInput.value = manualTotal = fmt(Number(existing.total_hours));
+      if (!legs.some(l => Number(l.hours)) && Number(existing.total_hours)) { legacyTotal = Number(existing.total_hours); recalcTotal(); }
     }
     paintResult();
 
@@ -676,7 +679,7 @@
                     btn.disabled = false; btn.textContent = "บันทึกรายงาน"; return; }
 
       const legSum = clean.reduce((s, l) => s + (Number(l.hours) || 0), 0);
-      const total = legSum > 0 ? legSum : (parseFloat(totalInput.value) || 0);
+      const total = legSum > 0 ? legSum : legacyTotal;          // ไม่มี ชม.รายขา → คงยอดเดิมของรายงานเก่า (ถ้ามี)
       const result = document.getElementById("resultSel").value;
       const repErr = await saveReport(missionId, total, document.getElementById("remarks").value.trim(), {
         result, parking_return: document.getElementById("parkRet").value.toUpperCase(),
