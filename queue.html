@@ -225,8 +225,8 @@
         <thead id="hsHead"></thead><tbody id="hsRows"><tr><td class="empty">กำลังโหลด…</td></tr></tbody></table></div>
       <div class="msgline" id="hsMsg"></div>
       <p class="muted" style="font-size:12px;line-height:1.6">ช่องสีเทา = จำนวนครั้งที่บินวันหยุด (นับแบบเดียวกับแทคเลขในคิววันหยุด · บินติดกันหลายวัน = 1 ช่อง) ·
-        ช่องเทาเปล่าข้างหน้า = จำนวนครั้งตั้งต้นตามตารางคิววันหยุด (ไม่มีวันที่)${planner ? " — กด − / + ที่คอลัมน์ ตั้งต้น เพื่อปรับจำนวน" : ""} ·
-        ช่องเทามีวันที่ = เที่ยวจริงในวันหยุด/เสาร์-อาทิตย์จากระบบ ·
+        ช่องเทาเปล่าข้างหน้า = จำนวนครั้งตั้งต้นตามตารางคิววันหยุด (ไม่มีวันที่)${planner ? " — กด − / + ที่คอลัมน์ ช่องว่าง เพื่อเพิ่ม/ลดช่องว่าง" : ""} ·
+        ช่องเทาวันที่แรก = วันบินวันหยุดล่าสุดตามข้อมูลตั้งต้นในฐานข้อมูล · ช่องเทามีวันที่ถัดไป = เที่ยวจริงในวันหยุด/เสาร์-อาทิตย์จากระบบ ·
         <span class="hs-legend-man">มุมแดง</span> = วันที่เพิ่มเอง (manual)${planner ? " — คลิกช่อง + เพื่อเพิ่มวันที่บิน · คลิกช่องมุมแดงเพื่อแก้/ลบ" : ""}</p>`;
     mountDutyTabs({ host: document.getElementById("dutyHost"), mainEl: document.getElementById("queueMain"),
                      mainLabel: "📊 คิวบิน", planner, loadCrew: () => loadCrew(false), exportSheets: exportQueueSheet,
@@ -690,6 +690,8 @@
     const thS = (d) => { const [y, m, dd] = d.split("-").map(Number); return `${dd} ${TH_MON_HS[m - 1]}${String(y + 543).slice(-2)}`; };
     const tripLabel = (t) => t.length === 1 ? thS(t[0])
       : t[0].slice(0, 7) === t[t.length - 1].slice(0, 7) ? `${Number(t[0].slice(8))}–${thS(t[t.length - 1])}` : `${thS(t[0])}–${thS(t[t.length - 1])}`;
+    // ช่องว่างข้างหน้า = ตั้งต้น − 1 ถ้ามีวันล่าสุด (ช่องสุดท้ายของตั้งต้นแสดงวันที่) · ไม่มีวันล่าสุด = ตั้งต้นทั้งหมด
+    const baseBlanks = (r, b) => b.last && r.base > 0 ? r.base - 1 : r.base;
     function holSheetRows(all = false) {
       if (!holRanks || !holData?.count) return null;
       const q = all ? "" : (document.getElementById("hsFind")?.value || "").trim();
@@ -709,14 +711,16 @@
       const rs = holSheetRows();
       if (!rs) { document.getElementById("hsRows").innerHTML = `<tr><td class="empty">${holData && !holData.count ? "ยังไม่มีจำนวนครั้งตั้งต้น (migration_41)" : "กำลังโหลด…"}</td></tr>`; return; }
       const { groups, ncol } = rs;
-      document.getElementById("hsHead").innerHTML = `<tr><th class="dg-nm">NAME</th><th>ตั้งต้น</th>${Array.from({ length: ncol }, (_, k) => `<th>${k + 1}</th>`).join("")}
+      document.getElementById("hsHead").innerHTML = `<tr><th class="dg-nm">NAME</th><th>ช่องว่าง</th>${Array.from({ length: ncol }, (_, k) => `<th>${k + 1}</th>`).join("")}
         <th>จำนวนครั้ง</th><th>แทค</th><th>วันล่าสุด</th><th>หมายเหตุ</th></tr>`;
       const n = groups.reduce((a, g) => a + g.list.length, 0);
       document.getElementById("hsSub").textContent = `${n} คน · ${futureBox.checked ? "รวมวันหยุดที่จัดล่วงหน้า" : "นับถึงวันนี้"} (ตามช่องติ๊กในแท็บคิวบิน)`;
       const row = ({ c, r, b, trips }) => {
-        const cells = [];
-        for (let k = 0; k < r.base; k++)
-          cells.push(`<td class="dg-c hs-g" title="ตั้งต้นจากตารางคิววันหยุด${b.last ? ` (ถึง ${thS(b.last)})` : ""}"></td>`);
+        const cells = [], blanks = baseBlanks(r, b);
+        for (let k = 0; k < blanks; k++)
+          cells.push(`<td class="dg-c hs-g" title="ตั้งต้นจากตารางคิววันหยุด (ไม่มีวันที่)"></td>`);
+        if (blanks < r.base)                                   // ช่องสุดท้ายของตั้งต้น = วันบินวันหยุดล่าสุดในฐานข้อมูล
+          cells.push(`<td class="dg-c hs-g" title="วันบินวันหยุดล่าสุดตามข้อมูลตั้งต้นในฐานข้อมูล">${thS(b.last)}</td>`);
         trips.forEach(({ t, man }) => cells.push(man
           ? `<td class="dg-c hs-g hs-man${planner ? " dg-ed" : ""}" data-d="${man}" title="เพิ่มเอง (manual)${planner ? " · คลิกเพื่อแก้/ลบ" : ""}">${tripLabel(t)}</td>`
           : `<td class="dg-c hs-g" title="จากตารางคิวบิน/ภารกิจ">${tripLabel(t)}</td>`));
@@ -724,7 +728,7 @@
         while (cells.length < ncol) cells.push(`<td class="dg-c"></td>`);
         const note = holData.notes.get(c.id) || "";
         return `<tr data-id="${c.id}"${r.inQueue ? "" : ' class="hs-out"'}><td class="dg-nm">${r.rank ? `<span class="hs-no">${r.rank}</span>` : ""}<span style="${qualStyle(c.position) || ""}">${esc(c.full_name)}</span>${r.inQueue ? "" : ` <span class="muted" title="ไม่ได้ติ๊กนับคิว">· ไม่นับคิว</span>`}</td>
-          <td class="dg-sum hs-base">${planner ? `<button type="button" data-b="-1" ${r.base ? "" : "disabled"} aria-label="ลดจำนวนตั้งต้น">−</button>` : ""}<b>${r.base}</b>${planner ? `<button type="button" data-b="1" aria-label="เพิ่มจำนวนตั้งต้น">+</button>` : ""}</td>
+          <td class="dg-sum hs-base" title="ช่องเทาว่างข้างหน้า · ตั้งต้นรวม ${r.base} ครั้ง${b.last ? ` (ล่าสุด ${thS(b.last)})` : ""}">${planner ? `<button type="button" data-b="-1" ${blanks ? "" : "disabled"} aria-label="ลดช่องว่างข้างหน้า">−</button>` : ""}<b>${blanks}</b>${planner ? `<button type="button" data-b="1" aria-label="เพิ่มช่องว่างข้างหน้า">+</button>` : ""}</td>
           ${cells.join("")}
           <td class="dg-sum">${r.count}</td><td class="dg-sum">${r.tag ?? "-"}</td>
           <td class="dg-sum dg-last">${r.last ? thS(r.last) : ""}</td>
@@ -738,15 +742,16 @@
       const rs = holSheetRows(true);
       if (!rs) return null;
       const G = "#C9CCD1", S2 = "#F6F8FB", H = (v, x = {}) => ({ v, bg: S2, fg: "#5B6675", bold: true, ...x });
-      const rows = [[H("NAME", { align: "left" }), H("ตั้งต้น"), ...Array.from({ length: rs.ncol }, (_, i) => H(i + 1)), H("จำนวนครั้ง"), H("แทค"), H("วันล่าสุด"), H("หมายเหตุ")]];
+      const rows = [[H("NAME", { align: "left" }), H("ช่องว่าง"), ...Array.from({ length: rs.ncol }, (_, i) => H(i + 1)), H("จำนวนครั้ง"), H("แทค"), H("วันล่าสุด"), H("หมายเหตุ")]];
       rs.groups.forEach(g => {
         rows.push([H(g.title, { align: "left" })]);
-        g.list.forEach(({ c, r, trips }) => {
-          const q = QUAL_COLORS[c.position] || {};
-          const cells = [...Array.from({ length: r.base }, () => ({ v: "", bg: G })),
+        g.list.forEach(({ c, r, b, trips }) => {
+          const q = QUAL_COLORS[c.position] || {}, blanks = baseBlanks(r, b);
+          const cells = [...Array.from({ length: blanks }, () => ({ v: "", bg: G })),
+                         ...(blanks < r.base ? [{ v: thS(b.last), bg: G, mono: true }] : []),
                          ...trips.map(({ t, man }) => ({ v: tripLabel(t), bg: G, mono: true, ...(man ? { fg: "#C00000", note: "เพิ่มเอง (manual)" } : {}) }))];
           while (cells.length < rs.ncol) cells.push({ v: "" });
-          rows.push([{ v: c.full_name, bg: q.bg, fg: q.fg, bold: true, align: "left" }, { v: r.base, bg: S2, bold: true }, ...cells,
+          rows.push([{ v: c.full_name, bg: q.bg, fg: q.fg, bold: true, align: "left" }, { v: blanks, bg: S2, bold: true }, ...cells,
                      { v: r.count, bold: true, bg: S2 }, { v: r.tag ?? "-", bold: true, bg: S2 }, { v: r.last ? thS(r.last) : "", bg: S2, fg: "#2F6AE0", mono: true },
                      { v: holData.notes.get(c.id) || "", align: "left" }]);
         });
@@ -761,12 +766,12 @@
         const btn = e.target.closest("[data-b]"); if (!btn) return;
         const id = btn.closest("tr").dataset.id, b = holData.count.get(id) || { count: 0, last: null };
         const next = b.count + Number(btn.dataset.b);
-        if (next < 0) return;
+        if (next < (b.last ? 1 : 0)) return;                 // ลดได้แค่ช่องว่าง — ช่องวันล่าสุดคงไว้
         btn.disabled = true;
         const err = await saveHolidayBaseCount(id, next, b.last);
         if (err) { btn.disabled = false; return hsMsg("บันทึกไม่สำเร็จ: " + err.message + (/row-level|policy/i.test(err.message) ? " — ต้องรัน migration_55" : ""), false); }
         holData.count.set(id, { ...b, count: next });
-        hsMsg(`ตั้งต้น ${next} ครั้ง`, true);
+        hsMsg(`ช่องว่างข้างหน้า ${b.last ? next - 1 : next} ช่อง · ตั้งต้นรวม ${next} ครั้ง`, true);
         render();
       });
       // หมายเหตุ
@@ -794,7 +799,7 @@
           if (v) {
             const b = holData.count.get(id) || { last: null }, r = holRanks.get(id);
             const why = v > todayStr ? "เพิ่มได้ถึงวันนี้เท่านั้น"
-              : b.last && v <= b.last ? `วันที่นี้อยู่ในจำนวนตั้งต้นแล้ว (ตั้งต้นถึง ${thS(b.last)}) — ใช้ − / + ที่คอลัมน์ ตั้งต้น แทน`
+              : b.last && v <= b.last ? `วันที่นี้อยู่ในจำนวนตั้งต้นแล้ว (ตั้งต้นถึง ${thS(b.last)}) — ใช้ − / + ที่คอลัมน์ ช่องว่าง แทน`
               : (holData.base.get(id) || []).includes(v) || r.trips.some(t => t.includes(v)) ? `มีวันที่ ${thS(v)} อยู่แล้ว` : "";
             if (why) { hsMsg(why, false); return renderHolSheet(); }
           }
