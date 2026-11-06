@@ -28,7 +28,7 @@
   .msg{font-size:12.5px;min-height:18px;color:var(--muted);margin-top:6px}
   .msg.err{color:var(--crit)} .msg.ok{color:var(--good)}
   .srwrap{overflow-x:auto;border:1px solid var(--line-strong);border-radius:10px;background:var(--surface)}
-  table.sr{border-collapse:collapse;width:100%;min-width:1080px;font-size:13px}
+  table.sr{border-collapse:collapse;width:100%;min-width:1280px;font-size:13px}
   table.sr th,table.sr td{border:1px solid var(--line);padding:4px 5px;vertical-align:middle}
   table.sr th{background:var(--surface-2);color:var(--muted);font-size:12px;font-weight:700;text-align:center;white-space:nowrap}
   table.sr td input[type=text],table.sr td input[type=date],table.sr td select{width:100%;margin:0;font-size:12.5px;padding:5px 6px;
@@ -39,9 +39,11 @@
   table.sr td.ck input{width:18px;height:18px;margin:0;cursor:pointer;accent-color:var(--primary)}
   table.sr td.ck input:disabled{cursor:default;opacity:.35}
   table.sr td.dt{width:140px} table.sr td.doc{width:120px} table.sr td.ag{width:170px} table.sr td.ow{width:170px}
-  table.sr td.rm{width:36px;text-align:center}
-  table.sr td.rm button{border:0;background:transparent;color:var(--faint);font-size:16px;cursor:pointer;padding:2px 6px;border-radius:6px}
-  table.sr td.rm button:hover{color:var(--crit);background:var(--crit-soft)}
+  table.sr td.rk{min-width:180px}
+  table.sr td.rm{width:64px;text-align:center}
+  table.sr td.rm button{border:1px solid var(--line-strong);background:var(--surface);color:var(--crit);font-size:12px;font-weight:600;
+       cursor:pointer;padding:3px 8px;border-radius:6px;white-space:nowrap}
+  table.sr td.rm button:hover{background:var(--crit);color:#fff;border-color:var(--crit)}
   table.sr tr.r-red td{background:var(--sr-red)}   table.sr tr.r-red td:first-child{box-shadow:inset 4px 0 0 var(--sr-red-b)}
   table.sr tr.r-yel td{background:var(--sr-yel)}   table.sr tr.r-yel td:first-child{box-shadow:inset 4px 0 0 var(--sr-yel-b)}
   table.sr tr.r-grn td{background:var(--sr-grn)}   table.sr tr.r-grn td:first-child{box-shadow:inset 4px 0 0 var(--sr-grn-b)}
@@ -62,7 +64,7 @@
         <button class="btn sm ghost" id="thisMonth">เดือนนี้</button>
         <label style="margin:0;display:inline-flex;align-items:center;gap:6px"><input type="checkbox" id="showAll"> แสดงทุกเดือน</label>
         <label style="margin:0;display:inline-flex;align-items:center;gap:6px"><input type="checkbox" id="onlyOpen"> เฉพาะที่ยังไม่เสร็จ</label>
-        <input id="find" placeholder="ค้นหา ภารกิจ / เส้นทาง / หน่วยงาน / ผู้รับผิดชอบ" style="width:280px;max-width:100%">
+        <input id="find" placeholder="ค้นหา ภารกิจ / เส้นทาง / หน่วยงาน / ผู้รับผิดชอบ / หมายเหตุ" style="width:280px;max-width:100%">
         <span class="sp"></span>
         <button class="btn sm primary" id="addRow">+ เพิ่มแถว</button>
       </div>
@@ -71,10 +73,10 @@
         <thead>
           <tr><th rowspan="2">วันที่</th><th rowspan="2">ภารกิจ</th><th rowspan="2">เส้นทาง</th>
               <th colspan="2">ขอสนับสนุน</th><th colspan="3">ใบวิทยุ / เอกสาร</th>
-              <th rowspan="2">ผู้รับผิดชอบ</th><th rowspan="2"></th></tr>
+              <th rowspan="2">ผู้รับผิดชอบ</th><th rowspan="2">หมายเหตุ</th><th rowspan="2">ลบ</th></tr>
           <tr><th>หน่วยงาน</th><th>เอกสาร</th><th>ทำ</th><th>เซ็น</th><th>ส่ง</th></tr>
         </thead>
-        <tbody id="rows"><tr><td colspan="10" class="empty">กำลังโหลด…</td></tr></tbody>
+        <tbody id="rows"><tr><td colspan="11" class="empty">กำลังโหลด…</td></tr></tbody>
       </table></div>
       <div class="msg" id="msg"></div>
     </div>
@@ -116,12 +118,22 @@
     return r.doc_signed && r.doc_sent ? "grn" : "yel";
   };
 
+  // เรียงตามวันที่ จากใกล้วันนี้สุด → ไกลสุด (ผู้ใช้ขอ 6 พ.ย. 69)
+  //  วันนี้/ข้างหน้า ก่อน (ใกล้ → ไกล) · ตามด้วยวันที่ผ่านมาแล้ว (เพิ่งผ่าน → นานแล้ว) · ไม่มีวันที่ = ท้ายสุด · วันเดียวกัน = ตามลำดับที่เพิ่ม
+  const byDate = (a, b) => {
+    const k = (r) => !r.req_date ? [2, ""] : r.req_date >= todayStr ? [0, r.req_date] : [1, r.req_date];
+    const [ga, da] = k(a), [gb, db] = k(b);
+    if (ga !== gb) return ga - gb;
+    const c = ga === 1 ? db.localeCompare(da) : da.localeCompare(db);
+    return c || String(a.created_at).localeCompare(String(b.created_at));
+  };
+
   async function load() {
     const { data, error } = await supabase.from("support_requests").select("*")
       .order("req_date", { ascending: true, nullsFirst: false }).order("created_at");
     if (error) {
       const need = /does not exist|schema cache|Could not find/i.test(error.message || "");
-      $("rows").innerHTML = `<tr><td colspan="10" class="empty">${need ? "ยังไม่มีตาราง — ต้องรัน db/migration_57_support_requests.sql ก่อน" : esc(error.message)}</td></tr>`;
+      $("rows").innerHTML = `<tr><td colspan="11" class="empty">${need ? "ยังไม่มีตาราง — ต้องรัน db/migration_57_support_requests.sql ก่อน" : esc(error.message)}</td></tr>`;
       $("addRow").disabled = true;
       return;
     }
@@ -134,7 +146,8 @@
     const q = $("find").value.trim().toLowerCase(), open = $("onlyOpen").checked;
     return rows.filter((r) => (all || !r.req_date || r.req_date.slice(0, 7) === ym)
       && (!open || colorOf(r) !== "grn")
-      && (!q || [r.mission, r.route, r.agency, r.owner].some((v) => String(v || "").toLowerCase().includes(q))));
+      && (!q || [r.mission, r.route, r.agency, r.owner, r.remark].some((v) => String(v || "").toLowerCase().includes(q))))
+      .sort(byDate);
   }
 
   function rowHTML(r) {
@@ -150,7 +163,8 @@
       <td class="doc"><select data-f="doc_type">${DOCS.map(([v, l]) => `<option value="${v}" ${(r.doc_type || "") === v ? "selected" : ""}>${l}</option>`).join("")}</select></td>
       ${ck("doc_made", "ทำ")}${ck("doc_signed", "เซ็น")}${ck("doc_sent", "ส่ง")}
       <td class="ow">${txt("owner", "ผู้รับผิดชอบ")}</td>
-      <td class="rm"><button type="button" data-del title="ลบแถว" aria-label="ลบแถว">✕</button></td></tr>`;
+      <td class="rk">${txt("remark", "หมายเหตุ")}</td>
+      <td class="rm"><button type="button" data-del title="ลบแถวนี้" aria-label="ลบแถว">🗑 ลบ</button></td></tr>`;
   }
 
   function render() {
@@ -164,7 +178,7 @@
       ${cnt[""] ? `<span>ยังไม่เลือกเอกสาร <b>${cnt[""]}</b></span>` : ""}
       <span>· ${list.length} รายการ${$("showAll").checked ? " (ทุกเดือน)" : ""}</span>`;
     $("rows").innerHTML = list.length ? list.map(rowHTML).join("")
-      : `<tr><td colspan="10" class="empty">ยังไม่มีรายการ — กด "+ เพิ่มแถว"</td></tr>`;
+      : `<tr><td colspan="11" class="empty">ยังไม่มีรายการ — กด "+ เพิ่มแถว"</td></tr>`;
   }
 
   // ---------- บันทึก ----------
@@ -225,7 +239,6 @@
     const { data, error } = await supabase.from("support_requests").insert({ req_date: date }).select().single();
     if (error) return msg("เพิ่มแถวไม่สำเร็จ: " + error.message, "err");
     rows.push(data);
-    rows.sort((a, b) => String(a.req_date || "9999").localeCompare(String(b.req_date || "9999")) || String(a.created_at).localeCompare(String(b.created_at)));
     $("find").value = ""; $("onlyOpen").checked = false;
     render();
     rowsEl.querySelector(`tr[data-id="${data.id}"] [data-f="mission"]`)?.focus();
