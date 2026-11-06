@@ -11,6 +11,8 @@
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bai+Jamjuree:wght@600;700&family=IBM+Plex+Sans+Thai:wght@400;500;600&family=IBM+Plex+Mono&display=swap">
 <link rel="stylesheet" href="css/style.css">
 <style>
+  /* เต็มความกว้างหน้าต่าง (ผู้ใช้ขอ 6 พ.ย. 69) · จอแคบ (< 900px) แต่ละแถวเปลี่ยนเป็นการ์ด */
+  main .wrap{max-width:none;padding:0 clamp(12px,2vw,28px)}
   :root{ --sr-red:#F6D3D3; --sr-red-b:#C0392B; --sr-yel:#FBEBB5; --sr-yel-b:#D4A017; --sr-grn:#D3EEDC; --sr-grn-b:#2E7D5B; }
   @media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){
     --sr-red:#4A2222; --sr-red-b:#E07B7B; --sr-yel:#463A14; --sr-yel-b:#E6C04A; --sr-grn:#163A27; --sr-grn-b:#5CBF94; }}
@@ -28,19 +30,20 @@
   .msg{font-size:12.5px;min-height:18px;color:var(--muted);margin-top:6px}
   .msg.err{color:var(--crit)} .msg.ok{color:var(--good)}
   .srwrap{overflow-x:auto;border:1px solid var(--line-strong);border-radius:10px;background:var(--surface)}
-  table.sr{border-collapse:collapse;width:100%;min-width:1280px;font-size:13px}
+  table.sr{border-collapse:collapse;width:100%;table-layout:fixed;font-size:13px}
+  /* ช่องขนาดคงที่ (วันที่/เอกสาร/ติ๊ก/ลบ) เป็น px · ช่องข้อความแบ่งพื้นที่ที่เหลือตามสัดส่วน */
+  table.sr col.c-dt{width:136px} table.sr col.c-doc{width:104px} table.sr col.c-ck{width:46px} table.sr col.c-rm{width:58px}
+  table.sr col.c-ms{width:20%} table.sr col.c-rt{width:18%} table.sr col.c-ag{width:13%} table.sr col.c-ow{width:13%} table.sr col.c-rk{width:16%}
   table.sr th,table.sr td{border:1px solid var(--line);padding:4px 5px;vertical-align:middle}
   table.sr th{background:var(--surface-2);color:var(--muted);font-size:12px;font-weight:700;text-align:center;white-space:nowrap}
   table.sr td input[type=text],table.sr td input[type=date],table.sr td select{width:100%;margin:0;font-size:12.5px;padding:5px 6px;
        border:1px solid transparent;background:transparent;border-radius:6px;color:var(--ink)}
   table.sr td input:hover,table.sr td select:hover{border-color:var(--line-strong)}
   table.sr td input:focus,table.sr td select:focus{border-color:var(--primary);background:var(--surface);outline:none}
-  table.sr td.ck{text-align:center;width:52px}
+  table.sr td.ck{text-align:center}
   table.sr td.ck input{width:18px;height:18px;margin:0;cursor:pointer;accent-color:var(--primary)}
   table.sr td.ck input:disabled{cursor:default;opacity:.35}
-  table.sr td.dt{width:140px} table.sr td.doc{width:120px} table.sr td.ag{width:170px} table.sr td.ow{width:170px}
-  table.sr td.rk{min-width:180px}
-  table.sr td.rm{width:64px;text-align:center}
+  table.sr td.rm{text-align:center}
   table.sr td.rm button{border:1px solid var(--line-strong);background:var(--surface);color:var(--crit);font-size:12px;font-weight:600;
        cursor:pointer;padding:3px 8px;border-radius:6px;white-space:nowrap}
   table.sr td.rm button:hover{background:var(--crit);color:#fff;border-color:var(--crit)}
@@ -49,6 +52,31 @@
   table.sr tr.r-grn td{background:var(--sr-grn)}   table.sr tr.r-grn td:first-child{box-shadow:inset 4px 0 0 var(--sr-grn-b)}
   table.sr tr.saving td{opacity:.7}
   table.sr td.empty{padding:30px;text-align:center;color:var(--faint)}
+  table.sr td.rm button .tx{margin-inline-start:3px}
+  @media (max-width:1280px){ table.sr td.rm button .tx{display:none} table.sr td.rm button{padding:3px 6px} }
+  /* จอแคบ: 1 แถว = 1 การ์ด · ป้ายชื่อช่องจาก data-l */
+  @media (max-width:900px){
+    .srwrap{border:0;background:transparent;overflow:visible}
+    table.sr,table.sr tbody{display:block;width:100%}
+    table.sr colgroup,table.sr thead{display:none}
+    table.sr tr[data-id]{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:6px 8px;padding:10px 10px 8px;margin-bottom:10px;
+         border:1px solid var(--line-strong);border-radius:10px;background:var(--surface)}
+    table.sr tr[data-id] td{display:flex;flex-direction:column;gap:2px;border:0;padding:0;background:transparent!important;box-shadow:none!important;min-width:0}
+    table.sr tr[data-id] td::before{content:attr(data-l);font-size:11px;font-weight:700;color:var(--muted)}
+    table.sr tr[data-id] td.dt{grid-column:span 2} table.sr tr[data-id] td.ms{grid-column:span 4}
+    table.sr tr[data-id] td.rt{grid-column:span 6} table.sr tr[data-id] td.ag{grid-column:span 3} table.sr tr[data-id] td.doc{grid-column:span 3}
+    table.sr tr[data-id] td.ck{grid-column:span 2;align-items:center}
+    table.sr tr[data-id] td.ow{grid-column:span 3} table.sr tr[data-id] td.rk{grid-column:span 3}
+    table.sr tr[data-id] td.rm{grid-column:span 6;align-items:flex-end}
+    table.sr tr[data-id] td.rm::before{display:none}
+    table.sr tr[data-id] td.rm button .tx{display:inline}
+    table.sr tr[data-id] td input[type=text],table.sr tr[data-id] td input[type=date],table.sr tr[data-id] td select{border-color:var(--line-strong);background:var(--surface)}
+    table.sr tr.r-red{background:var(--sr-red)!important;box-shadow:inset 5px 0 0 var(--sr-red-b)}
+    table.sr tr.r-yel{background:var(--sr-yel)!important;box-shadow:inset 5px 0 0 var(--sr-yel-b)}
+    table.sr tr.r-grn{background:var(--sr-grn)!important;box-shadow:inset 5px 0 0 var(--sr-grn-b)}
+    table.sr tr.r-red,table.sr tr.r-yel,table.sr tr.r-grn{padding-inline-start:14px}
+    table.sr tbody tr:not([data-id]){display:block} table.sr tbody tr:not([data-id]) td{display:block;border:0}
+  }
 </style>
 </head>
 <body>
@@ -70,6 +98,8 @@
       </div>
       <div class="legend" id="legend"></div>
       <div class="srwrap"><table class="sr">
+        <colgroup><col class="c-dt"><col class="c-ms"><col class="c-rt"><col class="c-ag"><col class="c-doc">
+          <col class="c-ck"><col class="c-ck"><col class="c-ck"><col class="c-ow"><col class="c-rk"><col class="c-rm"></colgroup>
         <thead>
           <tr><th rowspan="2">วันที่</th><th rowspan="2">ภารกิจ</th><th rowspan="2">เส้นทาง</th>
               <th colspan="2">ขอสนับสนุน</th><th colspan="3">ใบวิทยุ / เอกสาร</th>
@@ -153,18 +183,18 @@
   function rowHTML(r) {
     const c = colorOf(r), noDoc = r.doc_type === "none";
     const txt = (f, ph) => `<input type="text" data-f="${f}" value="${esc(r[f] || "")}" placeholder="${ph}">`;
-    const ck = (f, label) => `<td class="ck"><input type="checkbox" data-f="${f}" ${r[f] ? "checked" : ""} ${noDoc ? "disabled" : ""}
+    const ck = (f, label) => `<td class="ck" data-l="${label}"><input type="checkbox" data-f="${f}" ${r[f] ? "checked" : ""} ${noDoc ? "disabled" : ""}
         title="${label}${noDoc ? " (ไม่มีเอกสาร)" : ""}" aria-label="${label}"></td>`;
     return `<tr data-id="${r.id}" class="${c ? "r-" + c : ""}">
-      <td class="dt"><input type="date" data-f="req_date" value="${r.req_date || ""}"></td>
-      <td>${txt("mission", "ภารกิจ")}</td>
-      <td>${txt("route", "เส้นทาง")}</td>
-      <td class="ag">${txt("agency", "หน่วยงาน")}</td>
-      <td class="doc"><select data-f="doc_type">${DOCS.map(([v, l]) => `<option value="${v}" ${(r.doc_type || "") === v ? "selected" : ""}>${l}</option>`).join("")}</select></td>
+      <td class="dt" data-l="วันที่"><input type="date" data-f="req_date" value="${r.req_date || ""}"></td>
+      <td class="ms" data-l="ภารกิจ">${txt("mission", "ภารกิจ")}</td>
+      <td class="rt" data-l="เส้นทาง">${txt("route", "เส้นทาง")}</td>
+      <td class="ag" data-l="หน่วยงาน">${txt("agency", "หน่วยงาน")}</td>
+      <td class="doc" data-l="เอกสาร"><select data-f="doc_type">${DOCS.map(([v, l]) => `<option value="${v}" ${(r.doc_type || "") === v ? "selected" : ""}>${l}</option>`).join("")}</select></td>
       ${ck("doc_made", "ทำ")}${ck("doc_signed", "เซ็น")}${ck("doc_sent", "ส่ง")}
-      <td class="ow">${txt("owner", "ผู้รับผิดชอบ")}</td>
-      <td class="rk">${txt("remark", "หมายเหตุ")}</td>
-      <td class="rm"><button type="button" data-del title="ลบแถวนี้" aria-label="ลบแถว">🗑 ลบ</button></td></tr>`;
+      <td class="ow" data-l="ผู้รับผิดชอบ">${txt("owner", "ผู้รับผิดชอบ")}</td>
+      <td class="rk" data-l="หมายเหตุ">${txt("remark", "หมายเหตุ")}</td>
+      <td class="rm"><button type="button" data-del title="ลบแถวนี้" aria-label="ลบแถว">🗑<span class="tx">ลบ</span></button></td></tr>`;
   }
 
   function render() {
