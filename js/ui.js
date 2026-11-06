@@ -15,6 +15,7 @@ const LINKS = [
   { href: "pilot-month.html", label: "พ." },
   { href: "status.html",    label: "สถานภาพเครื่อง" },
   { href: "checklist.html", label: "Checklist", plannerOnly: true },
+  { href: "support.html",   label: "ขอสนับสนุน", plannerOnly: true },
   { href: "stats.html",     label: "สถิติ" },
   { href: "archive.html",   label: "ย้อนหลัง" },
   { href: "https://greensupawich.github.io/flightplan/", label: "Flight Plan ↗", external: true },
