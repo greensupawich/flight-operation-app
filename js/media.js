@@ -5,6 +5,7 @@
 //   • แสดงผลผ่าน signed URL (หมดอายุ 1 ชม.) · กดรูปย่อเพื่อเปิดเต็มจอ
 // =====================================================================
 import { supabase } from "./supabase.js";
+import { esc as escAttr } from "./esc.js";
 
 export const BUCKET = "report-media";
 export const MAX_VIDEO = 50 * 1024 * 1024;
@@ -13,7 +14,6 @@ const MAX_SIDE = 1600;
 const isImage = (t) => /^image\//.test(t || "");
 const isVideo = (t) => /^video\//.test(t || "");
 export const fmtSize = (b) => b >= 1048576 ? `${(b / 1048576).toFixed(1)} MB` : `${Math.max(1, Math.round(b / 1024))} KB`;
-const escAttr = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 
 // ---------- ย่อรูป (gif ไม่ย่อ เพราะจะเสียภาพเคลื่อนไหว) ----------
 export async function compressImage(file) {

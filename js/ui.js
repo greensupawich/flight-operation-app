@@ -3,9 +3,9 @@
 // =====================================================================
 import { signOut, canPlan, isAdmin } from "./auth.js";
 import { DB_ENV } from "./supabase.js";
+import { esc as escHtml } from "./esc.js";
 const EMBLEM = new URL("../assets/emblem-603.png", import.meta.url).href;   // ตรา ฝูง.603 (มุมซ้ายบน)
 
-const escHtml = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 
 const LINKS = [
   { href: "home.html",      label: "หน้าหลัก" },

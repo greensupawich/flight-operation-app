@@ -3,6 +3,7 @@
 //  ต่างจาก <input list=datalist> ตรงที่บอกสถานะชัดว่าผูกสำเร็จหรือยัง
 //  items = [{ id, label, hint, tag?: { text, style }, aliases?: [ชื่อเดิม] }]
 // =====================================================================
+import { esc } from "./esc.js";
 export function attachCombo(root, items, { value = "", id = null, onChange, emptyHtml = "" } = {}) {
   const input = root.querySelector(".cb-input");
   const list  = root.querySelector(".cb-list");
@@ -82,4 +83,3 @@ export const comboHTML = (placeholder = "") =>
   `<div class="cb"><input class="cb-input" autocomplete="off" placeholder="${placeholder}">
      <span class="cb-badge"></span><div class="cb-list" hidden></div></div>`;
 
-function esc(s){return String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));}

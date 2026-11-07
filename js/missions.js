@@ -140,7 +140,9 @@ async function lateColsOk() {
   return _colOk;
 }
 
-export async function saveMission(id, fields, crew) {
+const STALE_MSG = "มีคนแก้ภารกิจนี้ไปก่อนแล้ว";
+// version = เลขเวอร์ชันตอนเปิดฟอร์ม (migration_59) · ไม่ตรงกับในฐาน = มีคนแก้ภารกิจ/ลูกเรือไปก่อน → ไม่บันทึกทับ
+export async function saveMission(id, fields, crew, version = null) {
   const { data: { session } } = await supabase.auth.getSession();
   let missionId = id;
   const ok = await lateColsOk();
@@ -148,8 +150,11 @@ export async function saveMission(id, fields, crew) {
   LATE_COLS.forEach((c) => { if (!fields[c] && !ok[c]) delete fields[c]; });
 
   if (missionId) {
-    const { error } = await supabase.from("missions").update(fields).eq("id", missionId);
+    let q = supabase.from("missions").update(fields).eq("id", missionId);
+    if (version != null) q = q.eq("version", version);
+    const { data, error } = await q.select("id");
     if (error) return { error };
+    if (!data?.length) return { error: { message: STALE_MSG }, stale: true };
   } else {
     const { data, error } = await supabase.from("missions")
       .insert({ ...fields, created_by: session?.user?.id }).select("id").single();
@@ -262,6 +267,4 @@ export const iso = (d) =>
 export const isoLocal = (d) =>
   `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 
-export function esc(s) {
-  return String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
-}
+export { esc } from "./esc.js";   // ตัวเดียวทั้งระบบ (F-04)

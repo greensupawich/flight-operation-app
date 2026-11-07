@@ -3,11 +3,12 @@
 //   • ไฟล์หลัก  : flight-ops-YYYY-MM.zip  = data.json + media/<path> (รูป/วีดีโอ)
 //   • ไฟล์อ่าน  : flight-ops-YYYY-MM.xlsx (เปิดใน Excel · import กลับใช้ .zip/.json)
 //   • เคลียร์    : ต้อง export ก่อน + เก่ากว่า 3 เดือนเต็ม (ตรวจซ้ำในฐานข้อมูล)
-//  ต้องโหลด JSZip / SheetJS (global JSZip, XLSX) ในหน้า archive.html
+//  ต้องโหลด JSZip (global) ในหน้า archive.html · ไฟล์ .xlsx สร้างด้วย ExcelJS (vendor/) — เลิกใช้ SheetJS (F-14)
 // =====================================================================
 import { supabase } from "./supabase.js";
 import { defectLabel } from "./reports.js";
 import { BUCKET, removeFiles } from "./media.js";
+import { loadExcelJS } from "./board-excel.js";
 
 export const FORMAT = "flight-operation-archive";
 const PILOT_POS = ["AC", "IP", "P", "CP", "นบ.ราชฯ 1", "นบ.ราชฯ 2", "ตห.", "N"];   // ผอ.เดินทาง ไม่นับ
@@ -162,9 +163,22 @@ export async function buildZip(data, onProgress) {
   return { blob, failed };
 }
 
-export function buildXlsx(data, kindLabel = (k) => k) {
-  const wb = XLSX.utils.book_new();
-  const add = (name, rows) => XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows.length ? rows : [{ "": "— ไม่มีข้อมูล —" }]), name);
+export async function buildXlsx(data, kindLabel = (k) => k) {
+  const ExcelJS = await loadExcelJS();
+  const wb = new ExcelJS.Workbook();
+  // 1 ชีต = หัวตารางจากชื่อคีย์ (ลำดับตามที่พบ) + 1 แถวต่อรายการ — เหมือน json_to_sheet เดิม
+  const add = (name, rows) => {
+    const list = rows.length ? rows : [{ "": "— ไม่มีข้อมูล —" }];
+    const keys = [...new Set(list.flatMap((r) => Object.keys(r)))];
+    const ws = wb.addWorksheet(name);
+    ws.addRow(keys).font = { bold: true };
+    list.forEach((r) => ws.addRow(keys.map((k) => r[k] ?? "")));
+    ws.columns.forEach((col, i) => {
+      const len = Math.max(String(keys[i]).length, ...list.map((r) => String(r[keys[i]] ?? "").length));
+      col.width = Math.min(60, Math.max(8, len + 2));
+    });
+    ws.views = [{ state: "frozen", ySplit: 1 }];
+  };
   const ac = (a) => a ? `${a.type || ""}/${a.tail_number || ""}` : "";
   const mById = new Map(data.missions.map((m) => [m.id, m]));
   const mediaCount = (key, id) => data.media.filter((x) => x[key] === id).length;
@@ -203,7 +217,7 @@ export function buildXlsx(data, kindLabel = (k) => k) {
     "เครื่อง": a.tail, "แบบ": a.type, "เที่ยวบิน": a.flights, "ชม.บิน": a.hours, "ข้อขัดข้อง": a.discrepancies })));
   add("สรุปรายนักบิน", data.summary.per_crew.map((c) => ({
     "รหัส": c.code, "ยศ": c.rank, "ชื่อ": c.name, "เที่ยวบิน": c.flights, "ชม.บิน (AC/IP/P/CP)": c.hours })));
-  const out = XLSX.write(wb, { bookType: "xlsx", type: "array" });
+  const out = await wb.xlsx.writeBuffer();
   return new Blob([out], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
 }
 

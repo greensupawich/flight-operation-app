@@ -2,6 +2,7 @@
 //  admin.js — คำขอใช้งาน + จัดการผู้ใช้ (เฉพาะ admin)
 //  ทุกการเขียนถูกบังคับด้วย RLS ว่าต้องเป็น admin เท่านั้น
 // =====================================================================
+import { esc } from "./esc.js";
 import { supabase } from "./supabase.js";
 
 export const ROLES  = ["admin","planner","pilot","crew","viewer"];
@@ -191,7 +192,6 @@ function fmtTime(iso){
   try { return new Date(iso).toLocaleString("th-TH", { dateStyle:"short", timeStyle:"short" }); }
   catch { return iso; }
 }
-function esc(s){return String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));}
 
 // =====================================================================
 //  เพิ่มผู้ใช้แบบ manual (อีเมลที่อนุญาตล่วงหน้า)

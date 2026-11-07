@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <!-- CSP: อนุญาตเฉพาะโดเมนที่ใช้จริง · เพิ่มโดเมนใหม่ (CDN/API) ต้องแก้ทุกหน้า -->
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob: https://iljapjszrjuzjjbtxctu.supabase.co; media-src 'self' blob: https://iljapjszrjuzjjbtxctu.supabase.co; connect-src 'self' data: https://iljapjszrjuzjjbtxctu.supabase.co wss://iljapjszrjuzjjbtxctu.supabase.co; worker-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'">
+<meta name="referrer" content="same-origin">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Flight Operation · ข้อมูลภารกิจ</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -338,10 +339,12 @@
 
     // ---- โหลดข้อมูลเดิม (โหมดแก้ไข) ----
     const $ = (id) => document.getElementById(id);
+    let loadedVersion = null;                       // กันบันทึกทับ (migration_59)
     if (missionId) {
       document.getElementById("title").textContent = "แก้ไขภารกิจ";
       const m = await getMission(missionId);
       if (m) {
+        loadedVersion = m.version ?? null;
         $("f_date").value = m.mission_date || ""; fillAircraft(m.aircraft_id);
         $("f_callsign").value = m.callsign || ""; $("f_kind").value = KINDS[m.kind] ? m.kind : DEFAULT_KIND;
         names = parseMissionNames(m); if (!names.length) names = [""];
@@ -435,8 +438,13 @@
 
       const btn = document.getElementById("save");
       btn.disabled = true; btn.textContent = "กำลังบันทึก…";
-      const res = await saveMission(missionId, fields, crew);
+      const res = await saveMission(missionId, fields, crew, loadedVersion);
       btn.disabled = false; btn.textContent = "บันทึกภารกิจ";
+      if (res.stale) {
+        err.textContent = "ยังไม่ได้บันทึก: มีคนแก้ภารกิจนี้ (หรือลูกเรือ) ไปก่อนแล้ว";
+        if (confirm("มีคนแก้ภารกิจนี้ไปก่อนแล้ว — ยังไม่ได้บันทึกของคุณ\n\nกด OK เพื่อโหลดข้อมูลล่าสุด (สิ่งที่คุณแก้ในฟอร์มจะหายไป)\nกด Cancel เพื่อคงฟอร์มไว้ก่อน (จดสิ่งที่แก้ไว้ แล้วโหลดหน้าใหม่)")) location.reload();
+        return;
+      }
       if (res.error) { err.textContent = "บันทึกไม่สำเร็จ: " + res.error.message; return; }
       location.href = `day.html?date=${fields.mission_date}`;
     });

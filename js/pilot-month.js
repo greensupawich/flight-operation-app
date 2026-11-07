@@ -10,6 +10,7 @@
 import { supabase } from "./supabase.js";
 import { isStby, PILOT_ROLES } from "./missions.js";
 import { loadExcelJS } from "./board-excel.js";
+import { esc } from "./esc.js";
 
 export const ROSTER_POSITIONS = ["IP", "P", "CP"];
 export const TH_MONTH = ["มกราคม","กุมภาพันธ์","มีนาคม","เมษายน","พฤษภาคม","มิถุนายน",
@@ -126,7 +127,6 @@ export const isOffDay = (data, d) => {
 };
 
 // ---------- ตารางบนหน้าเว็บ (HTML) ----------
-const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 export function monthTableHTML(data, { editable = false } = {}) {
   const { y, m0, days, pilots } = data;
   const dayList = Array.from({ length: days }, (_, i) => i + 1);

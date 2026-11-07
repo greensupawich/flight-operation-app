@@ -7,6 +7,14 @@
 //  เพิ่ม/เปลี่ยนโปรเจกต์ → แก้ CSP (connect-src / img-src / media-src) ในทุกหน้า .html ด้วย
 // =====================================================================
 
+// กันหน้าเว็บถูกฝังใน iframe ของเว็บอื่น (clickjacking · รายงานความปลอดภัย F-06)
+//  GitHub Pages ตั้ง header frame-ancestors ไม่ได้ และ <meta> CSP ใช้ frame-ancestors ไม่ได้ → ตรวจด้วยสคริปต์
+//  ไฟล์นี้ถูก import ทุกหน้า (รวมหน้า login) จึงครอบคลุมทั้งระบบ
+if (window.top !== window.self) {
+  document.documentElement.style.visibility = "hidden";
+  try { window.top.location.replace(window.location.href); } catch { /* ต่างโดเมน → ซ่อนหน้าไว้ */ }
+}
+
 const PROD = {
   url: "https://iljapjszrjuzjjbtxctu.supabase.co",
   key: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlsamFwanN6cmp1empqYnR4Y3R1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODkxMTAwODksImV4cCI6MjEwNDY4NjA4OX0.2SLAx19gCIgIPooZp9TdAGa5ShbZNlcGtaIP4LV6ppg",
