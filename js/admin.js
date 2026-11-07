@@ -58,7 +58,7 @@ export async function deleteUser(id) {
   return error;
 }
 
-// ชื่อในทะเบียน (ตัดยศ เช่น "ร.ท.วิทวัส" → "วิทวัส") ตรงกับคำแรกของชื่อบัญชี → แนะนำให้ผูก
+// ชื่อในทะเบียน (ตัดยศ เช่น "ร.ท.สมชาย" → "สมชาย") ตรงกับคำแรกของชื่อบัญชี → แนะนำให้ผูก
 const bareName = (s) => String(s || "").replace(/^.*\./, "").replace(/\s*\(.*\)\s*$/, "").trim();
 function suggestCrew(p, crew) {
   const first = String(p.full_name || "").trim().split(/\s+/)[0];
