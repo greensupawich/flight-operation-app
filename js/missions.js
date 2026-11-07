@@ -1,0 +1,270 @@
+// =====================================================================
+//  missions.js — ปฏิทินภารกิจ + อ่าน/เขียนภารกิจ + ลูกเรือ
+// =====================================================================
+import { supabase } from "./supabase.js";
+
+// ---------- ชนิดภารกิจ (สีตามกระดานจัดบินจริง) ----------
+export const KINDS = {
+  fcf: "F.C.F",
+  dechochai: "เดโชชัย",
+  palace: "ภารกิจสำนักพระราชวัง",
+  rtaf: "ภารกิจ ทอ.",
+  training: "ฝึกบิน",
+  other: "อื่นๆ",
+  stby: "STBY (Standby)",
+  stby_dechochai: "STBY เดโชชัย",
+  stby_mission: "STBY (ภารกิจ)",
+};
+export const DEFAULT_KIND = "rtaf";
+// bg = สีพื้นตามกระดาน, fg = สีตัวอักษรที่อ่านออกบนพื้นนั้น
+export const KIND_COLORS = {
+  fcf:       { bg: "#D9783A", fg: "#1F1206" },
+  dechochai: { bg: "#E53935", fg: "#FFFFFF" },
+  palace:    { bg: "#A5D46A", fg: "#16240A" },
+  rtaf:      { bg: "#4DA3E8", fg: "#08202F" },
+  training:  { bg: "#FFFFFF", fg: "#16202E" },
+  other:     { bg: "#B39DDB", fg: "#1E1033" },   // อื่นๆ = ม่วง (ผู้ใช้กำหนด 30 ต.ค. 69 · migration_42)
+  stby:      { bg: "#FFFFFF", fg: "#16202E" },   // ช่อง ST ในกระดานคิวบินเป็นพื้นขาว
+  stby_dechochai: { bg: "#FDE0DE", fg: "#B71C1C" },   // STBY ที่รอเรียกเป็นเดโชชัย (ชมพูอ่อน ต่างจากเดโชชัยจริง)
+  stby_mission:   { bg: "#E6EAF0", fg: "#16202E" },   // STBY ที่แสดงเป็นการ์ดภารกิจ (เทาอ่อน) — migration_50
+};
+// ชนิด STBY = เตรียมพร้อม ยังไม่ปฏิบัติจริง (ไม่ขึ้นการ์ดภารกิจ/ไม่นับคิว/ไม่อยู่ในสถิติ)
+//  ถ้าถูกเรียกใช้ ผู้เกี่ยวข้องเปลี่ยนชนิดเป็นภารกิจจริง (เช่น stby_dechochai → dechochai) เอง
+//  stby_mission = STBY ทุกอย่าง ต่างแค่หน้าหลัก/Export Excel วางเป็นการ์ดภารกิจ (เหมือน STBY เดโชชัย)
+export const STBY_KINDS = ["stby", "stby_dechochai", "stby_mission"];
+export const isStby = (k) => STBY_KINDS.includes(k);
+export const kindStyle = (k) => {
+  const c = KIND_COLORS[k] || KIND_COLORS[DEFAULT_KIND];
+  return `background:${c.bg};color:${c.fg}`;
+};
+
+// ---------- คุณวุฒินักบิน (สีตามตารางรายชื่อนักบิน) ----------
+export const QUALS = ["IP", "P", "CP"];
+export const QUAL_COLORS = {
+  IP: { bg: "#F8CBAD", fg: "#4A2410" },   // ส้ม
+  P:  { bg: "#BDD7EE", fg: "#0F2C45" },   // ฟ้า
+  CP: { bg: "#D9D2E9", fg: "#2E2346" },   // ม่วง
+};
+export const qualStyle = (q) => {
+  const c = QUAL_COLORS[q];
+  return c ? `background:${c.bg};color:${c.fg}` : "";
+};
+
+// ---------- ตำแหน่งลูกเรือ (เรียงตามฟอร์ม) ----------
+//  นบ.ราชฯ 1/2 และ ตห. (เที่ยวบินพิเศษ) นับ ชม.บินเหมือน IP/P/CP (migration_47)
+//  ผอ.เดินทาง ไม่ใช่ตำแหน่งลูกเรือ — เป็นช่อง missions.travel_director ในหมวด คณะและผู้ประสานงาน (migration_48)
+export const SPECIAL_PILOT_ROLES = ["นบ.ราชฯ 1", "นบ.ราชฯ 2", "ตห."];
+export const PILOT_ROLES = ["AC", "IP", "P", "CP", ...SPECIAL_PILOT_ROLES, "N"];
+export const OTHER_ROLES = ["FM", "RO", "LM", "AH"];
+export const CREW_ROLES  = [...PILOT_ROLES, ...OTHER_ROLES];
+// ช่องลูกเรือตั้งต้น: ฟอร์มเพิ่มภารกิจมีช่องว่างไว้ให้ · การ์ดหน้าหลักแสดงแถวเหล่านี้เสมอ (ว่างก็คลิกเพิ่มได้) · AH ไม่ตั้งไว้
+export const DEFAULT_CREW_SLOTS = ["IP", "CP", "FM", "RO", "LM"];
+// N ไม่นับ ชม.บิน (AC นับเมื่อผูกทะเบียนนักบิน · ไม่อยู่ในทะเบียนก็ได้)
+export const NO_HOURS_ROLES = ["N"];
+
+const MISSION_SELECT =
+  "*, aircraft(id,tail_number,type), mission_crew(id,position,crew_name,crew_member_id,sort_order), post_flight_reports(id,total_hours)";
+
+// ภารกิจนี้มีรายงานหลังบินแล้วหรือยัง (1 ภารกิจ = 1 รายงาน — อาจมาเป็น object หรือ array)
+export const reportOf = (m) => {
+  const r = m?.post_flight_reports;
+  return Array.isArray(r) ? (r[0] || null) : (r || null);
+};
+
+// =====================================================================
+//  ปฏิทิน — นับจำนวนภารกิจต่อวันในเดือนที่กำหนด
+//  คืน { "2026-09-11": 3, ... }
+// =====================================================================
+export async function loadMonthCounts(year, month /* 0-11 */) {
+  const first = new Date(Date.UTC(year, month, 1));
+  const last  = new Date(Date.UTC(year, month + 1, 0));
+  const { data, error } = await supabase
+    .from("missions")
+    .select("mission_date")
+    .gte("mission_date", iso(first))
+    .lte("mission_date", iso(last));
+  if (error) { console.error(error); return {}; }
+  const counts = {};
+  (data || []).forEach((r) => { counts[r.mission_date] = (counts[r.mission_date] || 0) + 1; });
+  return counts;
+}
+
+// ---------- วันที่มีภารกิจยังไม่รายงานหลังบิน (ไม่นับ STBY / STBY เดโชชัย / ยกเลิก) ----------
+//  คืน Map("YYYY-MM-DD" -> จำนวนภารกิจที่ยังไม่รายงาน) — ปฏิทินแสดงเครื่องบินสีแดง
+export async function loadMonthUnreported(year, month /* 0-11 */) {
+  const first = new Date(Date.UTC(year, month, 1));
+  const last  = new Date(Date.UTC(year, month + 1, 0));
+  const { data, error } = await supabase
+    .from("missions")
+    .select("mission_date, kind, status, post_flight_reports(id)")
+    .gte("mission_date", iso(first))
+    .lte("mission_date", iso(last));
+  if (error) { console.error(error); return new Map(); }
+  const out = new Map();
+  (data || []).forEach((m) => {
+    if (isStby(m.kind) || m.status === "cancelled" || reportOf(m)) return;
+    out.set(m.mission_date, (out.get(m.mission_date) || 0) + 1);
+  });
+  return out;
+}
+
+// ---------- ภารกิจทั้งหมดของวันหนึ่ง (พร้อมลูกเรือ) ----------
+export async function loadMissionsByDate(dateStr) {
+  const { data, error } = await supabase
+    .from("missions").select(MISSION_SELECT)
+    .eq("mission_date", dateStr)
+    .order("created_at", { ascending: true });
+  if (error) { console.error(error); return []; }
+  return data || [];
+}
+
+export async function getMission(id) {
+  const { data, error } = await supabase
+    .from("missions").select(MISSION_SELECT).eq("id", id).single();
+  if (error) { console.error(error); return null; }
+  return data;
+}
+
+// =====================================================================
+//  บันทึกภารกิจ (สร้างใหม่ถ้าไม่มี id) + แทนที่รายชื่อลูกเรือทั้งชุด
+//  crew = [{ position, crew_name, crew_member_id }]
+// =====================================================================
+// ช่องที่เพิ่มทีหลัง (migration_48 travel_director, 49 doc_officer) — ยังไม่รัน migration → ตัดช่องที่ว่างออก แทนที่จะบันทึกไม่ได้ทั้งภารกิจ
+const LATE_COLS = ["travel_director", "doc_officer"];
+let _colOk;
+async function lateColsOk() {
+  if (!_colOk) {
+    _colOk = {};
+    for (const c of LATE_COLS) _colOk[c] = !(await supabase.from("missions").select(c).limit(1)).error;
+  }
+  return _colOk;
+}
+
+const STALE_MSG = "มีคนแก้ภารกิจนี้ไปก่อนแล้ว";
+// version = เลขเวอร์ชันตอนเปิดฟอร์ม (migration_59) · ไม่ตรงกับในฐาน = มีคนแก้ภารกิจ/ลูกเรือไปก่อน → ไม่บันทึกทับ
+export async function saveMission(id, fields, crew, version = null) {
+  const { data: { session } } = await supabase.auth.getSession();
+  let missionId = id;
+  const ok = await lateColsOk();
+  fields = { ...fields };
+  LATE_COLS.forEach((c) => { if (!fields[c] && !ok[c]) delete fields[c]; });
+
+  if (missionId) {
+    let q = supabase.from("missions").update(fields).eq("id", missionId);
+    if (version != null) q = q.eq("version", version);
+    const { data, error } = await q.select("id");
+    if (error) return { error };
+    if (!data?.length) return { error: { message: STALE_MSG }, stale: true };
+  } else {
+    const { data, error } = await supabase.from("missions")
+      .insert({ ...fields, created_by: session?.user?.id }).select("id").single();
+    if (error) return { error };
+    missionId = data.id;
+  }
+
+  // แทนที่ลูกเรือทั้งชุด — ลบ+ใส่ในคำสั่งเดียวที่ฐานข้อมูล (migration_58) · ล้ม = ลูกเรือเดิมยังอยู่ครบ
+  const rows = (crew || [])
+    .filter((c) => c.crew_name && c.crew_name.trim())
+    .map((c) => ({
+      position: c.position,
+      crew_name: c.crew_name.trim(),
+      crew_member_id: c.crew_member_id || null,
+    }));
+  const { error } = await supabase.rpc("replace_mission_crew", { p_mission: missionId, p_crew: rows });
+  if (error) return { error, id: missionId };
+  return { id: missionId };
+}
+
+export async function deleteMission(id) {
+  const { error } = await supabase.from("missions").delete().eq("id", id);
+  return error;
+}
+
+// ---------- เครื่องบิน (รายการตายตัว 6 ลำ — seed ไว้ใน migration_02) ----------
+export async function loadAircraft() {
+  const { data } = await supabase.from("aircraft").select("id,tail_number,type").order("tail_number");
+  return data || [];
+}
+
+// ชื่อที่แสดง เช่น "ATR72-600/60301"
+export const acLabel = (a) => a ? `${a.type || ""}/${a.tail_number}` : "-";
+
+// ---------- ชื่อเดิม / ชื่ออื่นของนักบิน (migration_15) ----------
+// คืน Map(crewId -> [ชื่อเดิม]) หรือ null ถ้ายังไม่มีตาราง
+export async function loadAliasMap() {
+  const { data, error } = await supabase.from("crew_aliases").select("alias,crew_member_id");
+  if (error) return null;
+  const map = new Map();
+  (data || []).forEach((a) => {
+    if (!map.has(a.crew_member_id)) map.set(a.crew_member_id, []);
+    map.get(a.crew_member_id).push(a.alias);
+  });
+  return map;
+}
+
+// ---------- ทะเบียนลูกเรือ (ไว้เลือกตอนจัดลูกเรือ — ชม.บินผูกกับรหัสในทะเบียน) ----------
+export async function loadCrewRoster() {
+  const [{ data }, aliases] = await Promise.all([
+    supabase.from("crew_members").select("id,code,full_name,position").eq("active", true).order("full_name"),
+    loadAliasMap(),
+  ]);
+  return (data || []).map((c) => ({ ...c, aliases: aliases?.get(c.id) || [] }));
+}
+
+// ---------- ชื่อภารกิจ (หลายภารกิจในเที่ยวบินเดียว) ----------
+//  "/" อยู่ในชื่อปกติได้ (เช่น VTBD-xxx/xxx) → แยกเฉพาะรูปแบบมีเลข "(1) … / (2) …" (เหมือนข้อมูลจากกระดาน)
+export function parseMissionNames(m) {
+  const s = String(m?.mission_name || "").trim();
+  if (!s) return [];
+  if (!/^\(\d+\)/.test(s)) return [s];
+  return s.split(/\s*\/\s*(?=\(\d+\))/).map((x) => x.replace(/^\(\d+\)\s*/, "").trim()).filter(Boolean);
+}
+export function missionNameField(list) {
+  const l = (list || []).map((x) => String(x || "").trim()).filter(Boolean);
+  return l.length <= 1 ? (l[0] || "") : l.map((x, i) => `(${i + 1}) ${x}`).join(" / ");
+}
+// บรรทัดที่แสดงในช่องภารกิจ (การ์ด / Excel) · หลายภารกิจ → ขึ้นต้น (1) (2) …
+export const missionNameLines = (m) => {
+  const l = parseMissionNames(m);
+  return l.length > 1 ? l.map((x, i) => `(${i + 1}) ${x}`) : l;
+};
+
+// ---------- POC คณะ (หลายคณะ / หลายภารกิจ) ----------
+//  เก็บในคอลัมน์เดิม ไม่ต้อง migration:
+//   • 1 คน  → poc_name = ชื่อ, poc_phone = เบอร์
+//   • หลายคน → poc_name = "(1) ชื่อ เบอร์ / (2) ชื่อ เบอร์", poc_phone = "" (รูปแบบเดียวกับข้อมูลที่นำเข้าจากกระดาน)
+const PHONE_TAIL = /\s*((?:\+66|0)\d(?:[\s-]?\d){7,9})\s*$/;
+const splitPhone = (t) => {
+  const s = String(t || "").trim(), m = s.match(PHONE_TAIL);
+  return m ? { name: s.slice(0, m.index).trim(), phone: m[1] } : { name: s, phone: "" };
+};
+export function parsePoc(m) {
+  const name = String(m?.poc_name || "").trim(), phone = String(m?.poc_phone || "").trim();
+  if (!name.includes("/")) {
+    if (!name && !phone) return [];
+    return [phone ? { name, phone } : splitPhone(name)];
+  }
+  const list = name.split(/\s*\/\s*/).map((x) => x.replace(/^\(\d+\)\s*/, "")).filter(Boolean).map(splitPhone);
+  if (phone) list.push({ name: "", phone });
+  return list;
+}
+export function pocFields(list) {
+  const l = (list || []).map((p) => ({ name: String(p.name || "").trim(), phone: String(p.phone || "").trim() }))
+                       .filter((p) => p.name || p.phone);
+  if (l.length <= 1) return { poc_name: l[0]?.name || "", poc_phone: l[0]?.phone || "" };
+  return { poc_name: l.map((p, i) => `(${i + 1}) ${[p.name, p.phone].filter(Boolean).join(" ")}`).join(" / "), poc_phone: "" };
+}
+// บรรทัดที่แสดงในช่อง POC (การ์ด / Excel) · หลายคน → ขึ้นต้น (1) (2) …
+export const pocLines = (m) => {
+  const l = parsePoc(m);
+  return l.map((p, i) => `${l.length > 1 ? `(${i + 1}) ` : ""}${[p.name, p.phone].filter(Boolean).join("  ")}`);
+};
+
+// ---------- helper ----------
+export const iso = (d) =>
+  `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}-${String(d.getUTCDate()).padStart(2, "0")}`;
+
+export const isoLocal = (d) =>
+  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+
+export { esc } from "./esc.js";   // ตัวเดียวทั้งระบบ (F-04)

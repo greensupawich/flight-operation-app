@@ -1,0 +1,158 @@
+// =====================================================================
+//  queue-rank.js — คำนวณลำดับคิวบิน (ไม่มีการเรียกฐานข้อมูล ทดสอบแยกได้)
+//
+//  กลุ่ม: IP + P นับรวมกัน · CP นับแยก
+//  ลำดับ: 1) บินจริงน้อยสุด (ไม่นับ ST / ไม่นับเที่ยวที่บินในวันหยุด) ในเดือนนั้น
+//         2) บินจริงครั้งล่าสุดนานกว่า (ไม่เคยบิน = นานสุด)
+//         3) ชื่ออยู่บนกว่า (ลำดับในทะเบียน)
+//  ไม่ได้คิว: ไม่ได้ติ๊ก / ไม่มีคุณวุฒิ
+//  ถูกจัดลงวันนั้นแล้ว: ยังอยู่ในคิวตามลำดับเดิม (assigned = true) · ไม่นับเที่ยวของวันนั้น → ลำดับไม่ขยับระหว่างจัด (ผู้ใช้กำหนด 30 ต.ค. 69)
+//  ไม่ว่างในวันนั้น: ยังได้ลำดับตามปกติ (off = true) ให้หน้าเว็บแสดงเป็นสีแดง/หมายเหตุ
+//  นับถึงวันนี้ (until) เท่านั้น — เที่ยวที่จัดล่วงหน้าหลังวันนี้ไม่นับ (ผู้ใช้กำหนด 4 พ.ย. 69)
+// =====================================================================
+const pad = (n) => String(n).padStart(2, "0");
+export const fmtDate = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+export const addDays = (s, n) => { const d = new Date(s + "T00:00:00"); d.setDate(d.getDate() + n); return fmtDate(d); };
+export const isWeekend = (s) => { const w = new Date(s + "T00:00:00").getDay(); return w === 0 || w === 6; };
+
+// วันทำการถัดไป: พรุ่งนี้ · ศุกร์ → จันทร์ · ข้ามเสาร์-อาทิตย์และวันหยุดราชการ
+export function nextWorkingDay(todayStr, isOff) {
+  let d = todayStr;
+  for (let i = 0; i < 60; i++) {
+    d = addDays(d, 1);
+    if (!isOff(d)) return d;
+  }
+  return addDays(todayStr, 1);
+}
+
+export const queueGroup = (position) =>
+  position === "CP" ? "CP" : (position === "IP" || position === "P") ? "IPP" : null;
+
+/**
+ * @param crew        [{id, position, in_queue}] เรียงตามลำดับในตาราง
+ * @param monthDates  วันที่ทั้งหมดของเดือนที่แสดงคิว
+ * @param target      วันที่แสดงคิว
+ * @param isOff       (date) => วันหยุด?
+ * @param itemsFor    (crewId, date) => [{st:boolean}]   สิ่งที่อยู่ในช่อง
+ * @param isUnavailable (crewId, date) => boolean
+ * @param historyStart  วันแรกที่ใช้ค้นหา "บินล่าสุด"
+ * @param until       วันสุดท้ายที่นับ (รวมวันนั้น · ปกติ = วันนี้) · null = ไม่จำกัด
+ * @returns Map(crewId -> { group, rank|null, flights, last|null, reason|null, off, assigned })
+ */
+export function rankQueue({ crew, monthDates, target, isOff, itemsFor, isUnavailable, historyStart, until = null }) {
+  const counted = (d) => !isOff(d) && d !== target && (!until || d <= until);
+  const lastFrom = until && until < addDays(target, -1) ? until : addDays(target, -1);
+  const result = new Map();
+  const groups = { IPP: [], CP: [] };
+
+  crew.forEach((p, idx) => {
+    const group = queueGroup(p.position);
+    if (!group) return;
+    const realOn = (d) => itemsFor(p.id, d).some((it) => !it.st);
+
+    const flights = monthDates.reduce((n, d) =>
+      n + (counted(d) ? itemsFor(p.id, d).filter((it) => !it.st).length : 0), 0);
+
+    let last = null;
+    for (let d = lastFrom; d >= historyStart; d = addDays(d, -1)) {
+      if (realOn(d)) { last = d; break; }
+    }
+
+    const reason = p.in_queue === false ? "ไม่ได้ติ๊กนับคิว" : null;
+    const assigned = !reason && itemsFor(p.id, target).length > 0;   // จัดลงวันนั้นแล้ว → ยังอยู่ในคิว
+    const off = !reason && isUnavailable(p.id, target);   // ไม่ว่าง → ยังนับลำดับ แต่ติดธงไว้
+
+    const row = { id: p.id, idx, group, flights, last, reason, off, assigned, rank: null };
+    groups[group].push(row);
+    result.set(p.id, row);
+  });
+
+  for (const g of Object.values(groups)) {
+    g.filter((r) => !r.reason)
+     .sort((a, b) => a.flights - b.flights
+                  || (a.last || "").localeCompare(b.last || "")   // ไม่เคยบิน ("") มาก่อน
+                  || a.idx - b.idx)
+     .forEach((r, i) => { r.rank = i + 1; });
+  }
+  return result;
+}
+
+// =====================================================================
+//  คิววันหยุด — แยกกลุ่ม IP+P / CP เหมือนคิวปกติ (เฉพาะที่ติ๊กนับคิว)
+//  กติกา (ผู้ใช้กำหนด 28 ต.ค. 69): เรียงตาม "จำนวนครั้งที่บินวันหยุด" น้อยสุดก่อน · เท่ากัน → ชื่ออยู่บนก่อนเสมอ
+//   • ไม่ใช้วันล่าสุดในการเรียง (วันล่าสุดแสดงประกอบเท่านั้น)
+//   • ไม่มีข้อมูลจำนวนครั้ง (ยังไม่รัน migration_41) → ใช้กติกาเดิม (26 ต.ค. 69): วันหยุดล่าสุดที่บิน เก่าสุดก่อน
+//   • วันล่าสุด = ค่าที่ใหม่กว่า ระหว่าง ข้อมูลตั้งต้นจากไฟล์ "นจบ." ชีตวันหยุด (crew_duty_log category 'holiday')
+//     กับ เที่ยวบินจริงในวันหยุด/เสาร์-อาทิตย์ในระบบ (ไม่นับ ST / ภารกิจที่ยกเลิก) ตั้งแต่ HOLIDAY_QUEUE_START
+// =====================================================================
+// เริ่มนับคิววันหยุดตั้งแต่ ต.ค. 2569 (ผู้ใช้กำหนด) — เปลี่ยนวันเริ่มรอบใหม่ได้ที่นี่
+export const HOLIDAY_QUEUE_START = "2026-10-01";
+
+// บินวันหยุดติดกันหลายวัน (เช่น เสาร์-อาทิตย์ ภารกิจเดียว) = 1 ครั้ง · dates เรียงเก่า → ใหม่
+export function groupTrips(dates) {
+  const trips = [];
+  let prev = null;
+  for (const d of dates) {
+    if (!prev || (Date.parse(d) - Date.parse(prev)) / 86400000 > 1) trips.push([]);
+    trips[trips.length - 1].push(d);
+    prev = d;
+  }
+  return trips;
+}
+const countTrips = (dates) => groupTrips(dates).length;
+/**
+ * @param crew      [{id, position, in_queue}] เรียงตามลำดับในตาราง
+ * @param target    วันหยุดที่จะแสดงคิว (นับเฉพาะเที่ยวก่อนวันนี้)
+ * @param since     วันแรกที่เริ่มนับ (เที่ยวก่อนหน้านี้ไม่นับ)
+ * @param isOff     (date) => วันหยุด?
+ * @param flownDays Map(crewId -> Set(date))  วันที่มีเที่ยวบินจริง (ไม่รวม ST / ยกเลิก)
+ * @param hasItemOn (crewId, date) => มีรายการในวันนั้นแล้ว
+ * @param isUnavailable (crewId, date) => boolean
+ * @param baselineDays  Map(crewId -> Iterable(date))  วันหยุดที่บินจากไฟล์ "นจบ." (ไม่กรองวันหยุดซ้ำ)
+ * @param until     วันสุดท้ายที่นับ (รวมวันนั้น · ปกติ = วันนี้) — วันหยุดที่จัดล่วงหน้าไม่นับ · null = ไม่จำกัด
+ * @param baselineCount Map(crewId -> {count, last}) | null  จำนวนครั้งตั้งต้นจากตารางคิววันหยุด (migration_41)
+ *                      null = ไม่มีข้อมูล → count เป็น null (ไม่แสดง)
+ * @returns Map(crewId -> { group, rank|null, count|null, last|null, tag|null, reason|null, off, base, trips })
+ *          base = จำนวนครั้งตั้งต้น (ไม่มีวันที่) · trips = [[วันที่…]] ครั้งที่นับต่อจากตั้งต้น (บินติดกัน = 1 ครั้ง) — ใบรายชื่อคิววันหยุด
+ *          tag = count − จำนวนครั้งน้อยสุดในกลุ่ม (เฉพาะที่ติ๊กนับคิว) · ทุกคนบินครบรอบ → เลขลดลงพร้อมกัน
+ */
+export function rankHolidayQueue({ crew, target, since = HOLIDAY_QUEUE_START, isOff, flownDays, hasItemOn, isUnavailable,
+                                   baselineDays = new Map(), baselineCount = null, until = null }) {
+  const upto = (d) => d < target && (!until || d <= until);
+  const result = new Map();
+  const groups = { IPP: [], CP: [] };
+  crew.forEach((p, idx) => {
+    const group = queueGroup(p.position);
+    if (!group) return;
+    const app = [...(flownDays.get(p.id) || [])].filter((d) => d >= since && upto(d) && isOff(d));
+    const base = [...(baselineDays.get(p.id) || [])].filter(upto);
+    const days = [...new Set([...base, ...app])].sort();
+    const reason = p.in_queue === false ? "ไม่ได้ติ๊กนับคิว" : null;
+    const assigned = !reason && hasItemOn(p.id, target);      // จัดลงวันหยุดนั้นแล้ว → ยังอยู่ในคิว
+    const off = !reason && isUnavailable(p.id, target);
+    // จำนวนครั้ง = ตั้งต้นจากตาราง + ครั้งที่บินหลังวันล่าสุดในตาราง (ไม่มีวันล่าสุด = นับตั้งแต่ since)
+    let count = null, baseN = 0, trips = [];
+    if (baselineCount) {
+      const b = baselineCount.get(p.id) || { count: 0, last: null };
+      trips = groupTrips(days.filter((d) => (b.last ? d > b.last : d >= since)));
+      baseN = b.count;
+      count = baseN + trips.length;
+    }
+    const row = { id: p.id, idx, group, count, base: baseN, trips, last: days[days.length - 1] || null,
+                  reason, off, assigned, rank: null, tag: null, inQueue: p.in_queue !== false };
+    groups[group].push(row);
+    result.set(p.id, row);
+  });
+  for (const g of Object.values(groups)) {
+    g.filter((r) => !r.reason)
+     .sort((a, b) => (baselineCount ? a.count - b.count : (a.last || "").localeCompare(b.last || "")) || a.idx - b.idx)
+     .forEach((r, i) => { r.rank = i + 1; });
+    // แทคเลข (ผู้ใช้กำหนด 28 ต.ค. 69): คนที่บินน้อยสุดในกลุ่ม = 0
+    const counted = g.filter((r) => r.inQueue && r.count != null);
+    if (counted.length) {
+      const min = Math.min(...counted.map((r) => r.count));
+      counted.forEach((r) => { r.tag = r.count - min; });
+    }
+  }
+  return result;
+}

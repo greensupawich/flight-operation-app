@@ -1,0 +1,769 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<!-- CSP: อนุญาตเฉพาะโดเมนที่ใช้จริง · เพิ่มโดเมนใหม่ (CDN/API) ต้องแก้ทุกหน้า -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob: https://iljapjszrjuzjjbtxctu.supabase.co; media-src 'self' blob: https://iljapjszrjuzjjbtxctu.supabase.co; connect-src 'self' data: https://iljapjszrjuzjjbtxctu.supabase.co wss://iljapjszrjuzjjbtxctu.supabase.co; worker-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'">
+<meta name="referrer" content="same-origin">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Flight Operation · สถิติ</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bai+Jamjuree:wght@600;700&family=IBM+Plex+Sans+Thai:wght@400;500;600&family=IBM+Plex+Mono&display=swap">
+<link rel="stylesheet" href="css/style.css">
+<style>
+  main .wrap{max-width:1560px}
+  h3.sec{font-family:"Bai Jamjuree",sans-serif;margin:26px 0 8px}
+  h3.sec:first-of-type{margin-top:14px}
+  .stat-head{display:flex;align-items:end;gap:12px;flex-wrap:wrap}
+  .stat-head .pick{margin-inline-start:auto;display:flex;align-items:center;gap:8px}
+  .stat-head .pick input{width:auto}
+  .kpi{display:flex;gap:10px;flex-wrap:wrap;margin:10px 0 4px}
+  .kpi .card{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:10px 16px;box-shadow:var(--shadow)}
+  .kpi .card .n{font-family:"Bai Jamjuree",sans-serif;font-weight:700;font-size:22px}
+  .kpi .card .l{font-size:12px;color:var(--muted)}
+
+  /* ---- กราฟเส้น ชม.สะสมรายวัน ---- */
+  .chart{min-height:250px;padding:10px 12px;border:1px solid var(--line);border-radius:12px;
+         background:var(--surface);box-shadow:var(--shadow);overflow-x:auto}
+  .chart svg{display:block;height:230px}
+  .chart .ln{fill:none;stroke:var(--primary);stroke-width:2.5;stroke-linejoin:round;stroke-linecap:round}
+  .chart .ar{fill:var(--primary);opacity:.12}
+  .chart .dot{fill:var(--primary)}
+  .chart .grid{stroke:var(--line);stroke-width:1}
+  .chart .axt{fill:var(--faint);font-size:10px;font-family:"IBM Plex Mono",monospace}
+  .chart .tg{fill:none;stroke:#D32F2F;stroke-width:2}
+  .chart .tg95{fill:none;stroke:#2E9E44;stroke-width:2;stroke-dasharray:6 4}
+  .chart .mband{fill:var(--primary);opacity:.06}
+  .chart .tgl{font-size:10px;font-family:"IBM Plex Mono",monospace;font-weight:600}
+  .fyt{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:4px 0 8px;font-size:13px}
+  .fyt input{width:110px}
+  .fyt .lg{display:inline-flex;align-items:center;gap:5px;color:var(--muted);font-size:12px}
+  .fyt .lg i{display:inline-block;width:18px;height:0;border-top:2.5px solid}
+  .fyt .sp{flex:1}
+  .chart-empty{display:flex;align-items:center;justify-content:center;height:230px;color:var(--faint)}
+
+  /* ---- ตารางแยกประเภท ---- */
+  table.mt{border-collapse:collapse;width:100%;font-size:12px}
+  table.mt th,table.mt td{border:1px solid var(--line);padding:4px 6px;text-align:center;white-space:nowrap}
+  table.mt th{background:var(--surface-2);font-weight:600;font-size:11px;color:var(--muted);position:sticky;top:0}
+  table.mt td.k{text-align:start;font-weight:700;white-space:normal;position:sticky;inset-inline-start:0;
+                width:92px;min-width:92px;max-width:92px;vertical-align:middle;z-index:1;line-height:1.25}
+  table.mt th.k{text-align:start;position:sticky;inset-inline-start:0;width:92px;min-width:92px;z-index:3}
+  table.mt td.sub,table.mt th.sub{position:sticky;inset-inline-start:92px;width:44px;min-width:44px;
+                background:var(--surface-2);font-size:10px;color:var(--muted);font-weight:600;z-index:1}
+  table.mt th.sub{z-index:3}
+  table.mt tr.ktop td,table.mt tr.ktop th{border-top:2px solid var(--line-strong)}
+  table.mt td.tot,table.mt th.tot{font-weight:700;background:var(--surface-2);position:sticky;inset-inline-end:0}
+  table.mt td.z{color:var(--faint)}
+  #disc tr.disc-link{cursor:pointer}
+  #disc tr.disc-link:hover td{background:var(--primary-soft)}
+  #disc tr.disc-link a{color:inherit;text-decoration:none}
+  #disc tr.disc-link:hover a{color:var(--primary);text-decoration:underline}
+  table.mt tr.sum td{font-weight:700;background:var(--surface-2)}
+  table.mt tr.sum td.k{background:var(--surface-2)}
+  .pager{display:flex;align-items:center;justify-content:center;gap:12px;margin:10px 0}
+  .pager .pinfo{font-size:12.5px;color:var(--muted)}
+  /* ---- รายการรายงานอันตราย ---- */
+  .sfitem{display:block;text-decoration:none;color:inherit;background:var(--surface);border:1px solid var(--line);
+          border-inline-start:4px solid var(--crit);border-radius:10px;padding:11px 14px;margin-bottom:8px;box-shadow:var(--shadow)}
+  .sfitem:hover{border-color:var(--primary)}
+  .sfitem .sf-top{display:flex;gap:10px;flex-wrap:wrap;align-items:baseline;font-size:12.5px;color:var(--muted);margin-bottom:4px}
+  .sfitem .sf-date{font-weight:700;color:var(--ink)}
+  .sfitem .sf-cs,.sfitem .sf-ac,.sfitem .sf-time{font-family:"IBM Plex Mono",monospace}
+  .sfitem .sf-time{color:var(--crit);font-weight:700}
+  .sfitem .sf-desc{font-size:14px;color:var(--ink);line-height:1.5;white-space:pre-wrap}
+  .sfitem .sf-route{font-size:12px;color:var(--faint);margin-top:3px}
+  .sfitem .go{float:inline-end;font-size:12px;color:var(--primary)}
+  .legend{display:flex;gap:12px;flex-wrap:wrap;margin:8px 0 0;font-size:12px;color:var(--muted)}
+  /* ---- ข้อขัดข้องแยกตามระบบ ---- */
+  .ds-range{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-inline-start:auto;font-size:13px}
+  .ds-range input{width:auto}
+  .ds-range .btn{white-space:nowrap}
+  table.ds td.n,table.ds th.n{text-align:end;font-variant-numeric:tabular-nums;white-space:nowrap}
+  table.ds td.bar{width:40%;min-width:120px}
+  table.ds .bar i{display:block;height:10px;border-radius:5px;background:var(--crit);min-width:2px}
+  table.ds tr.zero td{color:var(--faint)}
+  table.ds tr.zero .bar i{display:none}
+  .kpi .card.muted .n{color:var(--faint)}
+  .legend .sw{display:inline-block;width:14px;height:14px;border-radius:4px;margin-inline-end:5px;vertical-align:-2px;border:1px solid var(--line)}
+</style>
+</head>
+<body>
+<main>
+  <div class="wrap">
+    <div class="page-head stat-head">
+      <div><h1>สถิติ</h1><div class="sub">ชม.บินรวม · แยกประเภทภารกิจ · รายคน · รายเครื่อง</div></div>
+      <div class="pick">
+        <label for="mon" style="margin:0;font-size:13px">เดือน:</label>
+        <input type="month" id="mon">
+      </div>
+    </div>
+
+    <h3 class="sec" id="chartTitle">ชั่วโมงบินรวมทุกเครื่อง — รายวัน</h3>
+    <div class="kpi" id="kpi"></div>
+    <div class="fyt" id="fyt"></div>
+    <div class="chart" id="chart"><div class="chart-empty">กำลังโหลด…</div></div>
+
+    <div class="stat-head" style="margin:26px 0 8px">
+      <h3 class="sec" style="margin:0">ชั่วโมงบินแยกประเภทภารกิจ — รายวัน / รวมเดือน</h3>
+      <button class="btn sm" id="mtExport" title="ดาวน์โหลดตารางนี้ของเดือนที่เลือกเป็นไฟล์ Excel">⬇ Export Excel</button>
+    </div>
+    <div class="tablewrap"><div id="mtable"><div class="empty">กำลังโหลด…</div></div></div>
+    <div class="legend" id="legend"></div>
+
+    <div class="stat-head" style="margin:26px 0 8px">
+      <h3 class="sec" style="margin:0">ชั่วโมงบิน — รายเครื่อง</h3>
+      <div class="ds-range">
+        <label for="acFrom" style="margin:0">ตั้งแต่เดือน</label><input type="month" id="acFrom">
+        <label for="acTo" style="margin:0">ถึงเดือน</label><input type="month" id="acTo">
+        <button class="btn sm ghost" id="acMonth" title="ใช้เดือนที่เลือกด้านบน">เดือนที่เลือก</button>
+        <button class="btn sm ghost" id="acFy" title="ต.ค. – เดือนนี้">ปีงบนี้</button>
+        <button class="btn sm ghost" id="acAll" title="ทุกวันที่มีข้อมูล">ทั้งหมด</button>
+      </div>
+    </div>
+    <div class="tablewrap">
+      <table><thead><tr><th>ทะเบียน</th><th>แบบ</th><th style="text-align:end">เที่ยว</th><th style="text-align:end">ชม.บิน (ช่วงที่เลือก)</th>
+        <th style="text-align:end" title="ชม.สะสมของเครื่องทั้งหมด (รวมยอดยกมา) — ไม่ขึ้นกับช่วงวันที่">ชม.สะสมทั้งหมด</th></tr></thead>
+      <tbody id="ac"><tr><td colspan="5" class="empty">กำลังโหลด…</td></tr></tbody></table>
+    </div>
+    <div class="legend" id="acNote"></div>
+
+    <div class="stat-head" style="margin:26px 0 8px">
+      <h3 class="sec" style="margin:0">ข้อขัดข้อง — รายเครื่อง</h3>
+      <div class="pick"><label for="discAc" style="margin:0;font-size:13px">เครื่อง:</label>
+        <select id="discAc" style="width:auto"><option value="">ทั้งหมด</option></select></div>
+    </div>
+    <div class="tablewrap">
+      <table><thead><tr><th>ทะเบียน</th><th>รายละเอียด</th><th>สถานะ</th><th>วันที่ภารกิจ</th></tr></thead>
+      <tbody id="disc"><tr><td colspan="4" class="empty">กำลังโหลด…</td></tr></tbody></table>
+    </div>
+    <div class="pager" id="discPager"></div>
+
+    <div class="stat-head" style="margin:26px 0 8px">
+      <h3 class="sec" style="margin:0">ข้อขัดข้อง — แยกตามระบบ</h3>
+      <div class="ds-range">
+        <label for="dsFrom" style="margin:0">ตั้งแต่</label><input type="date" id="dsFrom">
+        <label for="dsTo" style="margin:0">ถึง</label><input type="date" id="dsTo">
+        <button class="btn sm ghost" id="dsMonth" title="ใช้เดือนที่เลือกด้านบน">เดือนที่เลือก</button>
+        <button class="btn sm ghost" id="dsFy" title="1 ต.ค. – วันนี้">ปีงบนี้</button>
+      </div>
+    </div>
+    <div class="kpi" id="dsKpi"></div>
+    <div class="tablewrap">
+      <table class="ds"><thead><tr><th>ระบบ</th><th class="n">เที่ยวที่ขัดข้อง</th><th class="n">% ของเที่ยวที่รายงาน</th><th></th></tr></thead>
+      <tbody id="dsBody"><tr><td colspan="4" class="empty">กำลังโหลด…</td></tr></tbody></table>
+    </div>
+    <h3 class="sec">⚠️ รายงานอันตราย (Safety Report)</h3>
+    <div id="safetyList"><div class="empty">กำลังโหลด…</div></div>
+    <div class="pager" id="safetyPager"></div>
+  </div>
+</main>
+
+<script type="module">
+  import { requireAuth, canPlan } from "./js/auth.js";
+  import { renderTopbar } from "./js/ui.js";
+  import { supabase } from "./js/supabase.js";
+  import { loadExcelJS } from "./js/board-excel.js";
+  import { KINDS, KIND_COLORS, DEFAULT_KIND, isStby } from "./js/missions.js";
+  import { DEFECT_SYSTEMS, defectLabel } from "./js/reports.js";
+
+  const profile = await requireAuth();
+  if (!profile) throw new Error("no auth");
+  renderTopbar(profile);
+  const esc=(s)=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+  const fx=(h)=>Number(h||0);
+  const fmt=(h)=>{ const v=Math.round(fx(h)*10)/10; return v ? String(v) : ""; };
+
+  // ---------- ดึงชั่วโมงบินทั้งหมด (ผูกกับวันที่ + ประเภทภารกิจ) ----------
+  let { data: reps, error: repErr } = await supabase.from("post_flight_reports")
+    .select("total_hours, rest_kind, missions(mission_date, kind, flight_legs(hours, vip))");
+  if (repErr) {   // ยังไม่ได้รัน migration_37 (ไม่มี rest_kind) → ที่เหลือนับเป็นฝึกบิน
+    ({ data: reps, error: repErr } = await supabase.from("post_flight_reports")
+      .select("total_hours, missions(mission_date, kind, flight_legs(hours, vip))"));
+  }
+  if (repErr) {   // ยังไม่ได้รัน migration_26 (ไม่มีคอลัมน์ vip) → โหลดแบบเดิม
+    ({ data: reps, error: repErr } = await supabase.from("post_flight_reports")
+      .select("total_hours, missions(mission_date, kind)"));
+  }
+  if (repErr) console.warn("reports:", repErr.message);
+  // ภารกิจวัง/เดโชชัยที่ติ๊ก "คณะวัง" รายขา: ชม.ขาที่ติ๊ก → ประเภทภารกิจ · ส่วนที่เหลือ → rest_kind (ค่าเริ่มต้น ฝึกบิน, migration_37)
+  //  f  = เที่ยวที่บินจริง (1 รายงาน = 1 เที่ยว) → KPI "เที่ยวบิน"
+  //  fk = เที่ยวในตารางแยกประเภท: ส่วนที่แตกออกนับเพิ่มอีก 1 เที่ยว → ตาราง ≥ KPI เสมอ
+  //  (ไม่มีขาไหนติ๊ก = นับทั้งภารกิจเป็นประเภทเดิม) — ตรงกับ archive_purge_month
+  const VIP_KINDS=["palace","dechochai"];
+  const rows=[];
+  for(const r of reps||[]){
+    const m=r.missions; if(!m||!m.mission_date) continue;
+    const date=String(m.mission_date).slice(0,10), kind=m.kind||DEFAULT_KIND, total=fx(r.total_hours);
+    const legs=m.flight_legs||[];
+    if(VIP_KINDS.includes(kind) && legs.some(l=>l.vip)){
+      const vh=Math.round(legs.reduce((t,l)=>t+(l.vip?fx(l.hours):0),0)*100)/100;   // ปัดทศนิยม float (0.7+0.6 ≠ 1.3)
+      rows.push({ date, kind, h:vh, f:1, fk:1 });
+      const rest=Math.round((total-vh)*100)/100;
+      if(rest>0) rows.push({ date, kind:r.rest_kind||"training", h:rest, f:0, fk:1 });
+    } else rows.push({ date, kind, h:total, f:1, fk:1 });
+  }
+
+  // เดือนที่เคลียร์ข้อมูลดิบแล้ว (archive.html) → ใช้สถิติสรุปรายวันแทน (migration_25)
+  //  วันที่ยังมีข้อมูลดิบอยู่ใช้ข้อมูลดิบ กันนับซ้ำ
+  //  flights = เที่ยวจริง · extra_flights = เที่ยวที่แตกจากภารกิจวัง/เดโชชัย (migration_37)
+  let { data: sd, error: sdErr } = await supabase.from("stats_daily").select("stat_date,kind,flights,extra_flights,hours");
+  if (sdErr) ({ data: sd, error: sdErr } = await supabase.from("stats_daily").select("stat_date,kind,flights,hours"));
+  if (sdErr) console.warn("stats_daily:", sdErr.message);
+  const rawDates=new Set(rows.map(r=>r.date));
+  for(const x of sd||[]){
+    const date=String(x.stat_date).slice(0,10);
+    if(!rawDates.has(date)){ const f=Number(x.flights)||0;
+      rows.push({ date, kind:x.kind||DEFAULT_KIND, h:fx(x.hours), f, fk:f+(Number(x.extra_flights)||0) }); }
+  }
+
+  const daysIn=(y,m)=>new Date(y,m,0).getDate();   // m=1..12
+
+  // ---------- เป้า ชม.บินทั้งปีงบ (migration_35) — ผู้วางแผนขึ้นไปแก้ได้ ----------
+  const planner=canPlan(profile);
+  const targets=new Map();                          // ปีงบ (พ.ศ.) -> ชม.
+  let tgErr=null;
+  { const { data, error } = await supabase.from("fy_hour_targets").select("fiscal_year,target_hours");
+    if (error) { tgErr=/does not exist|schema cache|Could not find/i.test(error.message||"")
+                   ? "ยังไม่มีตารางเป้า — ต้องรัน db/migration_35_fy_hour_targets.sql ก่อน" : error.message;
+                 console.warn("fy_hour_targets:", error.message); }
+    (data||[]).forEach(r=>targets.set(r.fiscal_year, Number(r.target_hours))); }
+  const ymd=(dt)=>`${dt.getFullYear()}-${String(dt.getMonth()+1).padStart(2,"0")}-${String(dt.getDate()).padStart(2,"0")}`;
+  const TH_MON=["ม.ค.","ก.พ.","มี.ค.","เม.ย.","พ.ค.","มิ.ย.","ก.ค.","ส.ค.","ก.ย.","ต.ค.","พ.ย.","ธ.ค."];
+  const r1=(v)=>Math.round(v*10)/10;
+
+  let lastMonth=null;                               // ข้อมูลตารางแยกประเภทที่แสดงอยู่ — ใช้ตอน Export Excel
+  function renderMonth(ym){
+    const [y,m]=ym.split("-").map(Number);
+    const nd=daysIn(y,m);
+    const inMonth=rows.filter(r=>r.date.slice(0,7)===ym);
+
+    // รวมรายวัน (ทุกประเภท) + แยกตามประเภท (ชม.บิน + จำนวนเที่ยว)
+    const perDay=Array(nd+1).fill(0);                 // ชม.รวมต่อวัน (ใช้ในกราฟ)
+    const perDayF=Array(nd+1).fill(0);               // จำนวนเที่ยวรวมต่อวัน (ตารางแยกประเภท — นับส่วนที่แตกออกด้วย)
+    const perKindH=new Map(), perKindF=new Map();    // kind -> [day]=ชม. / =เที่ยว
+    let monthFlights=0;                              // เที่ยวที่บินจริง (KPI)
+    for(const r of inMonth){
+      const d=Number(r.date.slice(8,10));
+      if(d<1||d>nd) continue;
+      perDay[d]+=r.h; perDayF[d]+=r.fk; monthFlights+=r.f;
+      if(!perKindH.has(r.kind)){ perKindH.set(r.kind, Array(nd+1).fill(0)); perKindF.set(r.kind, Array(nd+1).fill(0)); }
+      perKindH.get(r.kind)[d]+=r.h;
+      perKindF.get(r.kind)[d]+=r.fk;
+    }
+    const monthTotal=perDay.reduce((a,b)=>a+b,0);
+    const tableFlights=perDayF.reduce((a,b)=>a+b,0);
+    const flyingDays=perDay.filter(v=>v>0).length;
+    const maxDay=Math.max(1,...perDay);
+
+    // ----- KPI -----
+    document.getElementById("kpi").innerHTML=`
+      <div class="card"><div class="n">${Math.round(monthTotal*10)/10}</div><div class="l">ชม.รวมทั้งเดือน</div></div>
+      <div class="card"><div class="n">${flyingDays}</div><div class="l">วันที่มีบิน</div></div>
+      <div class="card"><div class="n">${monthFlights}</div><div class="l">เที่ยวบิน</div></div>`;
+
+    renderFyChart(ym);
+
+    // ----- ตารางแยกประเภท -----
+    const kindsShown=Object.keys(KINDS).filter(k=>!isStby(k));   // ทุกประเภท (ยกเว้น STBY) แม้ไม่มีข้อมูล
+    const box=document.getElementById("mtable");
+
+    const head=`<tr><th class="k">ประเภทภารกิจ</th><th class="sub"></th>`+
+      Array.from({length:nd},(_,i)=>{const d=i+1;const dow=new Date(y,m-1,d).getDay();
+        return `<th${(dow===0||dow===6)?' style="color:var(--faint)"':''}>${d}</th>`;}).join("")+
+      `<th class="tot">รวมเดือน</th></tr>`;
+
+    const zeros=Array(nd+1).fill(0);
+    // แต่ละประเภท = 2 แถวย่อย: บน=จำนวนเที่ยว · ล่าง=ชม.บิน
+    const body=kindsShown.map(k=>{
+      const c=KIND_COLORS[k]||KIND_COLORS[DEFAULT_KIND];
+      const fArr=perKindF.get(k)||zeros, hArr=perKindH.get(k)||zeros;
+      const fTot=fArr.reduce((a,b)=>a+b,0), hTot=hArr.reduce((a,b)=>a+b,0);
+      const tint=`background:color-mix(in srgb, ${c.bg} 20%, var(--surface))`;
+      const fCells=Array.from({length:nd},(_,i)=>{const v=fArr[i+1];
+        return v>0?`<td style="${tint}">${v}</td>`:`<td class="z">·</td>`;}).join("");
+      const hCells=Array.from({length:nd},(_,i)=>{const v=hArr[i+1];
+        return v>0?`<td style="${tint}">${fmt(v)}</td>`:`<td class="z">·</td>`;}).join("");
+      return `<tr class="ktop"><td class="k" rowspan="2" style="background:${c.bg};color:${c.fg}">${esc(KINDS[k])}</td>`+
+             `<td class="sub">เที่ยว</td>${fCells}<td class="tot">${fTot}</td></tr>`+
+             `<tr><td class="sub">ชม.</td>${hCells}<td class="tot">${Math.round(hTot*10)/10}</td></tr>`;
+    }).join("");
+
+    const sumF=`<tr class="sum ktop"><td class="k" rowspan="2">รวม/วัน</td><td class="sub">เที่ยว</td>`+
+      Array.from({length:nd},(_,i)=>{const v=perDayF[i+1];return `<td>${v>0?v:"·"}</td>`;}).join("")+
+      `<td class="tot">${tableFlights}</td></tr>`;
+    const sumH=`<tr class="sum"><td class="sub">ชม.</td>`+
+      Array.from({length:nd},(_,i)=>{const v=perDay[i+1];return `<td>${v>0?fmt(v):"·"}</td>`;}).join("")+
+      `<td class="tot">${Math.round(monthTotal*10)/10}</td></tr>`;
+
+    box.innerHTML=`<table class="mt"><thead>${head}</thead><tbody>${body}${sumF}${sumH}</tbody></table>`;
+    lastMonth={ y, m, nd, kindsShown, perKindF, perKindH, perDayF, perDay, monthTotal, tableFlights };
+
+    document.getElementById("legend").innerHTML=kindsShown.map(k=>{
+      const c=KIND_COLORS[k]||KIND_COLORS[DEFAULT_KIND];
+      return `<span><i class="sw" style="background:${c.bg}"></i>${esc(KINDS[k])}</span>`;}).join("");
+  }
+
+  // ----- กราฟเส้น ชม.สะสมทั้งปีงบ (1 ต.ค. – 30 ก.ย.) + เส้นเป้า (แดง) + 95% ของเป้า (เขียวปะ) -----
+  //  ปีงบของเดือนที่เลือก · แถบจาง = เดือนที่เลือก · ปีงบปัจจุบัน → เส้นจริงลากถึงวันนี้
+  function renderFyChart(ym){
+    const [y,m]=ym.split("-").map(Number);
+    const fyCE=m>=10 ? y+1 : y, fy=fyCE+543;                     // ปีงบ 2570 = 1 ต.ค. 2569 – 30 ก.ย. 2570
+    const days=[];
+    for(let dt=new Date(fyCE-1,9,1); dt<=new Date(fyCE,8,30); dt.setDate(dt.getDate()+1)) days.push(ymd(dt));
+    const nD=days.length, idx=new Map(days.map((d,i)=>[d,i]));
+    const perDay=Array(nD).fill(0);
+    for(const r of rows){ const i=idx.get(r.date); if(i!==undefined) perDay[i]+=r.h; }
+    const cum=[]; perDay.reduce((t,v,i)=>(cum[i]=t+v),0);
+    const todayS=ymd(new Date());
+    const last = todayS>days[nD-1] ? nD-1 : (todayS<days[0] ? -1 : idx.get(todayS));   // จุดสุดท้ายของเส้นจริง
+    const actual = last>=0 ? cum[last] : 0;
+    const target=targets.get(fy)||0;
+
+    document.getElementById("chartTitle").textContent=`ชั่วโมงบินรวมทุกเครื่อง — สะสมรายวัน ปีงบประมาณ ${fy}`;
+    // ----- แถบเป้า: ผู้วางแผนขึ้นไปกรอกได้ -----
+    const fyt=document.getElementById("fyt");
+    const pace = target && last>=0 ? target*(last+1)/nD : 0;      // ตามเส้นแดง ณ วันล่าสุด
+    fyt.innerHTML=`<b>เป้า ชม.บินรวมทั้งปีงบ ${fy}:</b>`+
+      (planner && !tgErr
+        ? `<input type="number" id="tgIn" min="1" step="0.1" value="${target||""}" placeholder="ชม."><button class="btn sm" id="tgSave">บันทึก</button>`
+        : `<span class="mono">${target ? r1(target)+" ชม." : "ยังไม่ได้ตั้ง"}</span>`)+
+      (tgErr ? `<span style="color:var(--crit)">${esc(tgErr)}</span>` : "")+
+      `<span class="sp"></span>
+       <span class="lg"><i style="border-color:var(--primary)"></i>ชม.สะสมจริง</span>
+       <span class="lg"><i style="border-color:#D32F2F"></i>เป้า</span>
+       <span class="lg"><i style="border-color:#2E9E44;border-top-style:dashed"></i>95% ของเป้า</span>
+       <button class="btn sm" id="fyExport" title="ไฟล์ Excel ที่มีเฉพาะกราฟนี้">⬇ Export Excel</button>`;
+    document.getElementById("fyExport").addEventListener("click",(e)=>exportFyChart(e.currentTarget));
+    if(planner && !tgErr){
+      const inp=document.getElementById("tgIn"), btn=document.getElementById("tgSave");
+      const save=async()=>{
+        const v=Number(inp.value);
+        if(inp.value.trim()==="" ){
+          if(!target || !confirm(`ลบเป้าปีงบ ${fy}?`)) return;
+          const { error } = await supabase.from("fy_hour_targets").delete().eq("fiscal_year",fy);
+          if(error) return alert("ลบไม่สำเร็จ: "+error.message);
+          targets.delete(fy); return renderFyChart(ym);
+        }
+        if(!(v>0 && v<100000)) return alert("กรอกชั่วโมงเป็นตัวเลขมากกว่า 0");
+        btn.disabled=true;
+        const { error } = await supabase.from("fy_hour_targets").upsert({ fiscal_year:fy, target_hours:r1(v) },{ onConflict:"fiscal_year" });
+        btn.disabled=false;
+        if(error) return alert("บันทึกไม่สำเร็จ: "+error.message);
+        targets.set(fy,r1(v)); renderFyChart(ym);
+      };
+      btn.addEventListener("click",save);
+      inp.addEventListener("keydown",(e)=>{ if(e.key==="Enter") save(); });
+    }
+    // ----- KPI ปีงบ (ต่อท้ายการ์ดของเดือน) -----
+    const kpi=document.getElementById("kpi");
+    kpi.querySelectorAll(".fyk").forEach(e=>e.remove());           // วาดใหม่ตอนบันทึกเป้า → ไม่ซ้ำ
+    kpi.insertAdjacentHTML("beforeend",
+      `<div class="card fyk"><div class="n">${r1(actual)}${target?`<span style="font-size:14px;color:var(--muted)"> / ${r1(target)}</span>`:""}</div>
+        <div class="l">ชม.สะสมปีงบ ${fy}${target?` · ${Math.round(actual/target*100)}% ของเป้า`:""}</div></div>`+
+      (pace ? `<div class="card fyk"><div class="n" style="color:${actual>=pace*0.95?"#2E9E44":"#D32F2F"}">${actual-pace>=0?"+":""}${r1(actual-pace)}</div>
+        <div class="l">เทียบเส้นเป้า ณ ${last===nD-1?"สิ้นปีงบ":"วันนี้"} (${r1(pace)} ชม.)</div></div>` : ""));
+
+    // วาด SVG (ใช้ทั้งบนหน้าเว็บ และตอน Export — exp=true: ใส่หัวข้อ/คำอธิบายเส้นในภาพ)
+    const fySvg=(W,H,exp=false)=>{
+      const padL=48,padR=56,padT=exp?40:14,padB=24;
+      const X=(i)=>padL+(W-padL-padR)*i/(nD-1);
+      const yMax=Math.max(target, actual, 1)*1.05;
+      const Y=(v)=>padT+(H-padT-padB)*(1-v/yMax);
+      const f=(v)=>v.toFixed(1);
+      let grid="";
+      for(let i=0;i<=4;i++){ const v=yMax*i/4, yy=Y(v);
+        grid+=`<line class="grid" x1="${padL}" y1="${f(yy)}" x2="${f(W-padR)}" y2="${f(yy)}"/>`
+             +`<text class="axt" x="${padL-6}" y="${f(yy+3)}" text-anchor="end">${Math.round(v)}</text>`; }
+      // แกน X = ต้นเดือน · แถบจาง = เดือนที่เลือก
+      let xl="", band="";
+      days.forEach((d,i)=>{ if(d.endsWith("-01")){
+        const mm=Number(d.slice(5,7));
+        xl+=`<line class="grid" x1="${f(X(i))}" y1="${padT}" x2="${f(X(i))}" y2="${H-padB}" opacity=".5"/>`
+           +`<text class="axt" x="${f(X(i)+3)}" y="${H-8}">${TH_MON[mm-1]}${mm===1||i===0?String(Number(d.slice(0,4))+543).slice(2):""}</text>`;
+        if(d.slice(0,7)===ym){ const e=days.findIndex((x,j)=>j>i && x.endsWith("-01")); const ei=e<0?nD-1:e;
+          band=`<rect class="mband" x="${f(X(i))}" y="${padT}" width="${f(X(ei)-X(i))}" height="${H-padT-padB}"/>`; }
+      }});
+      // เส้นเป้า (ตรงจาก 0 ที่ 1 ต.ค. ถึงเป้าที่ 30 ก.ย.)
+      let tg="";
+      if(target){
+        tg=`<path class="tg" d="M${f(X(0))},${f(Y(0))} L${f(X(nD-1))},${f(Y(target))}"><title>เป้า ${r1(target)} ชม.</title></path>`
+          +`<path class="tg95" d="M${f(X(0))},${f(Y(0))} L${f(X(nD-1))},${f(Y(target*0.95))}"><title>95% = ${r1(target*0.95)} ชม.</title></path>`
+          +`<text class="tgl" x="${f(X(nD-1)+4)}" y="${f(Y(target)+3)}" fill="#D32F2F">${Math.round(target)}</text>`
+          +`<text class="tgl" x="${f(X(nD-1)+4)}" y="${f(Y(target*0.95)+12)}" fill="#2E9E44">${Math.round(target*0.95)}</text>`;
+      }
+      // เส้นจริง
+      let ln="", area="", dots="";
+      if(last>=0){
+        for(let i=0;i<=last;i++) ln+=(i?"L":"M")+f(X(i))+","+f(Y(cum[i]))+" ";
+        area=`<path class="ar" d="M${f(X(0))},${f(Y(0))} ${ln.replace(/^M/,"L")} L${f(X(last))},${f(Y(0))} Z"/>`;
+        for(let i=0;i<=last;i++){ const endM = i===last || days[i+1]?.endsWith("-01");
+          if(endM) dots+=`<circle class="dot" cx="${f(X(i))}" cy="${f(Y(cum[i]))}" r="3.5"><title>${Number(days[i].slice(8))} ${TH_MON[Number(days[i].slice(5,7))-1]} · สะสม ${r1(cum[i])} ชม.${target?` · เป้า ณ วันนั้น ${r1(target*(i+1)/nD)}`:""}</title></circle>`; }
+      }
+      let lg="";
+      if(exp){
+        const items=[["#245073","ชม.สะสมจริง",""],["#D32F2F","เป้า "+r1(target)+" ชม.",""],["#2E9E44","95% = "+r1(target*0.95)+" ชม.","6 4"]].slice(0,target?3:1);
+        lg=`<text class="tt" x="${padL}" y="18">ชม.บินรวมทุกเครื่อง สะสมรายวัน · ปีงบประมาณ ${fy} (สะสมถึงวันนี้ ${r1(actual)} ชม.)</text>`;
+        let x=W-padR;
+        for(const [c,t,da] of items.reverse()){ const w=t.length*6.2+30; x-=w;
+          lg+=`<line x1="${f(x)}" y1="14" x2="${f(x+20)}" y2="14" stroke="${c}" stroke-width="2.5"${da?` stroke-dasharray="${da}"`:""}/>`
+             +`<text class="lgt" x="${f(x+25)}" y="18">${esc(t)}</text>`; }
+      }
+      return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}">
+        ${exp?`<style>${EXPORT_CSS}</style><rect width="${W}" height="${H}" fill="#fff"/>`:""}${lg}
+        ${band}${grid}${xl}${tg}${area}<path class="ln" d="${ln.trim()}"/>${dots}</svg>`;
+    };
+    lastFy={ fy, actual, target, svg:fySvg };
+    const chart=document.getElementById("chart");
+    if(!actual && !target){ chart.innerHTML=`<div class="chart-empty">ยังไม่มีข้อมูลชั่วโมงบินในปีงบ ${fy}</div>`; return; }
+    chart.innerHTML=fySvg(Math.max(640,(chart.clientWidth||900)-24),230);
+    chart.querySelector("svg").style.width=chart.querySelector("svg").getAttribute("width")+"px";
+  }
+
+  // ---------- Export ตารางแยกประเภทภารกิจ (เดือนที่เลือก) → Excel ----------
+  //  หน้าตาเดียวกับบนเว็บ: ประเภทละ 2 แถว (เที่ยว / ชม.) · สีประเภท · เสาร์-อาทิตย์หัวเทา · แถวรวม/วัน + คอลัมน์รวมเดือน
+  const TH_MONTH_FULL=["มกราคม","กุมภาพันธ์","มีนาคม","เมษายน","พฤษภาคม","มิถุนายน","กรกฎาคม","สิงหาคม","กันยายน","ตุลาคม","พฤศจิกายน","ธันวาคม"];
+  async function exportMonthTable(btn){
+    if(!lastMonth) return;
+    const { y, m, nd, kindsShown, perKindF, perKindH, perDayF, perDay, monthTotal, tableFlights } = lastMonth;
+    btn.disabled=true; const t0=btn.textContent; btn.textContent="กำลังสร้าง…";
+    try{
+      const ExcelJS=await loadExcelJS();
+      const wb=new ExcelJS.Workbook();
+      const title=`${TH_MON[m-1]}${String(y+543).slice(-2)}`;
+      const ws=wb.addWorksheet(title,{ views:[{ state:"frozen", xSplit:2, ySplit:3, showGridLines:false }],
+        pageSetup:{ paperSize:9, orientation:"landscape", fitToPage:true, fitToWidth:1, fitToHeight:0,
+                    margins:{ left:0.3, right:0.3, top:0.4, bottom:0.4, header:0.2, footer:0.2 } } });
+      const argb=(hex)=>"FF"+hex.replace("#","").toUpperCase();
+      const font=(o={})=>({ name:"Tahoma", size:10, ...o });
+      const thin={ style:"thin", color:{ argb:"FFB8C2CF" } }, thick={ style:"medium", color:{ argb:"FF5D6B7E" } };
+      const last=3+nd;                                 // คอลัมน์ "รวมเดือน"
+      ws.getColumn(1).width=20; ws.getColumn(2).width=6;
+      for(let c=3;c<=2+nd;c++) ws.getColumn(c).width=5.2;
+      ws.getColumn(last).width=10;
+
+      ws.mergeCells(1,1,1,last);
+      ws.getCell(1,1).value=`ชั่วโมงบินแยกประเภทภารกิจ — รายวัน / รวมเดือน · ${TH_MONTH_FULL[m-1]} ${y+543} · ฝูง.603 บน.6`;
+      ws.getCell(1,1).font=font({ size:14, bold:true });
+      ws.mergeCells(2,1,2,last);
+      ws.getCell(2,1).value=`รวม ${r1(monthTotal)} ชม. · ${tableFlights} เที่ยว (นับส่วนที่แตกจากภารกิจวัง/เดโชชัยด้วย) · ข้อมูล ณ ${new Date().toLocaleString("th-TH")}`;
+      ws.getCell(2,1).font=font({ size:9, color:{ argb:"FF5D6B7E" } });
+
+      // ใส่ค่าทีละเซลล์ (row.values ที่ช่องแรกว่างจะถูกตีความเป็น sparse array → เลื่อนคอลัมน์)
+      const put=(row,arr)=>arr.forEach((v,i)=>{ ws.getCell(row,i+1).value=v; });
+      const each=(row,fn)=>{ for(let c=1;c<=last;c++) fn(ws.getCell(row,c),c); };
+      put(3,["ประเภทภารกิจ","",...Array.from({length:nd},(_,i)=>i+1),"รวมเดือน"]);
+      const hr=ws.getRow(3);
+      each(3,(cell,c)=>{
+        const dow=c>=3&&c<=2+nd ? new Date(y,m-1,c-2).getDay() : -1;
+        cell.font=font({ bold:true, size:9, color:{ argb:(dow===0||dow===6)?"FF9AA4B2":"FF16202E" } });
+        cell.fill={ type:"pattern", pattern:"solid", fgColor:{ argb:"FFEEF1F5" } };
+        cell.alignment={ horizontal:c===1?"left":"center", vertical:"middle" };
+        cell.border={ top:thin, left:thin, right:thin, bottom:thick };
+      });
+      hr.height=18;
+
+      let r=4;
+      const addPair=(label, fArr, hArr, fTot, hTot, style)=>{
+        put(r,[label,"เที่ยว",...Array.from({length:nd},(_,i)=>fArr[i+1]>0?fArr[i+1]:null),fTot]);
+        put(r+1,[null,"ชม.",...Array.from({length:nd},(_,i)=>hArr[i+1]>0?r1(hArr[i+1]):null),r1(hTot)]);
+        ws.mergeCells(r,1,r+1,1);
+        [r,r+1].forEach((row,k)=>each(row,(cell,c)=>{
+          const sum=style.sum||c===last;
+          cell.font=font({ size:c===1?10:9, bold:sum||c===1, color:{ argb:c===2?"FF5D6B7E":"FF16202E" } });
+          cell.alignment={ horizontal:c===1?"left":"center", vertical:"middle", wrapText:c===1 };
+          cell.border={ top:k===0?thick:thin, left:thin, right:thin, bottom:thin };
+          if(k===1&&c>=3) cell.numFmt="0.0";
+          if(c===1&&style.bg) { cell.fill={ type:"pattern", pattern:"solid", fgColor:{ argb:argb(style.bg) } };
+                                cell.font=font({ bold:true, color:{ argb:argb(style.fg) } }); }
+          else if(sum) cell.fill={ type:"pattern", pattern:"solid", fgColor:{ argb:"FFEEF1F5" } };
+          else if(style.tint&&cell.value!=null&&c>=3) cell.fill={ type:"pattern", pattern:"solid", fgColor:{ argb:argb(style.tint) } };
+        }));
+        r+=2;
+      };
+      // สีอ่อน (20% ของสีประเภท ผสมขาว) เหมือนบนเว็บ
+      const tint=(hex)=>{ const n=parseInt(hex.slice(1),16), mix=(v)=>Math.round(v*0.2+255*0.8);
+        return "#"+[n>>16,(n>>8)&255,n&255].map(v=>mix(v).toString(16).padStart(2,"0")).join(""); };
+      const zeros=Array(nd+1).fill(0);
+      for(const k of kindsShown){
+        const c=KIND_COLORS[k]||KIND_COLORS[DEFAULT_KIND];
+        const fArr=perKindF.get(k)||zeros, hArr=perKindH.get(k)||zeros;
+        addPair(KINDS[k], fArr, hArr, fArr.reduce((a,b)=>a+b,0), hArr.reduce((a,b)=>a+b,0), { bg:c.bg, fg:c.fg, tint:tint(c.bg) });
+      }
+      addPair("รวม/วัน", perDayF, perDay, tableFlights, monthTotal, { sum:true });
+
+      const buf=await wb.xlsx.writeBuffer();
+      const url=URL.createObjectURL(new Blob([buf],{type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"}));
+      const a=document.createElement("a"); a.href=url; a.download=`ชั่วโมงบินแยกประเภทภารกิจ ${title}.xlsx`;
+      document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(url),30000);
+    }catch(e){ alert("Export ไม่สำเร็จ: "+(e.message||e)); }
+    finally{ btn.disabled=false; btn.textContent=t0; }
+  }
+  document.getElementById("mtExport").addEventListener("click",(e)=>exportMonthTable(e.currentTarget));
+
+  // ---------- Export กราฟ → Excel (ไฟล์มีแค่กราฟนี้ เป็นภาพคมชัด) ----------
+  const EXPORT_CSS=`text{font-family:Tahoma,"Leelawadee UI","Thonburi",sans-serif}
+    .ln{fill:none;stroke:#245073;stroke-width:2.5;stroke-linejoin:round;stroke-linecap:round}
+    .ar{fill:#245073;opacity:.12} .dot{fill:#245073} .grid{stroke:#dce2ea;stroke-width:1}
+    .axt{fill:#5d6b7e;font-size:10px} .tg{fill:none;stroke:#D32F2F;stroke-width:2}
+    .tg95{fill:none;stroke:#2E9E44;stroke-width:2;stroke-dasharray:6 4} .mband{fill:#245073;opacity:.06}
+    .tgl{font-size:10px;font-weight:700} .tt{font-size:13px;font-weight:700;fill:#16202e} .lgt{font-size:11px;fill:#16202e}`;
+  let lastFy=null;
+  async function svgToPng(svg, W, H, scale=2){
+    const url=URL.createObjectURL(new Blob([svg],{type:"image/svg+xml"}));
+    try{
+      const img=new Image();
+      await new Promise((ok,bad)=>{ img.onload=ok; img.onerror=()=>bad(new Error("แปลงกราฟเป็นภาพไม่สำเร็จ")); img.src=url; });
+      const cv=document.createElement("canvas"); cv.width=W*scale; cv.height=H*scale;
+      const cx=cv.getContext("2d"); cx.scale(scale,scale); cx.drawImage(img,0,0,W,H);
+      return cv.toDataURL("image/png");
+    } finally { URL.revokeObjectURL(url); }
+  }
+  async function exportFyChart(btn){
+    if(!lastFy) return;
+    const { fy, actual, target, svg } = lastFy;
+    btn.disabled=true; const t0=btn.textContent; btn.textContent="กำลังสร้าง…";
+    try{
+      const W=1000, H=380;
+      const [ExcelJS, png]=await Promise.all([loadExcelJS(), svgToPng(svg(W,H,true),W,H)]);
+      const wb=new ExcelJS.Workbook();
+      const ws=wb.addWorksheet(`กราฟ ปีงบ ${fy}`,{ views:[{ showGridLines:false }] });
+      ws.getCell("A1").value=`ชั่วโมงบินรวมทุกเครื่อง — สะสมรายวัน ปีงบประมาณ ${fy}`;
+      ws.getCell("A1").font={ name:"Tahoma", size:14, bold:true };
+      ws.getCell("A2").value=`สะสมถึงวันนี้ ${r1(actual)} ชม.`+(target?` · เป้า ${r1(target)} ชม. · 95% = ${r1(target*0.95)} ชม. · ${Math.round(actual/target*100)}% ของเป้า`:"")
+        +` · ข้อมูล ณ ${new Date().toLocaleString("th-TH")}`;
+      ws.getCell("A2").font={ name:"Tahoma", size:10, color:{ argb:"FF5D6B7E" } };
+      ws.addImage(wb.addImage({ base64:png, extension:"png" }),{ tl:{ col:0, row:3 }, ext:{ width:W, height:H } });
+      const buf=await wb.xlsx.writeBuffer();
+      const url=URL.createObjectURL(new Blob([buf],{type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"}));
+      const a=document.createElement("a"); a.href=url; a.download=`กราฟชั่วโมงบิน ปีงบ ${fy}.xlsx`;
+      document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(url),30000);
+    }catch(e){ alert("Export ไม่สำเร็จ: "+(e.message||e)); }
+    finally{ btn.disabled=false; btn.textContent=t0; }
+  }
+
+  const mon=document.getElementById("mon");
+  const now=new Date();
+  mon.value=`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,"0")}`;
+  mon.addEventListener("change",()=>renderMonth(mon.value||mon.max));
+  renderMonth(mon.value);
+
+  // ---------- ชั่วโมงบินรายเครื่อง — เลือกช่วงวันที่ (ผู้ใช้ขอ 3 พ.ย. 69) ----------
+  //  เที่ยว = รายงานหลังบิน 1 ฉบับ (ไม่นับภารกิจยกเลิก) · ชม. = total_hours · วันที่ = วันของภารกิจ
+  //  เลือกเป็นเดือน (ตั้งแต่เดือน–ถึงเดือน) · เดือนที่เคลียร์ข้อมูลดิบแล้ว → ใช้ stats_aircraft_monthly
+  //  ชม.สะสมทั้งหมด = aircraft.total_hours (ยอดยกมา + ทุกรายงาน) ไม่ขึ้นกับช่วง
+  const [{ data: ac }, { data: acReps, error: acErr }, { data: acMon }] = await Promise.all([
+    supabase.from("aircraft").select("id,tail_number,type,total_hours").order("type").order("tail_number"),
+    supabase.from("post_flight_reports").select("total_hours, result, missions(mission_date, aircraft_id, status)"),
+    supabase.from("stats_aircraft_monthly").select("ym,aircraft_id,flights,hours"),
+  ]);
+  if (acErr) console.warn("aircraft reports:", acErr.message);
+  const acRaw=(acReps||[]).filter(r=>r.missions?.mission_date && r.missions.aircraft_id)
+    .map(r=>({ date:String(r.missions.mission_date).slice(0,10), id:r.missions.aircraft_id, h:fx(r.total_hours),
+               f:(r.missions.status==="cancelled"||r.result==="CANCELLED") ? 0 : 1 }));
+  const acRawMonths=new Set(acRaw.map(r=>r.date.slice(0,7)));
+  const acArch=(acMon||[]).map(x=>({ ym:String(x.ym).slice(0,7), id:x.aircraft_id, h:fx(x.hours), f:Number(x.flights)||0 }))
+    .filter(x=>!acRawMonths.has(x.ym));
+  const acFrom=document.getElementById("acFrom"), acTo=document.getElementById("acTo");
+  const acFyStart=()=>{ const t=new Date(), y=t.getMonth()>=9 ? t.getFullYear() : t.getFullYear()-1; return `${y}-10`; };
+  const thisYm=()=>ymd(new Date()).slice(0,7);
+  acFrom.value=acFyStart(); acTo.value=thisYm();
+  function renderAc(){
+    let fa=acFrom.value, fb=acTo.value;
+    if (fa && fb && fa>fb) { [fa,fb]=[fb,fa]; acFrom.value=fa; acTo.value=fb; }
+    const a=fa ? `${fa}-01` : "", b=fb ? `${fb}-${String(daysIn(...fb.split("-").map(Number))).padStart(2,"0")}` : "";
+    const per=new Map((ac||[]).map(x=>[x.id,{ f:0, h:0 }]));
+    const add=(id,f,h)=>{ if(!per.has(id)) per.set(id,{ f:0, h:0 }); const p=per.get(id); p.f+=f; p.h+=h; };
+    for (const r of acRaw) if ((!a||r.date>=a)&&(!b||r.date<=b)) add(r.id,r.f,r.h);
+    let archUsed=false;
+    for (const x of acArch) if ((!fa||x.ym>=fa)&&(!fb||x.ym<=fb)) { add(x.id,x.f,x.h); archUsed=true; }
+    let tf=0, th=0;
+    const rowsHTML=(ac||[]).map(x=>{ const p=per.get(x.id); tf+=p.f; th+=p.h;
+      return `<tr><td class="mono">${esc(x.tail_number)}</td><td>${esc(x.type||"-")}</td>
+        <td class="num">${p.f||"·"}</td><td class="num">${p.h?r1(p.h).toFixed(1):"·"}</td>
+        <td class="num muted">${Number(x.total_hours||0).toFixed(1)}</td></tr>`; }).join("");
+    document.getElementById("ac").innerHTML = (ac&&ac.length)
+      ? rowsHTML + `<tr style="font-weight:700;background:var(--surface-2)"><td colspan="2">รวมทุกเครื่อง</td>
+          <td class="num">${tf}</td><td class="num">${r1(th).toFixed(1)}</td>
+          <td class="num muted">${r1((ac||[]).reduce((s,x)=>s+Number(x.total_hours||0),0)).toFixed(1)}</td></tr>`
+      : `<tr><td colspan="5" class="empty">ยังไม่มีข้อมูล</td></tr>`;
+    document.getElementById("acNote").textContent =
+      `เที่ยว = รายงานหลังบิน (ไม่นับภารกิจยกเลิก) · ชม. จากรายงานหลังบิน ตามวันที่ภารกิจ · ${fa?thMon(fa):"ต้นข้อมูล"} – ${fb?thMon(fb):"ล่าสุด"}`
+      + (archUsed ? " · รวมสรุปของเดือนที่เคลียร์ข้อมูลดิบแล้ว" : "");
+  }
+  const thMon=(s)=>{ const [y,m]=s.split("-").map(Number); return `${TH_MON[m-1]}${String(y+543).slice(-2)}`; };
+  acFrom.addEventListener("change", renderAc);
+  acTo.addEventListener("change", renderAc);
+  document.getElementById("acFy").addEventListener("click", ()=>{ acFrom.value=acFyStart(); acTo.value=thisYm(); renderAc(); });
+  document.getElementById("acAll").addEventListener("click", ()=>{ acFrom.value=""; acTo.value=""; renderAc(); });
+  document.getElementById("acMonth").addEventListener("click", ()=>{
+    const ym=document.getElementById("mon").value; if (!ym) return;
+    acFrom.value=ym; acTo.value=ym; renderAc(); });
+  renderAc();
+
+  const { data: d } = await supabase.from("discrepancies")
+    .select("*, aircraft(tail_number), missions(mission_date)").order("reported_date",{ascending:false});
+  // วันที่ของข้อขัดข้อง = วันของภารกิจ (ถ้าไม่ผูกภารกิจ ใช้วันที่รายงานแทน)
+  const discDate=(x)=>String(x.missions?.mission_date||x.reported_date||"").slice(0,10);
+  // สีประจำเครื่อง (แยกด้วย hue ต่างกัน · ใช้ได้ทั้งธีมสว่าง/มืด ด้วย color-mix)
+  const tails=[...new Set((d||[]).map(x=>x.aircraft?.tail_number||"-"))].sort();
+  const HUES=[210,8,145,40,275,175,320,95];
+  const col=(t)=>`hsl(${HUES[Math.max(0,tails.indexOf(t))%HUES.length]} 70% 45%)`;
+  // เรียงตามวันที่ภารกิจ (ใหม่ → เก่า) · วันเดียวกันเรียงตามทะเบียนเครื่อง
+  const discRows=(d||[]).slice().sort((a,b)=>
+    discDate(b).localeCompare(discDate(a))
+    || (a.aircraft?.tail_number||"").localeCompare(b.aircraft?.tail_number||""));
+
+  // ---- ตัวเลือกเครื่อง (dropdown) ----
+  const sel=document.getElementById("discAc");
+  const cntOf=(t)=>discRows.filter(x=>(x.aircraft?.tail_number||"-")===t).length;
+  sel.innerHTML=`<option value="">ทั้งหมด (${discRows.length})</option>`+
+    tails.map(t=>`<option value="${esc(t)}">${esc(t)} (${cntOf(t)})</option>`).join("");
+
+  // ---- แสดงผลแบบแบ่งหน้า หน้าละ 10 ----
+  const PAGE=10;
+  let discFilter="", discPage=1;
+  function renderDisc(){
+    const list=discFilter ? discRows.filter(x=>(x.aircraft?.tail_number||"-")===discFilter) : discRows;
+    const pages=Math.max(1,Math.ceil(list.length/PAGE));
+    if(discPage>pages) discPage=pages;
+    const slice=list.slice((discPage-1)*PAGE,(discPage-1)*PAGE+PAGE);
+    document.getElementById("disc").innerHTML = slice.length
+      ? slice.map(x=>{ const t=x.aircraft?.tail_number||"-"; const c=col(t);
+          // ผูกภารกิจ → คลิกทั้งแถวไปหน้ารายงานหลังบินของไฟลท์นั้น
+          const href=x.mission_id ? `report.html?mission=${x.mission_id}` : "";
+          return `<tr${href?` class="disc-link" data-href="${href}" title="เปิดรายงานหลังบินของไฟลท์นี้"`:""}>
+            <td class="mono" style="border-inline-start:5px solid ${c};background:color-mix(in srgb, ${c} 20%, var(--surface));font-weight:700">${esc(t)}</td>
+            <td>${href?`<a href="${href}">${esc(x.description)}</a>`:esc(x.description)}</td><td>${esc(x.status)}</td><td>${esc(discDate(x))}</td></tr>`;}).join("")
+      : `<tr><td colspan="4" class="empty">ไม่มีข้อขัดข้อง</td></tr>`;
+    document.querySelectorAll("#disc tr.disc-link").forEach(tr=>tr.addEventListener("click",(e)=>{
+      if(e.target.closest("a")) return;            // คลิกลิงก์เอง → ให้ลิงก์ทำงานปกติ (เปิดแท็บใหม่ได้)
+      location.href=tr.dataset.href;
+    }));
+    const pager=document.getElementById("discPager");
+    if(list.length<=PAGE){ pager.innerHTML=list.length?`<span class="pinfo">${list.length} รายการ</span>`:""; }
+    else{
+      pager.innerHTML=`<button class="btn sm ghost" ${discPage<=1?"disabled":""} data-prev>‹ ก่อนหน้า</button>`
+        +`<span class="pinfo">หน้า ${discPage}/${pages} · ${list.length} รายการ</span>`
+        +`<button class="btn sm ghost" ${discPage>=pages?"disabled":""} data-next>ถัดไป ›</button>`;
+      pager.querySelector("[data-prev]")?.addEventListener("click",()=>{ discPage--; renderDisc(); });
+      pager.querySelector("[data-next]")?.addEventListener("click",()=>{ discPage++; renderDisc(); });
+    }
+  }
+  sel.addEventListener("change",()=>{ discFilter=sel.value; discPage=1; renderDisc(); });
+  renderDisc();
+
+  // ---------- รายงานอันตราย (safety) — 5 รายการ/หน้า · กดเข้าหน้ารายงานหลังบิน ----------
+  const thD=(s)=>{ if(!s) return "-"; const [y,mo,da]=String(s).slice(0,10).split("-").map(Number); return `${da} ${TH_MON[mo-1]} ${y+543}`; };
+  const acLbl=(a)=> a ? `${a.type||""}/${a.tail_number||""}` : "";
+  const SF_COLS="id, occurred_time, description, created_at, mission_id, missions(mission_date, callsign, route, aircraft(tail_number,type))";
+  let { data: safe, error: safeErr } = await supabase.from("safety_reports")
+    .select(SF_COLS+", report_media(id)").order("created_at",{ascending:false});
+  if(safeErr){   // ยังไม่ได้รัน migration_24 (ไม่มีตาราง report_media) → โหลดแบบเดิม
+    ({ data: safe, error: safeErr } = await supabase.from("safety_reports")
+      .select(SF_COLS).order("created_at",{ascending:false}));
+  }
+  if(safeErr) console.warn("safety_reports:", safeErr.message);
+  const safeRows=(safe||[]).slice().sort((a,b)=>
+    String(b.missions?.mission_date||b.created_at).localeCompare(String(a.missions?.mission_date||a.created_at))
+    || String(b.created_at).localeCompare(String(a.created_at)));
+
+  const SF_PAGE=5;
+  let sfPage=1;
+  function renderSafety(){
+    const box=document.getElementById("safetyList");
+    const pages=Math.max(1,Math.ceil(safeRows.length/SF_PAGE));
+    if(sfPage>pages) sfPage=pages;
+    const slice=safeRows.slice((sfPage-1)*SF_PAGE,(sfPage-1)*SF_PAGE+SF_PAGE);
+    box.innerHTML = slice.length
+      ? slice.map(s=>{ const m=s.missions||{};
+          return `<a class="sfitem" href="report.html?mission=${s.mission_id}">
+            <span class="go">ดูรายงานหลังบิน →</span>
+            <div class="sf-top">
+              <span class="sf-date">${thD(m.mission_date)}</span>
+              ${m.callsign?`<span class="sf-cs">${esc(m.callsign)}</span>`:""}
+              ${m.aircraft?`<span class="sf-ac">${esc(acLbl(m.aircraft))}</span>`:""}
+              ${s.occurred_time?`<span class="sf-time">⏱ ${esc(s.occurred_time)}</span>`:""}
+              ${s.report_media?.length?`<span class="sf-time" title="รูป/วีดีโอแนบ">📎 ${s.report_media.length}</span>`:""}
+            </div>
+            <div class="sf-desc">${esc(s.description)}</div>
+            ${m.route?`<div class="sf-route">${esc(m.route)}</div>`:""}
+          </a>`;}).join("")
+      : `<div class="empty">— ยังไม่มีรายงานอันตราย —</div>`;
+    const pager=document.getElementById("safetyPager");
+    if(safeRows.length<=SF_PAGE){ pager.innerHTML=safeRows.length?`<span class="pinfo">${safeRows.length} รายการ</span>`:""; }
+    else{
+      pager.innerHTML=`<button class="btn sm ghost" ${sfPage<=1?"disabled":""} data-prev>‹ ก่อนหน้า</button>`
+        +`<span class="pinfo">หน้า ${sfPage}/${pages} · ${safeRows.length} รายการ</span>`
+        +`<button class="btn sm ghost" ${sfPage>=pages?"disabled":""} data-next>ถัดไป ›</button>`;
+      pager.querySelector("[data-prev]")?.addEventListener("click",()=>{ sfPage--; renderSafety(); });
+      pager.querySelector("[data-next]")?.addEventListener("click",()=>{ sfPage++; renderSafety(); });
+    }
+  }
+  renderSafety();
+
+  // ---------- ข้อขัดข้องแยกตามระบบ (migration_39) — เลือกช่วงวันที่ ----------
+  //  ข้อมูลดิบ: post_flight_reports.defect_systems (null = ยังไม่ระบุ · [] = ไม่มีข้อขัดข้อง)
+  //  เดือนที่เคลียร์แล้ว: stats_defect_daily ('_reported' / '_any' / รหัสระบบ) — ใช้เฉพาะวันที่ไม่มีข้อมูลดิบ
+  const dsRaw=[]; let dsErr=null;
+  { const { data, error } = await supabase.from("post_flight_reports").select("defect_systems, missions(mission_date)");
+    if (error) dsErr=/defect_systems/.test(error.message||"") ? "ยังไม่มีช่องระบบที่ขัดข้อง — ต้องรัน db/migration_39_defect_systems.sql ก่อน" : error.message;
+    for (const r of data||[]) { const d=r.missions?.mission_date; if (d) dsRaw.push({ date:String(d).slice(0,10), sys:r.defect_systems }); } }
+  const dsArch=[];
+  { const { data, error } = await supabase.from("stats_defect_daily").select("stat_date,system,flights");
+    if (error) console.warn("stats_defect_daily:", error.message);
+    for (const x of data||[]) { const date=String(x.stat_date).slice(0,10); if (!rawDates.has(date)) dsArch.push({ date, system:x.system, n:Number(x.flights)||0 }); } }
+
+  const dsFrom=document.getElementById("dsFrom"), dsTo=document.getElementById("dsTo");
+  const fyStart=()=>{ const t=new Date(), y=t.getMonth()>=9 ? t.getFullYear() : t.getFullYear()-1; return `${y}-10-01`; };
+  dsFrom.value=fyStart(); dsTo.value=ymd(new Date());
+
+  function renderDefects(){
+    let a=dsFrom.value, b=dsTo.value;
+    if (a && b && a>b) { [a,b]=[b,a]; dsFrom.value=a; dsTo.value=b; }
+    const inR=(d)=>(!a||d>=a)&&(!b||d<=b);
+    let total=0, reported=0, any=0;
+    const per=new Map(DEFECT_SYSTEMS.map(([c])=>[c,0]));
+    for (const r of dsRaw) {
+      if (!inR(r.date)) continue;
+      total++;
+      if (!Array.isArray(r.sys)) continue;
+      reported++;
+      const set=new Set(r.sys);
+      if (set.size) any++;
+      set.forEach(c=>per.set(c,(per.get(c)||0)+1));
+    }
+    for (const x of dsArch) {
+      if (!inR(x.date)) continue;
+      if (x.system==="_reported") { reported+=x.n; total+=x.n; }
+      else if (x.system==="_any") any+=x.n;
+      else per.set(x.system,(per.get(x.system)||0)+x.n);
+    }
+    const pct=(n)=>reported ? Math.round(n/reported*1000)/10 : 0;
+    const none=reported-any, unspec=total-reported;
+    document.getElementById("dsKpi").innerHTML=`
+      <div class="card"><div class="n">${reported}</div><div class="l">เที่ยวที่รายงาน</div></div>
+      <div class="card"><div class="n" style="color:var(--crit)">${any}</div><div class="l">เที่ยวที่เกิดข้อขัดข้อง${reported?` · ${pct(any)}%`:""}</div></div>
+      <div class="card"><div class="n" style="color:var(--good)">${none}</div><div class="l">ไม่มีข้อขัดข้อง</div></div>
+      ${unspec?`<div class="card muted" title="รายงานหลังบินที่ยังไม่ได้เลือกระบบ (เช่น รายงานก่อนมีช่องนี้) — ไม่นับใน %"><div class="n">${unspec}</div><div class="l">ยังไม่ระบุระบบ</div></div>`:""}`;
+    const body=document.getElementById("dsBody");
+    if (dsErr) { body.innerHTML=`<tr><td colspan="4" class="empty">${esc(dsErr)}</td></tr>`; return; }
+    const max=Math.max(1,...per.values());
+    body.innerHTML=[...per].map(([c,n])=>`<tr class="${n?"":"zero"}"><td>${esc(defectLabel(c))}</td>
+      <td class="n">${n||"·"}</td><td class="n">${n?pct(n)+"%":"·"}</td>
+      <td class="bar"><i style="width:${n?Math.max(n/max*100,2):0}%"></i></td></tr>`).join("")
+      + `<tr class="sum"><td><b>เที่ยวที่เกิดข้อขัดข้อง</b> <span class="muted" style="font-size:11px">(1 เที่ยวขัดข้องได้หลายระบบ)</span></td>
+         <td class="n"><b>${any}</b></td><td class="n"><b>${reported?pct(any)+"%":"·"}</b></td><td></td></tr>`;
+  }
+  dsFrom.addEventListener("change", renderDefects);
+  dsTo.addEventListener("change", renderDefects);
+  document.getElementById("dsFy").addEventListener("click", ()=>{ dsFrom.value=fyStart(); dsTo.value=ymd(new Date()); renderDefects(); });
+  document.getElementById("dsMonth").addEventListener("click", ()=>{
+    const ym=document.getElementById("mon").value; if (!ym) return;
+    const [y,m]=ym.split("-").map(Number);
+    dsFrom.value=`${ym}-01`; dsTo.value=`${ym}-${String(daysIn(y,m)).padStart(2,"0")}`; renderDefects(); });
+  renderDefects();
+</script>
+</body>
+</html>

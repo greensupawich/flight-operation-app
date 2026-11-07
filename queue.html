@@ -1,0 +1,1088 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<!-- CSP: อนุญาตเฉพาะโดเมนที่ใช้จริง · เพิ่มโดเมนใหม่ (CDN/API) ต้องแก้ทุกหน้า -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob: https://iljapjszrjuzjjbtxctu.supabase.co; media-src 'self' blob: https://iljapjszrjuzjjbtxctu.supabase.co; connect-src 'self' data: https://iljapjszrjuzjjbtxctu.supabase.co wss://iljapjszrjuzjjbtxctu.supabase.co; worker-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'">
+<meta name="referrer" content="same-origin">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Flight Operation · คิวบิน</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bai+Jamjuree:wght@600;700&family=IBM+Plex+Sans+Thai:wght@400;500;600&family=IBM+Plex+Mono:wght@500;600&display=swap">
+<link rel="stylesheet" href="css/style.css">
+<style>
+  :root{ --q-hol:#C9CCD1; --q-off:#E8A7A2; --q-off-strong:#C0504D; --q-grid:#D5DBE3; --q-600:#111418; --q-500:#C00000; --q-ovr:#7C3AED; }
+  @media (prefers-color-scheme:dark){ :root:not([data-theme="light"]){
+    --q-hol:#3A414C; --q-off:#7A3F3B; --q-off-strong:#E07B7B; --q-grid:#2A3544; --q-ovr:#A78BFA; }}
+  :root[data-theme="dark"]{ --q-hol:#3A414C; --q-off:#7A3F3B; --q-off-strong:#E07B7B; --q-grid:#2A3544; --q-ovr:#A78BFA; }
+
+  main .wrap{max-width:1500px}
+  .q-head{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:6px 0 12px}
+  .q-h{display:flex;align-items:center;flex-wrap:wrap;gap:6px 14px}
+  .q-future{display:inline-flex;align-items:center;gap:6px;font-family:"IBM Plex Sans Thai",sans-serif;font-size:13px;font-weight:500;
+            cursor:pointer;color:var(--muted);border:1px solid var(--line);border-radius:7px;padding:3px 9px;background:var(--surface-2)}
+  .q-future input{width:auto;margin:0}
+  .q-title{font-family:"Bai Jamjuree",sans-serif;font-weight:700;font-size:20px;min-width:170px;text-align:center}
+  .legend{display:flex;flex-wrap:wrap;gap:6px 14px;align-items:center;font-size:12px;color:var(--muted);margin-bottom:10px}
+  .legend .sw{display:inline-block;min-width:34px;padding:1px 6px;border-radius:4px;text-align:center;
+              font-family:"IBM Plex Mono",monospace;font-weight:600;font-size:11px;border:1px solid var(--line-strong);
+              margin-inline-end:4px;font-style:normal}
+  .hint{font-size:12.5px;color:var(--faint);margin:0 0 10px}
+  .hint kbd{font-family:"IBM Plex Mono",monospace;font-size:11px;background:var(--surface-2);border:1px solid var(--line-strong);
+            border-radius:4px;padding:0 5px;color:var(--ink)}
+
+  .qwrap{overflow-x:auto;border:1px solid var(--line-strong);border-radius:10px;background:var(--surface)}
+  table.q{border-collapse:separate;border-spacing:0;font-size:12px;user-select:none}
+  table.q th, table.q td{border-right:1px solid var(--q-grid);border-bottom:1px solid var(--q-grid);
+                         padding:0;height:27px;text-align:center;vertical-align:middle}
+  table.q thead th{position:sticky;top:0;z-index:3;background:var(--surface-2);font-family:"IBM Plex Mono",monospace;
+                   font-size:11px;font-weight:600;color:var(--muted);min-width:42px;height:38px;line-height:1.15}
+  table.q thead th small{display:block;font-family:"IBM Plex Sans Thai",sans-serif;font-weight:500;font-size:10px;color:var(--faint)}
+  table.q th.name, table.q td.name{position:sticky;left:0;z-index:2;min-width:150px;text-align:start;
+                   padding:0 9px;white-space:nowrap;font-weight:600;background:var(--surface);color:var(--ink)}
+  table.q thead th.name{z-index:4;background:var(--surface-2)}
+  table.q th.cnt, table.q td.cnt{min-width:58px;font-variant-numeric:tabular-nums;font-weight:700;background:var(--surface-2)}
+  table.q th.cnt{color:var(--ink)}
+  table.q th.hol, table.q td.hol{background:var(--q-hol)}
+  table.q td.off{background:var(--q-off)}
+  table.q th.plan{cursor:pointer}
+  table.q th.plan:hover{outline:2px solid var(--primary);outline-offset:-2px}
+  table.q td.day{position:relative}
+  table.q.can-edit td.day{cursor:cell}
+  table.q td.today-col, table.q th.today-col{box-shadow:inset 0 0 0 2px var(--accent)}
+  table.q td.sel{outline:3px solid var(--primary);outline-offset:-3px;z-index:1}
+  table.q td.ovr::after{content:"";position:absolute;top:0;right:0;border-style:solid;border-width:0 8px 8px 0;
+                        border-color:transparent var(--q-ovr) transparent transparent}
+  table.q td.link{cursor:pointer}
+
+  .chips{display:flex;flex-direction:column;height:100%;min-height:26px}
+  .chip{flex:1;display:flex;align-items:center;justify-content:center;padding:0 3px;min-height:26px;
+        font-family:"IBM Plex Mono",monospace;font-weight:600;font-size:11px;border-bottom:1px solid rgba(0,0,0,.08)}
+  .chip:last-child{border-bottom:0}
+  .chip.cx{opacity:.45;text-decoration:line-through}      /* ภารกิจที่ยกเลิก */
+  td.off .chip{box-shadow:inset 4px 0 0 var(--q-off-strong)}
+
+  /* ---- กล่องแก้ช่อง ---- */
+  .ed{position:absolute;z-index:60;width:292px;background:var(--surface);border:1px solid var(--line-strong);
+      border-radius:12px;box-shadow:0 18px 40px -12px rgba(0,0,0,.35);padding:12px}
+  .ed-top{font-size:12px;color:var(--muted);margin-bottom:8px;line-height:1.4}
+  .ed-top b{color:var(--ink)}
+  .ed input.ed-code{font-family:"IBM Plex Mono",monospace;font-weight:600;font-size:16px;text-transform:uppercase;
+                    padding:8px 10px}
+  .ed-row{display:flex;flex-wrap:wrap;gap:5px;margin-top:9px}
+  .ed-lbl{font-size:11px;color:var(--faint);margin:9px 0 -3px;width:100%}
+  .ed-kind{font:inherit;font-size:11.5px;font-weight:600;border:2px solid var(--line-strong);border-radius:7px;
+           padding:4px 7px;cursor:pointer}
+  .ed-kind.on{outline:2px solid var(--primary);outline-offset:1px;border-color:var(--ink)}
+  .ed-ac{font:inherit;font-family:"IBM Plex Mono",monospace;font-weight:700;font-size:12px;border:1px solid var(--line-strong);
+         background:var(--surface);border-radius:7px;padding:5px 12px;cursor:pointer}
+  .ed-ac.on{background:var(--primary-soft);border-color:var(--primary)}
+  .ed-actions{display:flex;gap:6px;margin-top:12px}
+  .ed-actions .btn{flex:1;justify-content:center}
+  .ed-note{font-size:11px;color:var(--faint);margin-top:8px;line-height:1.45}
+
+  /* ---- คิว ---- */
+  .qcheck{width:15px;height:15px;margin:0 7px 0 0;vertical-align:-2px;accent-color:var(--primary);cursor:pointer}
+  .qcheck:disabled{cursor:default}
+  table.q tr.noq td.name{opacity:.55}
+  table.q th.target{background:var(--primary);color:#fff}
+  table.q th.target small{color:#dfe8f1}
+  table.q td.target{box-shadow:inset 2px 0 0 var(--primary),inset -2px 0 0 var(--primary)}
+  .qno{display:inline-flex;align-items:center;justify-content:center;min-width:22px;height:20px;padding:0 5px;
+       border-radius:999px;font-family:"IBM Plex Mono",monospace;font-weight:700;font-size:11px;
+       background:var(--primary-soft);color:var(--primary);border:1px solid var(--primary)}
+  .qpanel{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:12px 16px;margin-bottom:12px;
+          box-shadow:var(--shadow)}
+  .qpanel h3{font-family:"Bai Jamjuree",sans-serif;font-weight:600;font-size:15px;margin:0 0 2px}
+  .hol-h{display:flex;align-items:center;flex-wrap:wrap;gap:6px 10px}
+  .hol-nav{display:inline-flex;align-items:center;gap:6px;margin-inline-start:auto;font-family:"IBM Plex Sans Thai",sans-serif;font-size:12.5px;font-weight:400}
+  .qpanel.loading{opacity:.55;pointer-events:none}
+  .qpanel .rule{font-size:12px;color:var(--faint);margin:0 0 10px}
+  .qcols{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
+  .qcols.with-ref{grid-template-columns:repeat(4,minmax(0,1fr))}
+  .qcols.with-ref3{grid-template-columns:repeat(3,minmax(0,1fr))}
+  .qcol.ref{background:var(--surface-2);border-radius:8px;padding:6px 6px 4px}
+  .qcol.ref h4{color:var(--muted)}
+  @media(max-width:1100px){ .qcols.with-ref,.qcols.with-ref3{grid-template-columns:repeat(2,minmax(0,1fr))} }
+  @media(max-width:760px){ .qcols,.qcols.with-ref,.qcols.with-ref3{grid-template-columns:1fr} }
+  .qcol h4{margin:0 0 6px;font-size:13px;font-weight:700}
+  .qlist{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:3px}   /* แสดงครบทุกคน ไม่เลื่อนในกล่อง */
+  .qlist li{display:flex;align-items:center;gap:8px;font-size:12.5px;padding:3px 6px;border-radius:6px}
+  .qlist li.next{background:var(--primary-soft)}
+  .qlist li.off{background:var(--crit-soft)}
+  .qlist li.done .nm,.qlist li.done .meta{opacity:.55}
+  .qlist .donetag{font-size:10.5px;font-weight:700;color:var(--good);border:1px solid var(--good);border-radius:5px;padding:0 5px;white-space:nowrap}
+  .qlist li.off .nm{color:var(--crit)}
+  .qlist li.off .qno{border-color:var(--crit);color:var(--crit)}
+  .qlist .offtag{font-size:10.5px;font-weight:700;color:#fff;background:var(--crit);border-radius:5px;padding:1px 6px;
+                 white-space:nowrap;max-width:45%;overflow:hidden;text-overflow:ellipsis}
+  .qlist .nm{font-weight:600;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;border-radius:4px;padding:0 5px}
+  .qlist .xtag{font-size:10.5px;font-weight:700;color:#fff;background:var(--warn);border-radius:5px;padding:1px 6px;white-space:nowrap}
+  .qlist .xtag.z{background:var(--surface-2);color:var(--muted);border:1px solid var(--line-strong);padding:0 5px}
+  .qlist .xtag.xed{cursor:pointer}
+  .qlist .xtag.xed:hover{outline:2px solid var(--primary);outline-offset:1px}
+  /* popup แก้แทคเลข (admin) */
+  .tagdlg-bg{position:fixed;inset:0;z-index:80;background:rgba(10,15,25,.35);display:flex;align-items:center;justify-content:center;padding:16px}
+  .tagdlg{background:var(--surface);border:1px solid var(--line-strong);border-radius:12px;box-shadow:0 12px 40px rgba(0,0,0,.25);
+          padding:16px 18px;width:300px;max-width:100%}
+  .tagdlg h4{margin:0 0 2px;font-family:"Bai Jamjuree",sans-serif;font-size:16px}
+  .tagdlg .sub{font-size:12px;color:var(--muted);margin-bottom:12px;line-height:1.5}
+  .tagdlg .stp{display:flex;align-items:center;justify-content:center;gap:12px;margin:6px 0 14px}
+  .tagdlg .stp button{width:44px;height:44px;border-radius:10px;font-size:22px;font-weight:700;justify-content:center}
+  .tagdlg .stp input{width:72px;text-align:center;font-size:22px;font-weight:700;font-family:"IBM Plex Mono",monospace}
+  .tagdlg .acts{display:flex;gap:8px} .tagdlg .acts .btn{flex:1;justify-content:center}
+  .qpanel.hol{border-color:var(--accent)}
+  /* 🏖 ใบรายชื่อคิววันหยุด */
+  table.dgrid.hs td.hs-g{background:var(--q-hol);color:var(--ink);font-weight:600}
+  table.dgrid.hs td.hs-man{position:relative}
+  table.dgrid.hs td.hs-man::after,.hs-legend-man::after{content:"";position:absolute;top:0;right:0;border-style:solid;
+       border-width:0 9px 9px 0;border-color:transparent #D32F2F transparent transparent}
+  .hs-legend-man{position:relative;display:inline-block;background:var(--q-hol);padding:0 12px 0 6px;border-radius:3px}
+  table.dgrid.hs td.hs-add{color:var(--faint);font-weight:700}
+  table.dgrid.hs td.dg-ed:hover{background:var(--primary-soft)}
+  table.dgrid.hs td.hs-base{min-width:84px;white-space:nowrap}
+  table.dgrid.hs td.hs-base button{width:22px;height:22px;padding:0;margin:0 4px;border:1px solid var(--line-strong);border-radius:5px;
+       background:var(--surface);color:var(--ink);font-weight:700;cursor:pointer;line-height:1}
+  table.dgrid.hs td.hs-base button:disabled{opacity:.35;cursor:default}
+  table.dgrid.hs .hs-no{display:inline-block;min-width:20px;font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--muted)}
+  table.dgrid.hs tr.hs-out td.dg-nm span:not(.muted){opacity:.55}
+  table.dgrid.hs tr.hs-grp td{background:var(--surface-2);font-weight:700;color:var(--muted);height:24px}
+  .qlist .meta{font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--muted);white-space:nowrap}
+  .qskip{font-size:11.5px;color:var(--faint);margin-top:6px;line-height:1.5}
+
+  details.af{margin-top:16px;background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:10px 14px}
+  details.af summary{cursor:pointer;font-weight:600;font-size:13.5px}
+  .af-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:10px;margin-top:12px}
+  /* แต่ละสนามบินเป็นกล่องแยก มีเส้นขอบ — กันอ่านสลับแถว */
+  .af-row{display:flex;gap:8px;align-items:center;border:1px solid var(--line-strong);border-radius:9px;
+          padding:7px 9px;background:var(--surface-2)}
+  .af-row span{flex:1;min-width:0;font-size:13px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .af-row input{width:86px;flex:none;font-family:"IBM Plex Mono",monospace;text-transform:uppercase;
+                padding:6px 8px;background:var(--surface)}
+  .af-row .btn{flex:none}
+  .af-row.af-new{border-style:dashed;border-color:var(--primary);background:var(--surface)}
+  .af-row.af-new input:first-child{flex:1;width:auto;font-family:inherit;text-transform:none}
+  .missing{background:var(--accent-soft);color:var(--warn);border-radius:9px;padding:10px 13px;font-size:12.5px;margin-bottom:12px}
+</style>
+</head>
+<body>
+<main>
+  <div class="wrap">
+    <div class="page-head">
+      <h1>คิวบิน</h1>
+      <div class="sub">ตารางการบินรายเดือนของนักบิน · นับบินจริงและ Standby แยกกัน</div>
+    </div>
+
+    <div id="dutyHost"></div>
+    <div id="queueMain">
+    <div class="q-head">
+      <button class="btn sm" id="prev">←</button>
+      <div class="q-title" id="title">—</div>
+      <button class="btn sm" id="next">→</button>
+      <button class="btn sm ghost" id="thisMonth">เดือนนี้</button>
+    </div>
+
+    <div class="legend" id="legend"></div>
+    <p class="hint" id="hint"></p>
+    <div class="missing" id="missing" hidden></div>
+
+    <div class="qpanel" id="qpanel" hidden></div>
+    <div class="qpanel hol" id="hpanel" hidden></div>
+    <div class="qwrap" id="qwrap"><table class="q" id="q"><tbody><tr><td class="empty">กำลังโหลด…</td></tr></tbody></table></div>
+
+    <details class="af" id="afBox">
+      <summary>รหัสสนามบิน (ชื่อจุดในเส้นทางบิน → รหัสที่แสดงในคิวบิน)</summary>
+      <div class="af-grid" id="afGrid"></div>
+    </details>
+    </div>
+  </div>
+</main>
+
+<script type="module">
+  import { requireAuth, canPlan, isAdmin } from "./js/auth.js";
+  import { renderTopbar } from "./js/ui.js";
+  import { KINDS, KIND_COLORS, QUAL_COLORS, qualStyle, esc, isStby } from "./js/missions.js";
+  import { loadQueueMonth, loadEntries, saveEntry, deleteEntry, monthRange, secondPoint, airfieldKey,
+           PILOT_POSITIONS, setHoliday, clearHoliday, saveAirfield,
+           setInQueue, loadHistory, loadHolidaysBetween, loadUnavailableOn } from "./js/queue.js";
+  import { rankQueue, rankHolidayQueue, HOLIDAY_QUEUE_START, nextWorkingDay, isWeekend, addDays } from "./js/queue-rank.js";
+  import { loadDuty, loadHolidayBase, saveHolidayBaseCount, addDuty, removeDuty, saveDutyNote } from "./js/duty.js";
+  import { mountDutyTabs } from "./js/duty-ui.js";
+  import { loadCrew } from "./js/crew.js";
+
+  const profile = await requireAuth();
+  if (profile) {
+    renderTopbar(profile);
+    const planner = canPlan(profile);
+    // จำนวนครั้งตั้งต้นคิววันหยุด (ช่องว่างข้างหน้า / แทคเลข) แก้ได้เฉพาะ admin (ผู้ใช้กำหนด 5 พ.ย. 69 · RLS migration_56)
+    //  ผู้วางแผนเพิ่ม/แก้วันที่ manual ได้ตามเดิม
+    const baseAdmin = isAdmin(profile);
+    // แท็บ ค้างคืน / เดโชชัย / STBY เดโชชัย / RTAF (แท็บแรก = คิวบินเดิม)
+    // แท็บ 🏖 วันหยุด = ใบรายชื่อคิววันหยุด (แบบตารางค้างคืน) — วาดในหน้านี้เพราะใช้ข้อมูลคิววันหยุด (renderHolSheet)
+    const holSheetEl = document.createElement("section");
+    holSheetEl.id = "dt-holq";
+    holSheetEl.innerHTML = `
+      <div class="dbar"><b>คิววันหยุด · ใบรายชื่อ</b><span class="muted" id="hsSub"></span>
+        <input id="hsFind" placeholder="ค้นหาชื่อ" style="width:140px;margin-inline-start:auto"></div>
+      <div class="tablewrap gridwrap"><table class="dgrid hs">
+        <thead id="hsHead"></thead><tbody id="hsRows"><tr><td class="empty">กำลังโหลด…</td></tr></tbody></table></div>
+      <div class="msgline" id="hsMsg"></div>
+      <p class="muted" style="font-size:12px;line-height:1.6">ช่องสีเทา = จำนวนครั้งที่บินวันหยุด (นับแบบเดียวกับแทคเลขในคิววันหยุด · บินติดกันหลายวัน = 1 ช่อง) ·
+        ช่องเทาเปล่าข้างหน้า = จำนวนครั้งตั้งต้นตามตารางคิววันหยุด (ไม่มีวันที่)${baseAdmin ? " — admin กด − / + ที่คอลัมน์ ช่องว่าง เพื่อเพิ่ม/ลดช่องว่าง" : ""} ·
+        ช่องเทาวันที่แรก = วันบินวันหยุดล่าสุดตามข้อมูลตั้งต้นในฐานข้อมูล · ช่องเทามีวันที่ถัดไป = เที่ยวจริงในวันหยุด/เสาร์-อาทิตย์จากระบบ ·
+        <span class="hs-legend-man">มุมแดง</span> = วันที่เพิ่มเอง (manual)${planner ? " — คลิกช่อง + เพื่อเพิ่มวันที่บิน · คลิกช่องมุมแดงเพื่อแก้/ลบ" : ""}</p>`;
+    mountDutyTabs({ host: document.getElementById("dutyHost"), mainEl: document.getElementById("queueMain"),
+                     mainLabel: "📊 คิวบิน", planner, loadCrew: () => loadCrew(false), exportSheets: exportQueueSheet,
+                     extraTabs: [{ key: "holq", label: "🏖 วันหยุด", el: holSheetEl, after: "overnight", onShow: () => setTimeout(renderHolSheet) }] });
+    // ชีต "คิวบิน" = ตารางของเดือนที่เปิดดูอยู่ สี/ขนาดช่องตามหน้าเว็บ — ไม่รวมเลขคิว/แผงลำดับคิว
+    //  ช่องภารกิจ = สีชนิดภารกิจ + สีตัวอักษรตามแบบเครื่อง · ไม่ว่าง = แดงอ่อน (เหตุผลอยู่ในหมายเหตุของช่อง) · วันหยุด = เทา
+    async function exportQueueSheet() {
+      if (!data || !dates.length) throw new Error("ตารางคิวบินยังโหลดไม่เสร็จ");
+      const HOL = "#C9CCD1", OFF = "#E8A7A2", S2 = "#F6F8FB";
+      const isHol = (d) => { const w = new Date(d + "T00:00:00").getDay(); return w === 0 || w === 6 || maps.holidayMap.has(d); };
+      const head = [{ v: "NAME / DATE", bg: S2, bold: true, align: "left" },
+        ...dates.map((d, i) => ({ v: `${i + 1}\n${TH_DOW[new Date(d + "T00:00:00").getDay()]}`, wrap: true, bold: true, mono: true,
+                                  bg: isHol(d) ? HOL : S2, note: maps.holidayMap.get(d) })),
+        { v: "บินจริง", bg: S2, bold: true }, { v: "ST", bg: S2, bold: true }];
+      const rows = data.crew.map((p) => {
+        const q = QUAL_COLORS[p.position] || {};
+        const cells = dates.map((d) => {
+          const k = `${p.id}|${d}`, its = cellItems(p.id, d).items, it = its[0];
+          const cell = { v: its.map((x) => x.text).filter(Boolean).join(" / "), mono: true, bold: true,
+                         bg: maps.offMap.has(k) ? OFF : isHol(d) ? HOL : undefined };
+          if (it) Object.assign(cell, { bg: (KIND_COLORS[it.kind] || KIND_COLORS.rtaf).bg,
+            fg: textColor(it.kind, it.ac).replace("var(--q-500)", "#C00000").replace("var(--q-600)", "#111418"),
+            strike: its.every((x) => x.cancelled) });
+          const notes = [maps.offMap.has(k) ? "ไม่ว่าง" + (maps.offMap.get(k) ? ": " + maps.offMap.get(k) : "") : "",
+                         ...its.map((x) => x.tip + (x.cancelled ? " (ยกเลิก)" : ""))].filter(Boolean);
+          if (notes.length) cell.note = notes.join("\n");
+          return cell;
+        });
+        const c = rowCounts(p.id);
+        return [{ v: p.full_name, bg: q.bg, fg: q.fg, bold: true, align: "left" }, ...cells,
+                { v: c.fly, bold: true, bg: S2 }, { v: c.st, bold: true, bg: S2 }];
+      });
+      const sheets = [{ name: "คิวบิน", rows: [head, ...rows], widths: [22, ...dates.map(() => 6), 8, 8], heights: { 0: 30 } }];
+      const hs = holSheetExport();
+      if (hs) sheets.push(hs);
+      return { name: `คิวบิน ${document.getElementById("title").textContent}`, sheets };
+    }
+
+    const TH_MONTH = ["มกราคม","กุมภาพันธ์","มีนาคม","เมษายน","พฤษภาคม","มิถุนายน",
+                      "กรกฎาคม","สิงหาคม","กันยายน","ตุลาคม","พฤศจิกายน","ธันวาคม"];
+    const TH_DOW = ["อา","จ","อ","พ","พฤ","ศ","ส"];
+    const KIND_SHORT = { fcf:"F.C.F", dechochai:"เดโชชัย", palace:"พระราชวัง", rtaf:"ทอ.", training:"ฝึกบิน", other:"อื่นๆ", stby:"ST", stby_dechochai:"ST เดโชฯ", stby_mission:"ST ภารกิจ" };
+    const pad = (n) => String(n).padStart(2, "0");
+    const now = new Date();
+    const todayStr = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+    let view = new Date(now.getFullYear(), now.getMonth(), 1);
+    let data = null, dates = [];
+    let mode = "edit";
+    let sel = null;                       // { crew, date }
+    let lastKind = "rtaf", lastAc = "600";
+    let target = null, aheadHol = new Set(), ranks = null;
+    let tq = null, qMaps = null;      // ข้อมูลเดือนของวันที่จัดคิว (เมื่อเปิดดูเดือนอื่น) · maps ที่ใช้คิดคิว
+    let prevRef = null, ranksPrev = null, needRef = new Set();   // คิวอ้างอิงที่นับต่อจากเดือนก่อน · needRef = กลุ่มที่ยังมีคนบิน 0 เที่ยว
+    let holTarget = null, holData = null, holRanks = null;      // คิววันหยุด
+    // นับเที่ยวที่จัดล่วงหน้าไหม (ผู้ใช้ขอ 4 พ.ย. 69) · จำค่าไว้ในเบราว์เซอร์ของแต่ละคน · ค่าเริ่มต้น = ไม่นับ (นับถึงวันนี้)
+    //  ช่องติ๊กอยู่ต่อท้ายหัวข้อ "คิวบิน · วันที่" — renderQueuePanel ย้าย element เดิมมาใส่ทุกครั้งที่วาด (ค่าไม่หาย)
+    const futureLabel = document.createElement("label");
+    futureLabel.className = "q-future";
+    futureLabel.title = "ติ๊ก = นับเที่ยวที่จัดล่วงหน้า (หลังวันนี้) ด้วย · ไม่ติ๊ก = นับถึงวันนี้เท่านั้น";
+    futureLabel.innerHTML = `<input type="checkbox" id="countFuture"> นับเที่ยวที่จัดล่วงหน้า`;
+    const futureBox = futureLabel.querySelector("input");
+    try { futureBox.checked = localStorage.getItem("fo.queue.countFuture") === "1"; } catch {}
+    const countUntil = () => futureBox.checked ? null : todayStr;
+    futureBox.addEventListener("change", () => {
+      try { localStorage.setItem("fo.queue.countFuture", futureBox.checked ? "1" : "0"); } catch {}
+      render();
+    });
+    let holDays = [], holIdx = 0;     // วันหยุดข้างหน้า (60 วัน) · holIdx = วันที่เลือกดู (0 = วันหยุดถัดไป) — เลื่อนดูคนไม่ว่างวันถัด ๆ ไปได้
+
+    const table = document.getElementById("q");
+    if (planner) {
+      table.classList.add("can-edit");
+    }
+
+    // ---------- คำอธิบาย ----------
+    document.getElementById("legend").innerHTML =
+      Object.entries(KINDS).filter(([k]) => !isStby(k)).map(([k, l]) =>
+        `<span><i class="sw" style="background:${KIND_COLORS[k].bg};color:${KIND_COLORS[k].fg}">&nbsp;</i>${esc(l)}</span>`).join("") +
+      `<span><i class="sw" style="background:#fff;color:#111">ST</i>Standby</span>
+       <span><i class="sw" style="background:${KIND_COLORS.stby_dechochai.bg};color:${KIND_COLORS.stby_dechochai.fg}">ST</i>STBY เดโชชัย</span>
+       <span><i class="sw" style="background:${KIND_COLORS.stby_mission.bg};color:${KIND_COLORS.stby_mission.fg}">ST</i>STBY (ภารกิจ)</span>
+       <span><i class="sw" style="background:#fff;color:var(--q-600)">CNX</i>ATR72-600</span>
+       <span><i class="sw" style="background:#fff;color:var(--q-500)">CNX</i>ATR72-500</span>
+       <span><i class="sw" style="background:var(--q-hol)">&nbsp;</i>วันหยุด</span>
+       <span><i class="sw" style="background:var(--q-off)">&nbsp;</i>ไม่ว่าง</span>` +
+      (planner ? `<span><i class="sw" style="position:relative;background:#fff">&nbsp;<b style="position:absolute;top:0;right:0;border-style:solid;border-width:0 7px 7px 0;border-color:transparent var(--q-ovr) transparent transparent"></b></i>แก้เองทับข้อมูลภารกิจ</span>` : "");
+
+    function setHint() {
+      const h = document.getElementById("hint");
+      if (!planner) { h.innerHTML = "กดช่องที่มีภารกิจเพื่อเปิดภารกิจวันนั้น"; return; }
+      h.innerHTML = `คลิกช่องแล้ว<b>พิมพ์รหัสได้เลย</b> หรือดับเบิลคลิกเพื่อเลือกสี/แบบเครื่อง · <kbd>Enter</kbd> บันทึก · <kbd>←↑↓→</kbd> เลื่อนช่อง · <kbd>Delete</kbd> ลบข้อมูลในช่อง · กดหัววันที่เพื่อตั้งวันหยุด`;
+    }
+    setHint();
+
+    const textColor = (kind, ac) => {
+      const onRed = kind === "dechochai";
+      return ac === "500" ? (onRed ? "#FFE34D" : "var(--q-500)") : (onRed ? "#FFFFFF" : "var(--q-600)");
+    };
+    const chipStyle = (kind, ac) => `background:${(KIND_COLORS[kind] || KIND_COLORS.rtaf).bg};color:${textColor(kind, ac)}`;
+
+    async function load() {
+      const y = view.getFullYear(), m = view.getMonth();
+      document.getElementById("title").textContent = `${TH_MONTH[m]} ${y + 543}`;
+      const { first } = monthRange(y, m);
+      const [base, entries, ahead] = await Promise.all([
+        loadQueueMonth(y, m), loadEntries(y, m), loadHolidaysBetween(todayStr, addDays(todayStr, 60)),
+      ]);
+      aheadHol = new Set(ahead.map(h => h.holiday_date));
+      target = nextWorkingDay(todayStr, d => isWeekend(d) || aheadHol.has(d));
+      // ข้อมูลย้อนหลัง 120 วันก่อนเดือนนี้ ไว้หา "บินจริงครั้งล่าสุด"
+      const hist = target.slice(0, 7) === first.slice(0, 7)
+        ? await loadHistory(addDays(target, -120), addDays(first, -1)) : { entries: [], missions: [] };
+      data = { ...base, entries, hist };
+      // วันที่จัดคิวอยู่คนละเดือนกับที่เปิดดู (เช่น ดู ต.ค. แต่คิวของ 2 พ.ย.) → โหลดข้อมูลเดือนนั้นมาคิดคิวด้วย
+      tq = null;
+      if (target.slice(0, 7) !== first.slice(0, 7)) {
+        const [ty, tm] = target.split("-").map(Number);
+        const t = monthRange(ty, tm - 1);
+        const [tBase, tEntries, tHist] = await Promise.all([
+          loadQueueMonth(ty, tm - 1), loadEntries(ty, tm - 1), loadHistory(addDays(target, -120), addDays(t.first, -1)),
+        ]);
+        tq = { ...tBase, entries: tEntries, hist: tHist,
+               dates: Array.from({ length: t.days }, (_, i) => `${ty}-${pad(tm)}-${pad(i + 1)}`) };
+      }
+      // คิวอ้างอิง = นับเที่ยวต่อจากเดือนก่อน (ผู้ใช้ขอ 30 ต.ค. 69) · แสดงจนกว่าทุกคนในกลุ่มบินครบ 1 ครั้งในเดือนใหม่ (3 พ.ย. 69)
+      //  เที่ยวของเดือนก่อน + เดือนนี้ก่อนวันจัดคิว · ต้องรู้วันหยุดของเดือนก่อน (ไม่นับเที่ยวในวันหยุด)
+      prevRef = null;
+      {
+        const [ty, tm] = target.split("-").map(Number);
+        const pd = new Date(ty, tm - 2, 1), pr = monthRange(pd.getFullYear(), pd.getMonth());
+        const prevHol = await loadHolidaysBetween(pr.first, pr.last);
+        prevRef = { label: `${TH_MONTH[pd.getMonth()]} ${pd.getFullYear() + 543}`,
+                    holidays: new Set(prevHol.map(h => h.holiday_date)),
+                    dates: Array.from({ length: pr.days }, (_, i) => `${pd.getFullYear()}-${pad(pd.getMonth() + 1)}-${pad(i + 1)}`) };
+      }
+      // คิววันหยุด: วันหยุดถัดไป (ตั้งแต่พรุ่งนี้) หรือวันหยุดที่เลื่อนไปดู · นับจากประวัติทั้งหมดในระบบ
+      holDays = Array.from({ length: 60 }, (_, i) => addDays(todayStr, i + 1)).filter(d => isWeekend(d) || aheadHol.has(d));
+      await loadHoliday();
+      render();
+    }
+    // โหลดข้อมูลคิววันหยุดของ holDays[holIdx] · ประวัติถึงวันนั้น (เที่ยววันหยุดที่จัดไว้ก่อนหน้านับรวมด้วย) · คนไม่ว่างวันนั้น
+    async function loadHoliday() {
+      holIdx = Math.max(0, Math.min(holIdx, holDays.length - 1));
+      holTarget = holDays[holIdx] || nextWorkingDay(todayStr, d => !(isWeekend(d) || aheadHol.has(d)));
+      const [allHist, allHol, holOff, holBase, holCount] = await Promise.all([
+        loadHistory(HOLIDAY_QUEUE_START, holTarget), loadHolidaysBetween(HOLIDAY_QUEUE_START, holTarget), loadUnavailableOn(holTarget),
+        loadDuty("holiday"),                         // ข้อมูลตั้งต้นจากไฟล์ "นจบ." ชีตวันหยุด (migration_34)
+        loadHolidayBase(),                           // จำนวนครั้งตั้งต้นจากตารางคิววันหยุด (migration_41)
+      ]);
+      holData = { hist: allHist, holidays: new Set([...allHol.map(h => h.holiday_date), ...aheadHol]),
+                  off: new Map(holOff.map(u => [u.crew_member_id, u.note || ""])), base: holBase.days, count: holCount.base,
+                  manual: holBase.manual || new Map(), notes: holBase.notes || new Map() };
+    }
+    async function shiftHoliday(step) {
+      const want = step === 0 ? 0 : holIdx + step;
+      if (want < 0 || want >= holDays.length || want === holIdx) return;
+      holIdx = want;
+      document.getElementById("hpanel").classList.add("loading");
+      await loadHoliday();
+      holRanks = computeHolidayRanks();
+      renderHolidayPanel();
+      renderHolSheet();
+    }
+
+    // ---------- สิ่งที่แสดงในแต่ละช่อง ----------
+    let maps = {};
+    function buildMaps(src = data, ym = dates[0]?.slice(0, 7)) {
+      const codeMap = new Map(src.airfields.map(a => [a.name, a.code]));
+      const entryMap = new Map([...(src.hist?.entries || []), ...src.entries].map(e => [`${e.crew_member_id}|${e.entry_date}`, e]));
+      const offMap = new Map(src.unavailable.map(u => [`${u.crew_member_id}|${u.off_date}`, u.note || ""]));
+      const holidayMap = new Map(src.holidays.map(h => [h.holiday_date, h.name || "วันหยุด"]));
+      const missionCell = new Map(), seen = new Set();
+      const missingCodes = new Set();
+      [...(src.hist?.missions || []), ...src.missions].forEach(ms => {
+        (ms.mission_crew || []).forEach(mc => {
+          if (!mc.crew_member_id || !PILOT_POSITIONS.includes(String(mc.position || "").trim().toUpperCase())) return;
+          const k = `${mc.crew_member_id}|${ms.id}`;
+          if (seen.has(k)) return; seen.add(k);
+          const ck = `${mc.crew_member_id}|${ms.mission_date}`;
+          if (!missionCell.has(ck)) missionCell.set(ck, []);
+          missionCell.get(ck).push(ms);
+        });
+        if (!isStby(ms.kind) && ms.mission_date.slice(0, 7) === ym) {
+          const p = secondPoint(ms.route); if (p && !codeMap.has(p)) missingCodes.add(p);
+        }
+      });
+      return { codeMap, entryMap, offMap, holidayMap, missionCell, missingCodes };
+    }
+
+    // ช่องที่พิมพ์เอง > ข้อมูลจากภารกิจ
+    function cellItems(crewId, d, mp = maps) {
+      const k = `${crewId}|${d}`;
+      const e = mp.entryMap.get(k);
+      const ms = mp.missionCell.get(k) || [];
+      if (e) return { manual: true, override: ms.length > 0, missions: ms,
+        items: [{ text: e.code || "", kind: e.kind, ac: e.ac_type || "600",
+                  st: String(e.code || "").trim().toUpperCase() === "ST" || isStby(e.kind) && !e.code }] };
+      return { manual: false, override: false, missions: ms,
+        items: ms.map(m => {
+          const p = secondPoint(m.route);
+          return { text: isStby(m.kind) ? "ST" : (mp.codeMap.get(p) || ""),   // ไม่มีรหัส → แสดงแต่สี
+                   kind: m.kind, ac: /500/.test(m.aircraft?.type || "") ? "500" : "600",
+                   st: isStby(m.kind),
+                   cancelled: m.status === "cancelled",          // ยกเลิก → แสดงจาง ไม่นับคิว
+                   tip: `${KINDS[m.kind] || ""} · ${m.callsign || ""} · ${m.route || ""}` };
+        }) };
+    }
+
+    function cellHTML(crewId, d) {
+      const c = cellItems(crewId, d);
+      if (!c.items.length) return "";
+      return `<div class="chips">${c.items.map(it =>
+        `<span class="chip${it.cancelled ? " cx" : ""}" style="${chipStyle(it.kind, it.ac)}">${esc(it.text)}</span>`).join("")}</div>`;
+    }
+
+    function cellClass(crewId, d) {
+      const k = `${crewId}|${d}`;
+      const w = new Date(d + "T00:00:00").getDay();
+      const c = cellItems(crewId, d);
+      return ["day", maps.offMap.has(k) ? "off" : "",
+              (w === 0 || w === 6 || maps.holidayMap.has(d)) ? "hol" : "",
+              d === todayStr ? "today-col" : "", c.override ? "ovr" : "",
+              !planner && c.missions.length ? "link" : "",
+              sel && sel.crew === crewId && sel.date === d ? "sel" : ""].filter(Boolean).join(" ");
+    }
+
+    function cellTitle(crewId, d) {
+      const k = `${crewId}|${d}`, c = cellItems(crewId, d), parts = [];
+      if (maps.offMap.has(k)) parts.push("ไม่ว่าง" + (maps.offMap.get(k) ? ": " + maps.offMap.get(k) : ""));
+      if (c.manual) parts.push(`แก้เอง: ${c.items[0].text || "(สีอย่างเดียว)"} · ${KINDS[c.items[0].kind] || ""} · ATR72-${c.items[0].ac}`);
+      c.missions.forEach(m => parts.push(`ภารกิจ: ${KINDS[m.kind] || ""} · ${m.callsign || ""} · ${m.route || ""}${m.status === "cancelled" ? " · ยกเลิก (ไม่นับคิว)" : ""}`));
+      return parts.join("\n");
+    }
+
+    function rowCounts(crewId) {
+      let fly = 0, st = 0;
+      dates.forEach(d => cellItems(crewId, d).items.forEach(it => { if (!it.cancelled) it.st ? st++ : fly++; }));
+      return { fly, st };
+    }
+
+    function render() {
+      const y = view.getFullYear(), m = view.getMonth();
+      const { days } = monthRange(y, m);
+      dates = Array.from({ length: days }, (_, i) => `${y}-${pad(m + 1)}-${pad(i + 1)}`);
+      maps = buildMaps();
+      qMaps = maps;
+      let qDates = dates;
+      if (!dates.includes(target) && tq) {
+        // เดือนที่เปิดอยู่ใช้ข้อมูลสด (พิมพ์/ลบช่องแล้วคิวเปลี่ยนทันที) แทนข้อมูลย้อนหลังที่โหลดไว้
+        const ym = dates[0].slice(0, 7);
+        const hist = { entries: [...tq.hist.entries.filter(e => e.entry_date.slice(0, 7) !== ym), ...data.entries],
+                       missions: [...tq.hist.missions.filter(m => m.mission_date.slice(0, 7) !== ym), ...data.missions] };
+        qMaps = buildMaps({ ...tq, hist }, tq.dates[0].slice(0, 7));
+        qDates = tq.dates;
+      }
+      ranks = qDates.includes(target)
+        ? rankQueue({
+            crew: data.crew, monthDates: qDates, target,
+            isOff: d => isWeekend(d) || qMaps.holidayMap.has(d) || aheadHol.has(d),
+            itemsFor: (id, d) => cellItems(id, d, qMaps).items.filter(it => !it.cancelled),   // ยกเลิกไม่นับคิว
+            isUnavailable: (id, d) => qMaps.offMap.has(`${id}|${d}`),
+            historyStart: addDays(target, -120),
+            until: countUntil(),                              // ไม่ติ๊ก = นับถึงวันนี้ · ติ๊ก = รวมเที่ยวที่จัดล่วงหน้า
+          })
+        : null;
+      // คิวอ้างอิง: นับเที่ยวตั้งแต่ต้นเดือนก่อนจนถึงวันก่อนวันจัดคิว (เหมือนไม่ได้เริ่มนับใหม่ต้นเดือน)
+      //  แสดงเฉพาะกลุ่ม (IP/P · CP) ที่ยังมีคนในคิวบิน 0 เที่ยวในเดือนนี้ · ทุกคนบินครบ 1 ครั้งแล้ว → ซ่อน
+      needRef = new Set(ranks ? [...ranks.values()].filter(r => r.rank && !r.flights).map(r => r.group) : []);
+      ranksPrev = ranks && prevRef && needRef.size
+        ? rankQueue({
+            crew: data.crew, monthDates: [...prevRef.dates, ...qDates.filter(d => d < target)], target,
+            isOff: d => isWeekend(d) || qMaps.holidayMap.has(d) || aheadHol.has(d) || prevRef.holidays.has(d),
+            itemsFor: (id, d) => cellItems(id, d, qMaps).items.filter(it => !it.cancelled),
+            isUnavailable: (id, d) => qMaps.offMap.has(`${id}|${d}`),
+            historyStart: addDays(target, -120),
+            until: countUntil(),                              // ไม่ติ๊ก = นับถึงวันนี้ · ติ๊ก = รวมเที่ยวที่จัดล่วงหน้า
+          })
+        : null;
+
+      holRanks = holData ? computeHolidayRanks() : null;
+
+      let html = `<thead><tr><th class="name">NAME / DATE</th>` +
+        dates.map((d, i) => {
+          const w = new Date(d + "T00:00:00").getDay();
+          const hol = w === 0 || w === 6 || maps.holidayMap.has(d);
+          const cls = [hol ? "hol" : "", planner ? "plan" : "", d === todayStr ? "today-col" : "", ranks && d === target ? "target" : ""].join(" ");
+          const title = maps.holidayMap.has(d) ? ` title="${esc(maps.holidayMap.get(d))}"` : "";
+          return `<th class="${cls}" data-date="${d}"${title}>${i + 1}<small>${TH_DOW[w]}</small></th>`;
+        }).join("") + `<th class="cnt">บินจริง</th><th class="cnt">ST</th></tr></thead><tbody>`;
+
+      if (!data.crew.length) html += `<tr><td class="name">ยังไม่มีนักบินในทะเบียน</td></tr>`;
+      data.crew.forEach(p => {
+        const inQ = p.in_queue !== false;
+        html += `<tr data-crew="${p.id}" class="${inQ ? "" : "noq"}"><td class="name" style="${qualStyle(p.position) || ""}" title="${esc(p.code)}">` +
+          `<input type="checkbox" class="qcheck" data-q="${p.id}" ${inQ ? "checked" : ""} ${planner ? "" : "disabled"} title="นับคิว">${esc(p.full_name)}</td>`;
+        dates.forEach(d => {
+          let inner = cellHTML(p.id, d), t = cellTitle(p.id, d), cls = cellClass(p.id, d);
+          if (ranks && d === target) {
+            cls += " target";
+            const r = ranks.get(p.id);
+            const liveItems = cellItems(p.id, d).items.filter(it => !it.cancelled);
+            if (!liveItems.length && r && r.rank) {                 // ว่าง หรือมีแต่ภารกิจที่ยกเลิก
+              inner = `<span class="qno">${r.rank}</span>` + inner;
+              t = `คิวที่ ${r.rank} (${r.group === "CP" ? "CP" : "IP/P"})${r.off ? " · ไม่ว่าง" : ""} · บินจริง ${r.flights} เที่ยว (ไม่นับวันหยุด) · บินล่าสุด ${r.last ? thaiShort(r.last) : "ไม่มีข้อมูล"}` + (t ? "\n" + t : "");
+            }
+          }
+          html += `<td class="${cls}" data-date="${d}"${t ? ` title="${esc(t)}"` : ""}>${inner}</td>`;
+        });
+        const c = rowCounts(p.id);
+        html += `<td class="cnt" data-cnt="fly">${c.fly}</td><td class="cnt" data-cnt="st">${c.st}</td></tr>`;
+      });
+      table.innerHTML = html + `</tbody>`;
+      renderQueuePanel();
+      renderHolidayPanel();
+      renderHolSheet();
+
+      const miss = document.getElementById("missing");
+      if (maps.missingCodes.size) {
+        miss.hidden = false;
+        miss.innerHTML = `ยังไม่มีรหัสสนามบินของ <b>${[...maps.missingCodes].map(esc).join(", ")}</b> — ในตารางจะแสดงแต่สี` +
+          (planner ? ` · กรอกรหัสได้ที่กล่อง "รหัสสนามบิน" ด้านล่าง` : "");
+      } else miss.hidden = true;
+      renderAirfields([...maps.missingCodes]);
+    }
+
+    // อัปเดตช่องเดียว (ไม่ต้องวาดทั้งตาราง)
+    function refreshCell() { render(); }      // แก้ช่องไหนก็อาจทำให้ลำดับคิวเปลี่ยน
+
+    // ---------- แผงสรุปคิว ----------
+    const TH_DOW_FULL = ["อาทิตย์","จันทร์","อังคาร","พุธ","พฤหัสบดี","ศุกร์","เสาร์"];
+    const TH_MON_S = ["ม.ค.","ก.พ.","มี.ค.","เม.ย.","พ.ค.","มิ.ย.","ก.ค.","ส.ค.","ก.ย.","ต.ค.","พ.ย.","ธ.ค."];
+    function thaiShort(s) { const [yy, mm, dd] = s.split("-").map(Number); return `${dd} ${TH_MON_S[mm - 1]}`; }
+    function thaiLong(s) {
+      const [yy, mm, dd] = s.split("-").map(Number);
+      return `วัน${TH_DOW_FULL[new Date(s + "T00:00:00").getDay()]}ที่ ${dd} ${TH_MON_S[mm - 1]} ${yy + 543}`;
+    }
+    function renderQueuePanel() {
+      const box = document.getElementById("qpanel");
+      box.hidden = false;
+      if (!ranks) {
+        const [ty, tm] = target.split("-").map(Number);
+        box.innerHTML = `<h3 class="q-h">คิวบิน · ${thaiLong(target)}</h3>
+          <p class="rule" style="margin:0">ลำดับคิวจะแสดงเมื่อเปิดเดือน ${TH_MONTH[tm - 1]} ${ty + 543} <button class="btn sm ghost" id="goTarget">ไปเดือนนั้น</button></p>`;
+        document.getElementById("goTarget").addEventListener("click", () => go(new Date(ty, tm - 1, 1)));
+        box.querySelector(".q-h").append(futureLabel);
+        return;
+      }
+      const byId = new Map(data.crew.map(c => [c.id, c]));
+      const col = (group, title, src = ranks, ref = false) => {
+        const rows = [...src.values()].filter(r => r.group === group);
+        const ranked = rows.filter(r => r.rank).sort((a, b) => a.rank - b.rank);
+        // คนไม่ว่างยังอยู่ในลำดับคิว แต่เป็นแถวสีแดง + หมายเหตุ · ไฮไลต์ "คิวถัดไป" ที่คนแรกที่ว่าง
+        const nextId = ranked.find(r => !r.off && !r.assigned)?.id;     // คนแรกที่ว่างและยังไม่ถูกจัด
+        const offN = ranked.filter(r => r.off).length;
+        return `<div class="qcol${ref ? " ref" : ""}"><h4>${title} <span class="muted" style="font-weight:400">(${ranked.length} คน${offN ? ` · ไม่ว่าง ${offN}` : ""})</span></h4>
+          <ol class="qlist">${ranked.map(r => {
+            const c = byId.get(r.id);
+            const note = r.off ? (qMaps.offMap.get(`${r.id}|${target}`) || "") : "";
+            return `<li class="${r.off ? "off" : r.assigned ? "done" : r.id === nextId ? "next" : ""}"${r.off ? ` title="ไม่ว่าง${note ? ": " + esc(note) : ""}"` : r.assigned ? ` title="จัดลงวันนั้นแล้ว"` : ""}>
+              <span class="qno">${r.rank}</span><span class="nm" style="${r.off ? "" : qualStyle(c.position)}">${esc(c.full_name)}</span>
+              ${r.off ? `<span class="offtag">ไม่ว่าง${note ? " · " + esc(note) : ""}</span>` : ""}
+              ${r.assigned ? `<span class="donetag">✓ จัดแล้ว</span>` : ""}
+              <span class="meta">บิน ${r.flights} · ล่าสุด ${r.last ? thaiShort(r.last) : "—"}</span></li>`;
+          }).join("") || `<li class="muted">ไม่มีผู้ที่นับคิวได้</li>`}</ol></div>`;
+      };
+      box.innerHTML = `<h3 class="q-h">คิวบิน · ${thaiLong(target)}</h3>
+        <p class="rule">${dates.includes(target) ? "" : `คิดจากข้อมูลเดือน ${TH_MONTH[Number(target.slice(5, 7)) - 1]} ${Number(target.slice(0, 4)) + 543} · `}บินจริงน้อยสุดก่อน (ไม่นับ ST และเที่ยวที่บินในวันหยุด ในเดือนนั้น · ${futureBox.checked ? "รวมเที่ยวที่จัดล่วงหน้า" : "นับถึงวันนี้ ไม่นับเที่ยวที่จัดล่วงหน้า"}) → บินล่าสุดนานกว่าก่อน → ชื่ออยู่บนก่อน · ติ๊กหน้าชื่อเพื่อนับคิว</p>
+        ${ranksPrev ? `<p class="rule" style="margin-top:-6px">คอลัมน์ <b>อ้างอิง</b> = นับเที่ยวต่อจากเดือน ${prevRef.label} (เดือนก่อน + เดือนนี้ก่อนวันจัดคิว) ไว้ประกอบการจัดลำดับ · แสดงจนกว่าทุกคนในกลุ่มจะบินครบ 1 ครั้งในเดือนนี้</p>` : ""}
+        <div class="qcols${ranksPrev ? (needRef.size === 2 ? " with-ref" : " with-ref3") : ""}">${col("IPP", "IP / P")}${ranksPrev && needRef.has("IPP") ? col("IPP", `IP / P · อ้างอิง ${prevRef.label}`, ranksPrev, true) : ""}${col("CP", "CP")}${ranksPrev && needRef.has("CP") ? col("CP", `CP · อ้างอิง ${prevRef.label}`, ranksPrev, true) : ""}</div>`;
+      box.querySelector(".q-h").append(futureLabel);
+    }
+
+    // ---------- คิววันหยุด ----------
+    // ช่องที่พิมพ์เอง (queue_entries) > ภารกิจ — กติกาเดียวกับตาราง · นับเฉพาะเที่ยวจริง (ไม่ใช่ ST / ไม่ยกเลิก)
+    function computeHolidayRanks() {
+      const { hist, holidays, off } = holData;
+      // ช่องที่แก้ในเดือนที่เปิดอยู่ใช้ data.entries (อัปเดตทันทีเมื่อพิมพ์/ลบ) แทนข้อมูลที่โหลดไว้
+      const ym = dates[0]?.slice(0, 7);
+      const entries = [...hist.entries.filter(e => e.entry_date.slice(0, 7) !== ym), ...data.entries];
+      const entryByKey = new Map(entries.map(e => [`${e.crew_member_id}|${e.entry_date}`, e]));
+      const real = new Map();          // "crew|date" → มีเที่ยวจริง
+      const any = new Set();           // "crew|date" → มีรายการ (รวม ST) ไม่นับที่ยกเลิก
+      hist.missions.forEach(ms => (ms.mission_crew || []).forEach(mc => {
+        if (!mc.crew_member_id || !PILOT_POSITIONS.includes(String(mc.position || "").trim().toUpperCase())) return;
+        const k = `${mc.crew_member_id}|${ms.mission_date}`;
+        if (entryByKey.has(k) || ms.status === "cancelled") return;
+        any.add(k);
+        if (!isStby(ms.kind)) real.set(k, true);
+      }));
+      entryByKey.forEach((e, k) => {
+        any.add(k);
+        const st = String(e.code || "").trim().toUpperCase() === "ST" || (isStby(e.kind) && !e.code);
+        if (!st) real.set(k, true);
+      });
+      const flownDays = new Map();
+      real.forEach((_, k) => {
+        const [id, d] = k.split("|");
+        if (!flownDays.has(id)) flownDays.set(id, new Set());
+        flownDays.get(id).add(d);
+      });
+      return rankHolidayQueue({
+        crew: data.crew, target: holTarget,
+        isOff: d => isWeekend(d) || holidays.has(d),
+        flownDays,
+        hasItemOn: (id, d) => any.has(`${id}|${d}`),
+        isUnavailable: (id) => off.has(id),
+        baselineDays: holData.base,
+        baselineCount: holData.count,
+        until: countUntil(),                                  // ไม่ติ๊ก = นับถึงวันนี้ · ติ๊ก = รวมวันหยุดที่จัดล่วงหน้า
+      });
+    }
+
+    // ---------- admin แก้แทคเลขคิววันหยุด: เลขใหม่ − เลขเดิม → บวก/ลบที่จำนวนครั้งตั้งต้น (crew_holiday_base) ----------
+    // แก้แทคเลข/จำนวนครั้งตั้งต้น: admin เท่านั้น (baseAdmin)
+    const admin = baseAdmin;
+    if (admin) document.getElementById("hpanel").addEventListener("click", (e) => {
+      const tag = e.target.closest(".xtag.xed"); if (!tag || !holRanks || !holData?.count) return;
+      const id = tag.dataset.id, r = holRanks.get(id); if (!r || r.tag == null) return;
+      const c = data.crew.find(x => x.id === id);
+      const bg = document.createElement("div");
+      bg.className = "tagdlg-bg";
+      bg.innerHTML = `<div class="tagdlg" role="dialog" aria-modal="true" aria-label="แก้แทคเลขคิววันหยุด">
+        <h4>${esc(c?.full_name || "")}</h4>
+        <div class="sub">แทคเลขคิววันหยุด (เทียบกับคนที่บินน้อยสุดในกลุ่ม) · บินวันหยุดรวม ${r.count} ครั้ง</div>
+        <div class="stp"><button class="btn" data-d="-1" aria-label="ลด">−</button>
+          <input type="number" min="0" step="1" value="${r.tag}" aria-label="แทคเลข">
+          <button class="btn" data-d="1" aria-label="เพิ่ม">+</button></div>
+        <div class="acts"><button class="btn ghost" data-x>ยกเลิก</button><button class="btn primary" data-ok>บันทึก</button></div></div>`;
+      document.body.appendChild(bg);
+      const inp = bg.querySelector("input");
+      const onKey = (k) => { if (k.key === "Escape") close(); if (k.key === "Enter") save(); };
+      const close = () => { bg.remove(); removeEventListener("keydown", onKey); };
+      const save = async () => {
+        const v = Number(inp.value);
+        if (inp.value === "" || !Number.isInteger(v) || v < 0) { inp.focus(); return; }
+        if (v === r.tag) return close();
+        const b = holData.count.get(id) || { count: 0, last: null };
+        const next = b.count + (v - r.tag);
+        if (next < 0) return alert("ลดได้ไม่ถึงเลขนี้ — จำนวนครั้งตั้งต้นจะติดลบ");
+        bg.querySelector("[data-ok]").disabled = true;
+        const err = await saveHolidayBaseCount(id, next, b.last);
+        if (err) { bg.querySelector("[data-ok]").disabled = false; return alert("บันทึกไม่สำเร็จ: " + err.message); }
+        holData.count.set(id, { ...b, count: next });
+        close(); render();
+      };
+      addEventListener("keydown", onKey);
+      bg.addEventListener("click", (ev) => {
+        if (ev.target === bg || ev.target.closest("[data-x]")) return close();
+        if (ev.target.closest("[data-ok]")) return save();
+        const d = ev.target.closest("[data-d]");
+        if (d) inp.value = Math.max(0, (Number(inp.value) || 0) + Number(d.dataset.d));
+      });
+      inp.focus(); inp.select();
+    });
+
+    // ---------- 🏖 ใบรายชื่อคิววันหยุด (แบบตารางค้างคืน) ----------
+    //  NAME | ตั้งต้น | 1…N | จำนวนครั้ง | แทค | วันล่าสุด | หมายเหตุ
+    //  ช่องเทาเปล่า = จำนวนครั้งตั้งต้น (crew_holiday_base) · ช่องเทามีวันที่ = ครั้งที่นับต่อ (holRanks.trips)
+    //  manual = crew_duty_log หมวด holiday ที่เพิ่มในเว็บ (มุมแดง) — ผู้วางแผนเพิ่ม/แก้/ลบได้ · เที่ยวจากระบบแก้ที่ตารางคิวบิน/ภารกิจ
+    const TH_MON_HS = ["ม.ค.","ก.พ.","มี.ค.","เม.ย.","พ.ค.","มิ.ย.","ก.ค.","ส.ค.","ก.ย.","ต.ค.","พ.ย.","ธ.ค."];
+    const thS = (d) => { const [y, m, dd] = d.split("-").map(Number); return `${dd} ${TH_MON_HS[m - 1]}${String(y + 543).slice(-2)}`; };
+    const tripLabel = (t) => t.length === 1 ? thS(t[0])
+      : t[0].slice(0, 7) === t[t.length - 1].slice(0, 7) ? `${Number(t[0].slice(8))}–${thS(t[t.length - 1])}` : `${thS(t[0])}–${thS(t[t.length - 1])}`;
+    // ช่องว่างข้างหน้า = ตั้งต้น − 1 ถ้ามีวันล่าสุด (ช่องสุดท้ายของตั้งต้นแสดงวันที่) · ไม่มีวันล่าสุด = ตั้งต้นทั้งหมด
+    const baseBlanks = (r, b) => b.last && r.base > 0 ? r.base - 1 : r.base;
+    function holSheetRows(all = false) {
+      if (!holRanks || !holData?.count) return null;
+      const q = all ? "" : (document.getElementById("hsFind")?.value || "").trim();
+      const groups = [["IPP", "IP / P"], ["CP", "CP"]].map(([g, title]) => ({ title,
+        list: data.crew.filter(c => holRanks.get(c.id)?.group === g && (!q || c.full_name.includes(q)))
+          .sort((x, y) => (holRanks.get(x.id).rank ?? 1e9) - (holRanks.get(y.id).rank ?? 1e9) || holRanks.get(x.id).idx - holRanks.get(y.id).idx)
+          .map(c => {
+          const r = holRanks.get(c.id), man = holData.manual.get(c.id) || new Set();
+          return { c, r, b: holData.count.get(c.id) || { count: 0, last: null },
+                   trips: r.trips.map(t => ({ t, man: t.find(d => man.has(d)) || null })) };
+        }) }));
+      const most = Math.max(0, ...groups.flatMap(g => g.list.map(x => x.r.base + x.trips.length)));
+      return { groups, ncol: Math.max(20, most + (planner ? 1 : 0)) };
+    }
+    function renderHolSheet() {
+      if (holSheetEl.hidden) return;
+      const rs = holSheetRows();
+      if (!rs) { document.getElementById("hsRows").innerHTML = `<tr><td class="empty">${holData && !holData.count ? "ยังไม่มีจำนวนครั้งตั้งต้น (migration_41)" : "กำลังโหลด…"}</td></tr>`; return; }
+      const { groups, ncol } = rs;
+      document.getElementById("hsHead").innerHTML = `<tr><th class="dg-nm">NAME</th><th>ช่องว่าง</th>${Array.from({ length: ncol }, (_, k) => `<th>${k + 1}</th>`).join("")}
+        <th>จำนวนครั้ง</th><th>แทค</th><th>วันล่าสุด</th><th>หมายเหตุ</th></tr>`;
+      const n = groups.reduce((a, g) => a + g.list.length, 0);
+      document.getElementById("hsSub").textContent = `${n} คน · ${futureBox.checked ? "รวมวันหยุดที่จัดล่วงหน้า" : "นับถึงวันนี้"} (ตามช่องติ๊กในแท็บคิวบิน)`;
+      const row = ({ c, r, b, trips }) => {
+        const cells = [], blanks = baseBlanks(r, b);
+        for (let k = 0; k < blanks; k++)
+          cells.push(`<td class="dg-c hs-g" title="ตั้งต้นจากตารางคิววันหยุด (ไม่มีวันที่)"></td>`);
+        if (blanks < r.base)                                   // ช่องสุดท้ายของตั้งต้น = วันบินวันหยุดล่าสุดในฐานข้อมูล
+          cells.push(`<td class="dg-c hs-g" title="วันบินวันหยุดล่าสุดตามข้อมูลตั้งต้นในฐานข้อมูล">${thS(b.last)}</td>`);
+        trips.forEach(({ t, man }) => cells.push(man
+          ? `<td class="dg-c hs-g hs-man${planner ? " dg-ed" : ""}" data-d="${man}" title="เพิ่มเอง (manual)${planner ? " · คลิกเพื่อแก้/ลบ" : ""}">${tripLabel(t)}</td>`
+          : `<td class="dg-c hs-g" title="จากตารางคิวบิน/ภารกิจ">${tripLabel(t)}</td>`));
+        if (planner) cells.push(`<td class="dg-c dg-ed hs-add" data-d="" title="เพิ่มวันที่บินวันหยุด (manual)">+</td>`);
+        while (cells.length < ncol) cells.push(`<td class="dg-c"></td>`);
+        const note = holData.notes.get(c.id) || "";
+        return `<tr data-id="${c.id}"${r.inQueue ? "" : ' class="hs-out"'}><td class="dg-nm">${r.rank ? `<span class="hs-no">${r.rank}</span>` : ""}<span style="${qualStyle(c.position) || ""}">${esc(c.full_name)}</span>${r.inQueue ? "" : ` <span class="muted" title="ไม่ได้ติ๊กนับคิว">· ไม่นับคิว</span>`}</td>
+          <td class="dg-sum hs-base" title="ช่องเทาว่างข้างหน้า · ตั้งต้นรวม ${r.base} ครั้ง${b.last ? ` (ล่าสุด ${thS(b.last)})` : ""}">${baseAdmin ? `<button type="button" data-b="-1" ${blanks ? "" : "disabled"} aria-label="ลดช่องว่างข้างหน้า">−</button>` : ""}<b>${blanks}</b>${baseAdmin ? `<button type="button" data-b="1" aria-label="เพิ่มช่องว่างข้างหน้า">+</button>` : ""}</td>
+          ${cells.join("")}
+          <td class="dg-sum">${r.count}</td><td class="dg-sum">${r.tag ?? "-"}</td>
+          <td class="dg-sum dg-last">${r.last ? thS(r.last) : ""}</td>
+          <td class="dg-note">${planner ? `<input data-note value="${esc(note)}">` : esc(note)}</td></tr>`;
+      };
+      document.getElementById("hsRows").innerHTML = groups.map(g =>
+        `<tr class="hs-grp"><td class="dg-nm">${g.title}</td><td colspan="${ncol + 5}"></td></tr>` +
+        (g.list.map(row).join("") || `<tr><td class="empty" colspan="${ncol + 6}">ไม่พบนักบิน</td></tr>`)).join("");
+    }
+    function holSheetExport() {
+      const rs = holSheetRows(true);
+      if (!rs) return null;
+      const G = "#C9CCD1", S2 = "#F6F8FB", H = (v, x = {}) => ({ v, bg: S2, fg: "#5B6675", bold: true, ...x });
+      const rows = [[H("NAME", { align: "left" }), H("ช่องว่าง"), ...Array.from({ length: rs.ncol }, (_, i) => H(i + 1)), H("จำนวนครั้ง"), H("แทค"), H("วันล่าสุด"), H("หมายเหตุ")]];
+      rs.groups.forEach(g => {
+        rows.push([H(g.title, { align: "left" })]);
+        g.list.forEach(({ c, r, b, trips }) => {
+          const q = QUAL_COLORS[c.position] || {}, blanks = baseBlanks(r, b);
+          const cells = [...Array.from({ length: blanks }, () => ({ v: "", bg: G })),
+                         ...(blanks < r.base ? [{ v: thS(b.last), bg: G, mono: true }] : []),
+                         ...trips.map(({ t, man }) => ({ v: tripLabel(t), bg: G, mono: true, ...(man ? { fg: "#C00000", note: "เพิ่มเอง (manual)" } : {}) }))];
+          while (cells.length < rs.ncol) cells.push({ v: "" });
+          rows.push([{ v: c.full_name, bg: q.bg, fg: q.fg, bold: true, align: "left" }, { v: blanks, bg: S2, bold: true }, ...cells,
+                     { v: r.count, bold: true, bg: S2 }, { v: r.tag ?? "-", bold: true, bg: S2 }, { v: r.last ? thS(r.last) : "", bg: S2, fg: "#2F6AE0", mono: true },
+                     { v: holData.notes.get(c.id) || "", align: "left" }]);
+        });
+      });
+      return { name: "คิววันหยุด", rows, widths: [22, 8, ...Array(rs.ncol).fill(10), 10, 7, 11, 22] };
+    }
+    if (planner) {
+      const hsMsg = (t, ok) => { const el = document.getElementById("hsMsg"); el.style.color = ok ? "var(--good)" : "var(--crit)"; el.textContent = t; };
+      holSheetEl.addEventListener("input", (e) => { if (e.target.id === "hsFind") renderHolSheet(); });
+      // − / + จำนวนครั้งตั้งต้น (admin)
+      holSheetEl.addEventListener("click", async (e) => {
+        const btn = e.target.closest("[data-b]"); if (!btn || !baseAdmin) return;
+        const id = btn.closest("tr").dataset.id, b = holData.count.get(id) || { count: 0, last: null };
+        const next = b.count + Number(btn.dataset.b);
+        if (next < (b.last ? 1 : 0)) return;                 // ลดได้แค่ช่องว่าง — ช่องวันล่าสุดคงไว้
+        btn.disabled = true;
+        const err = await saveHolidayBaseCount(id, next, b.last);
+        if (err) { btn.disabled = false; return hsMsg("บันทึกไม่สำเร็จ: " + err.message + (/row-level|policy/i.test(err.message) ? " — เฉพาะ admin" : ""), false); }
+        holData.count.set(id, { ...b, count: next });
+        hsMsg(`ช่องว่างข้างหน้า ${b.last ? next - 1 : next} ช่อง · ตั้งต้นรวม ${next} ครั้ง`, true);
+        render();
+      });
+      // หมายเหตุ
+      holSheetEl.addEventListener("change", async (e) => {
+        if (!e.target.matches("[data-note]")) return;
+        const id = e.target.closest("tr").dataset.id;
+        const err = await saveDutyNote(id, "holiday", e.target.value);
+        if (err) return hsMsg("บันทึกหมายเหตุไม่สำเร็จ: " + err.message, false);
+        holData.notes.set(id, e.target.value.trim()); hsMsg("บันทึกหมายเหตุแล้ว", true);
+      });
+      // คลิกช่อง + / มุมแดง → กรอกวันที่ · ลบค่าว่าง = ลบ · Esc = ยกเลิก
+      holSheetEl.addEventListener("click", (e) => {
+        const td = e.target.closest("td.dg-c.dg-ed"); if (!td || td.querySelector("input")) return;
+        const old = td.dataset.d, id = td.closest("tr").dataset.id;
+        td.innerHTML = `<input type="date" value="${old}" max="${todayStr}">`;
+        const inp = td.firstElementChild; inp.focus(); try { inp.showPicker?.(); } catch {}
+        let done = false;
+        const yOk = (v) => { const y = +v.slice(0, 4); return y >= 2000 && y <= now.getFullYear() + 1; };
+        const finish = async (save, fromChange = false) => {
+          if (done) return;
+          const v = inp.value;
+          if (save && v && !yOk(v)) { if (fromChange) return; done = true; hsMsg("ปีไม่ถูกต้อง — ใช้ปี ค.ศ. (เช่น 2026)", false); return renderHolSheet(); }
+          done = true;
+          if (!save || v === old || (!v && !old)) return renderHolSheet();
+          if (v) {
+            const b = holData.count.get(id) || { last: null }, r = holRanks.get(id);
+            const why = v > todayStr ? "เพิ่มได้ถึงวันนี้เท่านั้น"
+              : b.last && v <= b.last ? `วันที่นี้อยู่ในจำนวนตั้งต้นแล้ว (ตั้งต้นถึง ${thS(b.last)}) — ${baseAdmin ? "ใช้ − / + ที่คอลัมน์ ช่องว่าง แทน" : "ให้ admin ปรับจำนวนช่องว่างแทน"}`
+              : (holData.base.get(id) || []).includes(v) || r.trips.some(t => t.includes(v)) ? `มีวันที่ ${thS(v)} อยู่แล้ว` : "";
+            if (why) { hsMsg(why, false); return renderHolSheet(); }
+          }
+          let err = null;
+          if (old) err = await removeDuty(id, "holiday", old);
+          if (!err && v) err = await addDuty(id, "holiday", v);
+          if (err) { hsMsg("บันทึกไม่สำเร็จ: " + err.message, false); return renderHolSheet(); }
+          const days = (holData.base.get(id) || []).filter(x => x !== old);
+          if (v) days.push(v);
+          holData.base.set(id, days.sort());
+          const man = holData.manual.get(id) || new Set();
+          man.delete(old); if (v) man.add(v);
+          holData.manual.set(id, man);
+          hsMsg(v ? (old ? `แก้เป็น ${thS(v)} แล้ว` : `เพิ่ม ${thS(v)} แล้ว`) : `ลบ ${thS(old)} แล้ว`, true);
+          render();
+        };
+        inp.addEventListener("change", () => finish(true, true));
+        inp.addEventListener("blur", () => finish(true));
+        inp.addEventListener("keydown", (k) => { if (k.key === "Escape") finish(false); if (k.key === "Enter") finish(true); });
+      });
+    } else holSheetEl.addEventListener("input", (e) => { if (e.target.id === "hsFind") renderHolSheet(); });
+
+    function renderHolidayPanel() {
+      const box = document.getElementById("hpanel");
+      if (!holRanks) { box.hidden = true; return; }
+      box.hidden = false;
+      const byId = new Map(data.crew.map(c => [c.id, c]));
+      const col = (group, title) => {
+        const ranked = [...holRanks.values()].filter(r => r.group === group && r.rank).sort((a, b) => a.rank - b.rank);
+        const nextId = ranked.find(r => !r.off && !r.assigned)?.id;     // คนแรกที่ว่างและยังไม่ถูกจัด
+        const offN = ranked.filter(r => r.off).length;
+        return `<div class="qcol"><h4>${title} <span class="muted" style="font-weight:400">(${ranked.length} คน${offN ? ` · ไม่ว่าง ${offN}` : ""})</span></h4>
+          <ol class="qlist">${ranked.map(r => {
+            const c = byId.get(r.id);
+            const note = r.off ? (holData.off.get(r.id) || "") : "";
+            return `<li class="${r.off ? "off" : r.assigned ? "done" : r.id === nextId ? "next" : ""}"${r.off ? ` title="ไม่ว่าง${note ? ": " + esc(note) : ""}"` : r.assigned ? ` title="จัดลงวันนั้นแล้ว"` : ""}>
+              <span class="qno">${r.rank}</span><span class="nm" style="${r.off ? "" : qualStyle(c.position)}">${esc(c.full_name)}</span>
+              ${r.tag != null ? `<span class="xtag${r.tag ? "" : " z"}${admin ? " xed" : ""}" data-id="${r.id}" title="บินวันหยุด ${r.count} ครั้ง · มากกว่าคนที่บินน้อยสุดในกลุ่ม ${r.tag} ครั้ง${admin ? "\nคลิกเพื่อแก้เลข" : ""}">${r.tag}</span>` : ""}
+              ${r.off ? `<span class="offtag">ไม่ว่าง${note ? " · " + esc(note) : ""}</span>` : ""}
+              ${r.assigned ? `<span class="donetag">✓ จัดแล้ว</span>` : ""}
+              <span class="meta">ล่าสุด ${r.last ? thaiShort(r.last) + String(Number(r.last.slice(0, 4)) + 543).slice(-2) : "—"}</span></li>`;
+          }).join("") || `<li class="muted">ไม่มีผู้ที่นับคิวได้</li>`}</ol></div>`;
+      };
+      const holName = holData.holidays.has(holTarget) ? (data.holidays.find(h => h.holiday_date === holTarget)?.name || "") : "";
+      box.classList.remove("loading");
+      box.innerHTML = `<h3 class="hol-h">คิววันหยุด · ${thaiLong(holTarget)}${holName ? ` <span class="muted" style="font-weight:400">(${esc(holName)})</span>` : ""}
+          <span class="hol-nav">
+            <button type="button" class="btn sm ghost" data-hol="-1" ${holIdx <= 0 ? "disabled" : ""} title="วันหยุดก่อนหน้า">‹</button>
+            <span class="muted">${holIdx ? `วันหยุดที่ ${holIdx + 1} ข้างหน้า` : "วันหยุดถัดไป"}</span>
+            <button type="button" class="btn sm ghost" data-hol="1" ${holIdx >= holDays.length - 1 ? "disabled" : ""} title="วันหยุดถัดไป">›</button>
+            ${holIdx ? `<button type="button" class="btn sm ghost" data-hol="0">กลับวันหยุดถัดไป</button>` : ""}
+          </span></h3>
+        <p class="rule">${holData.count
+          ? `เรียงตามจำนวนครั้งที่บินวันหยุด — น้อยสุดอยู่คิวแรก · เท่ากัน → ชื่ออยู่บนก่อน (ไม่ใช้วันล่าสุด) · เฉพาะที่ติ๊ก ·
+             แทคเลขหลังชื่อ = จำนวนครั้ง เทียบกับคนที่บินน้อยสุดในกลุ่ม (น้อยสุด = 0) · จำนวนครั้งตามตารางคิววันหยุด + เที่ยวจริงในวันหยุด/เสาร์-อาทิตย์หลังจากนั้น
+             (ไม่นับ ST · บินติดกันหลายวัน = 1 ครั้ง · ${futureBox.checked ? "รวมวันหยุดที่จัดล่วงหน้า" : "นับถึงวันนี้ ไม่นับวันหยุดที่จัดล่วงหน้า"})`
+          : `เรียงตามวันหยุดล่าสุดที่บิน — บินมานานที่สุดอยู่คิวแรก · บินล่าสุดอยู่คิวสุดท้าย · ไม่เคยบินวันหยุด = อยู่หน้าสุด (เฉพาะที่ติ๊ก) ·
+             วันล่าสุดคิดจากข้อมูลไฟล์ "นจบ." (ชีตวันหยุด) รวมกับเที่ยวจริงในวันหยุด/เสาร์-อาทิตย์ในระบบตั้งแต่ ${thaiShort(HOLIDAY_QUEUE_START)} ${Number(HOLIDAY_QUEUE_START.slice(0, 4)) + 543} (ไม่นับ ST)`}</p>
+        <div class="qcols">${col("IPP", "IP / P")}${col("CP", "CP")}</div>`;
+      box.querySelectorAll("[data-hol]").forEach(b => b.addEventListener("click", () => shiftHoliday(Number(b.dataset.hol))));
+    }
+
+    // ---------- เลือกช่อง ----------
+    function tdOf(s) {
+      return s && table.querySelector(`tr[data-crew="${s.crew}"] td.day[data-date="${s.date}"]`);
+    }
+    function setSel(s) {
+      const old = tdOf(sel); if (old) old.classList.remove("sel");
+      sel = s;
+      const td = tdOf(sel);
+      if (td) { td.classList.add("sel"); td.scrollIntoView({ block: "nearest", inline: "nearest" }); }
+    }
+    function moveSel(dr, dc) {
+      if (!sel) return;
+      const ri = data.crew.findIndex(c => c.id === sel.crew);
+      const ci = dates.indexOf(sel.date);
+      const r = Math.max(0, Math.min(data.crew.length - 1, ri + dr));
+      const c = Math.max(0, Math.min(dates.length - 1, ci + dc));
+      setSel({ crew: data.crew[r].id, date: dates[c] });
+    }
+
+    // ---------- กล่องแก้ช่อง ----------
+    let ed = null;
+    function closeEditor() { if (ed) { ed.remove(); ed = null; } }
+
+    function openEditor(initialText) {
+      if (!planner || !sel) return;
+      closeEditor();
+      const td = tdOf(sel); if (!td) return;
+      const crew = data.crew.find(c => c.id === sel.crew);
+      const c = cellItems(sel.crew, sel.date);
+      const cur = c.items[0];
+      let kind = cur ? cur.kind : lastKind;
+      let ac = cur ? cur.ac : lastAc;
+      const [yy, mm, dd] = sel.date.split("-").map(Number);
+
+      ed = document.createElement("div");
+      ed.className = "ed";
+      ed.innerHTML = `
+        <div class="ed-top"><b>${esc(crew.full_name)}</b> · ${dd} ${TH_MONTH[mm - 1]} ${yy + 543}</div>
+        <input class="ed-code" maxlength="10" list="edCodes" autocomplete="off"
+               placeholder="รหัส เช่น CNX / ST (เว้นว่าง = สีอย่างเดียว)">
+        <datalist id="edCodes">${[...new Set(["ST", ...data.airfields.map(a => a.code), ...data.entries.map(e => e.code).filter(Boolean)])]
+          .map(x => `<option value="${esc(x)}">`).join("")}</datalist>
+        <div class="ed-row">
+          <div class="ed-lbl">สีชนิดภารกิจ</div>
+          ${Object.keys(KINDS).map(k => `<button type="button" class="ed-kind" data-kind="${k}"
+               style="background:${KIND_COLORS[k].bg};color:${KIND_COLORS[k].fg}">${KIND_SHORT[k]}</button>`).join("")}
+        </div>
+        <div class="ed-row">
+          <div class="ed-lbl">แบบเครื่อง</div>
+          <button type="button" class="ed-ac" data-ac="600" style="color:var(--q-600)">600 ตัวดำ</button>
+          <button type="button" class="ed-ac" data-ac="500" style="color:var(--q-500)">500 ตัวแดง</button>
+        </div>
+        <div class="ed-actions">
+          <button class="btn sm primary" data-act="save">บันทึก ⏎</button>
+          <button class="btn sm" data-act="clear" style="color:var(--crit)" ${c.manual ? "" : "disabled"}>ลบข้อมูล</button>
+          <button class="btn sm ghost" data-act="cancel">ยกเลิก</button>
+        </div>
+        ${c.override || (!c.manual && c.missions.length)
+          ? `<div class="ed-note">ช่องนี้มีข้อมูลจากภารกิจ — ที่บันทึกตรงนี้จะแสดงแทนในคิวบินเท่านั้น ข้อมูลภารกิจไม่เปลี่ยน · กด "ลบข้อมูล" เพื่อกลับไปแสดงตามภารกิจ</div>` : ""}`;
+      document.body.appendChild(ed);
+
+      const input = ed.querySelector(".ed-code");
+      input.value = initialText !== undefined ? initialText : (cur && c.manual ? cur.text : (cur ? cur.text : ""));
+      const paintBtns = () => {
+        ed.querySelectorAll(".ed-kind").forEach(b => b.classList.toggle("on", b.dataset.kind === kind));
+        ed.querySelectorAll(".ed-ac").forEach(b => b.classList.toggle("on", b.dataset.ac === ac));
+        input.style.background = KIND_COLORS[kind].bg;
+        input.style.color = textColor(kind, ac);
+      };
+      paintBtns();
+      ed.querySelectorAll(".ed-kind").forEach(b => b.addEventListener("click", () => { kind = b.dataset.kind; paintBtns(); input.focus(); }));
+      ed.querySelectorAll(".ed-ac").forEach(b => b.addEventListener("click", () => { ac = b.dataset.ac; paintBtns(); input.focus(); }));
+
+      // วางกล่องใต้ช่อง (ไม่ให้ล้นจอ)
+      const r = td.getBoundingClientRect();
+      const W = 292, H = ed.offsetHeight;
+      let left = window.scrollX + r.left;
+      let top = window.scrollY + r.bottom + 6;
+      if (left + W > window.scrollX + innerWidth - 10) left = window.scrollX + innerWidth - W - 10;
+      if (r.bottom + H + 10 > innerHeight) top = window.scrollY + r.top - H - 6;
+      ed.style.left = Math.max(window.scrollX + 10, left) + "px";
+      ed.style.top = top + "px";
+
+      input.focus();
+      if (initialText !== undefined) input.setSelectionRange(input.value.length, input.value.length); else input.select();
+
+      const target = { ...sel };
+      const save = async (moveDown) => {
+        lastKind = kind; lastAc = ac;
+        const code = input.value.trim().toUpperCase();
+        // อัปเดตบนจอทันที แล้วค่อยบันทึก
+        data.entries = data.entries.filter(e => !(e.crew_member_id === target.crew && e.entry_date === target.date));
+        data.entries.push({ crew_member_id: target.crew, entry_date: target.date, code: code || null, kind, ac_type: ac });
+        closeEditor(); refreshCell(target.crew, target.date);
+        if (moveDown) moveSel(1, 0);
+        const err = await saveEntry(target.crew, target.date, { code, kind, ac_type: ac });
+        if (err) { alert("บันทึกไม่สำเร็จ: " + err.message); load(); }
+      };
+      ed.querySelector('[data-act="save"]').addEventListener("click", () => save(false));
+      ed.querySelector('[data-act="cancel"]').addEventListener("click", () => { closeEditor(); });
+      ed.querySelector('[data-act="clear"]').addEventListener("click", () => { closeEditor(); clearCell(target); });
+      input.addEventListener("keydown", (e) => {
+        if (e.key === "Enter") { e.preventDefault(); save(true); }
+        if (e.key === "Escape") { e.preventDefault(); closeEditor(); }
+        e.stopPropagation();
+      });
+    }
+
+    async function clearCell(target) {
+      if (!maps.entryMap.has(`${target.crew}|${target.date}`)) return;
+      data.entries = data.entries.filter(e => !(e.crew_member_id === target.crew && e.entry_date === target.date));
+      refreshCell(target.crew, target.date);
+      const err = await deleteEntry(target.crew, target.date);
+      if (err) { alert("ลบไม่สำเร็จ: " + err.message); load(); }
+    }
+
+    // ---------- ช่องติ๊กนับคิว ----------
+    table.addEventListener("change", async (e) => {
+      const cb = e.target.closest(".qcheck"); if (!cb || !planner) return;
+      const crew = data.crew.find(c => c.id === cb.dataset.q);
+      const val = cb.checked;
+      crew.in_queue = val; render();
+      const err = await setInQueue(crew.id, val);
+      if (err) {
+        alert("บันทึกไม่สำเร็จ: " + err.message + (/in_queue/.test(err.message) ? "\n(ยังไม่ได้รัน migration_14_queue_rotation.sql)" : ""));
+        crew.in_queue = !val; render();
+      }
+    });
+
+    // ---------- คลิก / ดับเบิลคลิก ----------
+    table.addEventListener("click", async (e) => {
+      const th = e.target.closest("thead th[data-date]");
+      if (th && planner) { await toggleHoliday(th.dataset.date); return; }
+      const td = e.target.closest("td.day"); if (!td) return;
+      const crew = td.closest("tr").dataset.crew, date = td.dataset.date;
+      if (!planner || (e.metaKey || e.ctrlKey)) {
+        if (cellItems(crew, date).missions.length) location.href = `day.html?date=${date}`;
+        return;
+      }
+      if (mode !== "edit") return;
+      closeEditor();
+      setSel({ crew, date });
+    });
+    table.addEventListener("dblclick", (e) => {
+      if (!planner || mode !== "edit") return;
+      const td = e.target.closest("td.day"); if (!td) return;
+      setSel({ crew: td.closest("tr").dataset.crew, date: td.dataset.date });
+      openEditor();
+    });
+    document.addEventListener("mousedown", (e) => {
+      if (ed && !ed.contains(e.target) && !e.target.closest("td.day")) closeEditor();
+    });
+
+    // ---------- คีย์บอร์ดแบบ Excel ----------
+    document.addEventListener("keydown", (e) => {
+      if (!planner || mode !== "edit" || !sel || ed) return;
+      if (e.target instanceof Element && e.target.closest("input,select,textarea,[contenteditable]")) return;
+      const k = e.key;
+      if (k === "ArrowUp")    { e.preventDefault(); moveSel(-1, 0); }
+      else if (k === "ArrowDown")  { e.preventDefault(); moveSel(1, 0); }
+      else if (k === "ArrowLeft")  { e.preventDefault(); moveSel(0, -1); }
+      else if (k === "ArrowRight" || k === "Tab") { e.preventDefault(); moveSel(0, e.shiftKey ? -1 : 1); }
+      else if (k === "Enter" || k === "F2") { e.preventDefault(); openEditor(); }
+      else if (k === "Delete" || k === "Backspace") { e.preventDefault(); clearCell({ ...sel }); }
+      else if (k === "Escape") { setSel(null); }
+      else if (k.length === 1 && !e.metaKey && !e.ctrlKey && !e.altKey) { e.preventDefault(); openEditor(k.toUpperCase()); }
+    });
+
+    // ---------- วันหยุด ----------
+    async function toggleHoliday(d) {
+      const existing = data.holidays.find(h => h.holiday_date === d);
+      if (existing) {
+        if (!confirm(`ยกเลิกวันหยุด ${d}${existing.name ? " (" + existing.name + ")" : ""}?`)) return;
+        const err = await clearHoliday(d); if (err) alert(err.message);
+      } else {
+        const name = prompt(`ตั้ง ${d} เป็นวันหยุดราชการ\nชื่อวันหยุด (เว้นว่างได้):`, "");
+        if (name === null) return;
+        const err = await setHoliday(d, name.trim()); if (err) alert(err.message);
+      }
+      load();
+    }
+
+    // ---------- รหัสสนามบิน ----------
+    function renderAirfields(missing) {
+      const rows = [...missing.map(n => ({ name: n, code: "" })), ...data.airfields].sort((a, b) => a.name.localeCompare(b.name, "th"));
+      const grid = document.getElementById("afGrid");
+      grid.innerHTML = rows.map(a => `
+        <div class="af-row" data-name="${esc(a.name)}">
+          <span>${esc(a.name)}</span>
+          <input value="${esc(a.code)}" placeholder="รหัส" maxlength="6" ${planner ? "" : "disabled"}>
+          ${planner ? `<button class="btn sm" data-save>บันทึก</button>` : ""}
+        </div>`).join("") +
+        (planner ? `<div class="af-row af-new"><input id="afNewName" placeholder="ชื่อจุด เช่น บน.46">
+                     <input id="afNewCode" placeholder="รหัส" maxlength="6"><button class="btn sm" id="afAdd">เพิ่ม</button></div>` : "");
+      grid.querySelectorAll("[data-save]").forEach(b => b.addEventListener("click", async (e) => {
+        const row = e.target.closest(".af-row");
+        const code = row.querySelector("input").value.trim();
+        if (!code) { alert("กรอกรหัสก่อน"); return; }
+        const err = await saveAirfield(row.dataset.name, code);
+        if (err) alert("บันทึกไม่สำเร็จ: " + err.message); else load();
+      }));
+      document.getElementById("afAdd")?.addEventListener("click", async () => {
+        const name = document.getElementById("afNewName").value.trim();
+        const code = document.getElementById("afNewCode").value.trim();
+        if (!airfieldKey(name) || !code) { alert("กรอกชื่อจุดและรหัส"); return; }
+        const err = await saveAirfield(name, code);
+        if (err) alert("บันทึกไม่สำเร็จ: " + err.message); else load();
+      });
+    }
+
+    // ---------- เปลี่ยนเดือน ----------
+    const go = (d) => { closeEditor(); setSel(null); view = d; load(); };
+    document.getElementById("prev").addEventListener("click", () => go(new Date(view.getFullYear(), view.getMonth() - 1, 1)));
+    document.getElementById("next").addEventListener("click", () => go(new Date(view.getFullYear(), view.getMonth() + 1, 1)));
+    document.getElementById("thisMonth").addEventListener("click", () => go(new Date(now.getFullYear(), now.getMonth(), 1)));
+    load();
+  }
+</script>
+</body>
+</html>

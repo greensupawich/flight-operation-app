@@ -1,0 +1,314 @@
+// =====================================================================
+//  admin.js — คำขอใช้งาน + จัดการผู้ใช้ (เฉพาะ admin)
+//  ทุกการเขียนถูกบังคับด้วย RLS ว่าต้องเป็น admin เท่านั้น
+// =====================================================================
+import { esc } from "./esc.js";
+import { supabase } from "./supabase.js";
+
+export const ROLES  = ["admin","planner","pilot","crew","viewer"];
+export const ROLE_LABEL = {
+  admin:"ผู้ดูแลระบบ", planner:"ผู้วางแผน", pilot:"นักบิน", crew:"เจ้าหน้าที่", viewer:"ผู้ชม",
+};
+const STATUS = ["pending","active","disabled"];
+export const DEFAULT_ADMIN_EMAIL = "green.supawich@gmail.com";
+export const MAX_ADMINS = 3;
+const isDefaultAdmin = (p) => String(p.email || "").toLowerCase() === DEFAULT_ADMIN_EMAIL;
+const adminCount = (profiles) => profiles.filter((p) => p.role === "admin").length;
+
+// ---------- โหลดผู้ใช้ทั้งหมด ----------
+export async function loadProfiles() {
+  const { data, error } = await supabase
+    .from("profiles").select("*").order("created_at", { ascending: true });
+  if (error) { console.error(error); return []; }
+  return data || [];
+}
+
+// ---------- อนุมัติคำขอ: pending → active + กำหนดบทบาท ----------
+export async function approve(id, role) {
+  const { error } = await supabase.from("profiles")
+    .update({ status: "active", role }).eq("id", id);
+  return error;
+}
+
+// ---------- ปฏิเสธคำขอ ----------
+export async function reject(id) {
+  const { error } = await supabase.from("profiles")
+    .update({ status: "disabled" }).eq("id", id);
+  return error;
+}
+
+// ---------- แก้บทบาท/สถานะ + ชื่อในทะเบียนนักบินของผู้ใช้เดิม ----------
+//  crewId: undefined = ไม่แตะ · null = ยกเลิกการผูก (migration_45 — ใช้เช็คสิทธิ์รายงานหลังบินของนักบิน)
+export async function updateUser(id, role, status, crewId) {
+  const patch = { role, status };
+  if (crewId !== undefined) patch.crew_member_id = crewId;
+  const { error } = await supabase.from("profiles").update(patch).eq("id", id);
+  if (error && /crew_member_id/.test(error.message || ""))
+    return { message: "ยังไม่มีช่องผูกชื่อ — ต้องรัน db/migration_45_profile_crew_link.sql ก่อน" };
+  if (error && /uq_profiles_crew_member|duplicate key/.test(error.message || ""))
+    return { message: "ชื่อนี้ผูกกับบัญชีอื่นอยู่แล้ว (1 ชื่อ = 1 บัญชี)" };
+  return error;
+}
+
+// ---------- ลบบัญชีผู้ใช้ (migration_53) — ข้อมูลที่บัญชีนี้บันทึกไว้ยังอยู่ ----------
+export async function deleteUser(id) {
+  const { error } = await supabase.rpc("admin_delete_user", { p_id: id });
+  if (error && /admin_delete_user|schema cache|Could not find/i.test(error.message || ""))
+    return { message: "ยังลบบัญชีไม่ได้ — ต้องรัน db/migration_53_admin_delete_user.sql ก่อน" };
+  return error;
+}
+
+// ชื่อในทะเบียน (ตัดยศ เช่น "ร.ท.วิทวัส" → "วิทวัส") ตรงกับคำแรกของชื่อบัญชี → แนะนำให้ผูก
+const bareName = (s) => String(s || "").replace(/^.*\./, "").replace(/\s*\(.*\)\s*$/, "").trim();
+function suggestCrew(p, crew) {
+  const first = String(p.full_name || "").trim().split(/\s+/)[0];
+  return first ? crew.find((c) => bareName(c.full_name) === first) : null;
+}
+
+// =====================================================================
+//  วาดตาราง "คำขอใช้งาน" (status = pending)
+// =====================================================================
+export function renderRequests(card, tbody, countEl, profiles, onDone) {
+  const rows = profiles.filter((p) => p.status === "pending");
+  card.hidden = rows.length === 0;                      // ซ่อนการ์ดถ้าไม่มีคำขอ
+  countEl.textContent = rows.length ? `(${rows.length})` : "";
+  if (!rows.length) return;
+
+  tbody.innerHTML = rows.map((p) => `
+    <tr data-id="${p.id}">
+      <td>
+        <div style="font-weight:600">${esc(p.full_name || "— ยังไม่กรอกชื่อ —")}</div>
+        <div class="muted mono" style="font-size:12px">${esc(p.email)}</div>
+      </td>
+      <td>${esc(p.rank || "-")}</td>
+      <td class="muted" style="font-size:12.5px">${fmtTime(p.created_at)}</td>
+      <td>
+        <select data-role style="min-width:120px">
+          ${ROLES.map(r=>`<option value="${r}" ${r==="crew"?"selected":""}
+             ${r==="admin" && adminCount(profiles)>=MAX_ADMINS ? "disabled" : ""}>${ROLE_LABEL[r]}${r==="admin" && adminCount(profiles)>=MAX_ADMINS ? " (ครบ 3 คน)" : ""}</option>`).join("")}
+        </select>
+      </td>
+      <td style="white-space:nowrap">
+        <button class="btn sm primary" data-approve>✓ อนุมัติ</button>
+        <button class="btn sm" data-reject style="color:var(--crit)">ปฏิเสธ</button>
+      </td>
+    </tr>`).join("");
+
+  tbody.querySelectorAll("[data-approve]").forEach((b) =>
+    b.addEventListener("click", async (e) => {
+      const tr = e.target.closest("tr");
+      b.disabled = true; b.textContent = "…";
+      const err = await approve(tr.dataset.id, tr.querySelector("[data-role]").value);
+      if (err) { alert("อนุมัติไม่สำเร็จ: " + err.message); b.disabled = false; b.textContent = "✓ อนุมัติ"; }
+      else onDone();
+    }));
+
+  tbody.querySelectorAll("[data-reject]").forEach((b) =>
+    b.addEventListener("click", async (e) => {
+      const tr = e.target.closest("tr");
+      if (!confirm("ปฏิเสธคำขอนี้?")) return;
+      b.disabled = true;
+      const err = await reject(tr.dataset.id);
+      if (err) { alert("ไม่สำเร็จ: " + err.message); b.disabled = false; }
+      else onDone();
+    }));
+}
+
+// =====================================================================
+//  วาดตาราง "ผู้ใช้ทั้งหมด"
+// =====================================================================
+//  selfId = บัญชีที่ล็อกอินอยู่ (ลบตัวเองไม่ได้)
+export function renderUsers(tbody, profiles, onDone, crew = [], selfId = null) {
+  const hasLink = profiles.some((p) => "crew_member_id" in p);       // รัน migration_45 แล้ว
+  const linked = new Map(profiles.filter((p) => p.crew_member_id).map((p) => [p.crew_member_id, p.id]));
+  const rows = profiles.filter((p) => p.status !== "pending")
+    .sort((a, b) => (isDefaultAdmin(b) - isDefaultAdmin(a)) || ((b.role === "admin") - (a.role === "admin")));
+  const full = adminCount(profiles) >= MAX_ADMINS;
+
+  // ช่องผูกชื่อในทะเบียนนักบิน — เจ้าหน้าที่ (crew) รายงานหลังบินได้เฉพาะภารกิจที่ชื่อตัวเองอยู่ในลูกเรือ (นักบินได้ทุกภารกิจ — migration_46)
+  function crewCell(p) {
+    const sug = !p.crew_member_id ? suggestCrew(p, crew) : null;
+    const opts = crew.filter((c) => c.active !== false || c.id === p.crew_member_id)
+      .map((c) => {
+        const taken = linked.has(c.id) && linked.get(c.id) !== p.id;
+        return `<option value="${c.id}" ${c.id === p.crew_member_id ? "selected" : ""} ${taken ? "disabled" : ""}>${esc(c.full_name)}${c.position ? " · " + esc(c.position) : ""}${taken ? " (ผูกแล้ว)" : ""}</option>`;
+      }).join("");
+    return `<select data-crew style="min-width:150px"><option value="">— ไม่ผูก —</option>${opts}</select>
+      ${sug && !linked.has(sug.id) ? `<div class="muted" style="font-size:11.5px;margin-top:3px">แนะนำ: <a href="#" data-sug="${sug.id}">${esc(sug.full_name)}</a></div>` : ""}
+      ${p.role === "crew" && !p.crew_member_id ? `<div style="font-size:11.5px;color:var(--warn);margin-top:2px">ยังไม่ผูก → รายงานหลังบินไม่ได้</div>` : ""}`;
+  }
+
+  tbody.innerHTML = rows.length ? rows.map((p) => {
+    const locked = isDefaultAdmin(p);
+    const roleOpts = ROLES.map((r) => {
+      const block = r === "admin" && full && p.role !== "admin";
+      return `<option value="${r}" ${r === p.role ? "selected" : ""} ${block ? "disabled" : ""}>${ROLE_LABEL[r]}${block ? " (ครบ 3 คน)" : ""}</option>`;
+    }).join("");
+    return `
+    <tr data-id="${p.id}">
+      <td>
+        <div style="font-weight:600">${esc(p.full_name || "-")}
+          ${locked ? `<span class="lock-badge" title="ผู้ดูแลหลัก ถอดสิทธิ์ไม่ได้">🔒 ผู้ดูแลหลัก</span>` : ""}</div>
+        <div class="muted mono" style="font-size:12px">${esc(p.email)}</div>
+      </td>
+      <td>${esc(p.rank || "-")}</td>
+      <td>${hasLink ? crewCell(p) : `<span class="muted" style="font-size:12px">ต้องรัน migration_45</span>`}</td>
+      <td><select data-role ${locked ? "disabled" : ""}>${roleOpts}</select></td>
+      <td><select data-status ${locked ? "disabled" : ""}>${STATUS.map(s=>`<option value="${s}" ${s===p.status?"selected":""}>${s}</option>`).join("")}</select></td>
+      <td style="white-space:nowrap"><button class="btn sm" data-save ${locked ? 'title="ผู้ดูแลหลัก: แก้ได้เฉพาะชื่อในทะเบียนนักบิน (สิทธิ์/สถานะล็อก)"' : ""}>บันทึก</button>
+          ${locked || p.id === selfId ? "" : `<button class="btn sm" data-deluser style="color:var(--crit)" title="ลบบัญชีนี้">ลบ</button>`}</td>
+    </tr>`;
+  }).join("")
+    : `<tr><td colspan="6" class="empty">ยังไม่มีผู้ใช้ที่อนุมัติแล้ว</td></tr>`;
+
+  tbody.querySelectorAll("[data-sug]").forEach((a) => a.addEventListener("click", (e) => {
+    e.preventDefault(); a.closest("tr").querySelector("[data-crew]").value = a.dataset.sug;
+  }));
+  tbody.querySelectorAll("[data-save]").forEach((b) =>
+    b.addEventListener("click", async (e) => {
+      const tr = e.target.closest("tr");
+      b.disabled = true; b.textContent = "…";
+      const cs = tr.querySelector("[data-crew]");
+      const err = await updateUser(tr.dataset.id,
+        tr.querySelector("[data-role]").value, tr.querySelector("[data-status]").value,
+        cs ? (cs.value || null) : undefined);
+      b.disabled = false; b.textContent = err ? "บันทึก" : "✓";
+      if (err) alert("ไม่สำเร็จ: " + err.message); else onDone && onDone();
+    }));
+  tbody.querySelectorAll("[data-deluser]").forEach((b) =>
+    b.addEventListener("click", async (e) => {
+      const tr = e.target.closest("tr");
+      const p = profiles.find((x) => x.id === tr.dataset.id);
+      if (!p || !confirm(`ลบบัญชี ${p.full_name || ""} (${p.email})?\n\n• เข้าใช้งานไม่ได้ทันที\n• ภารกิจ/รายงานที่บัญชีนี้บันทึกไว้ยังอยู่ครบ\n• ถ้าล็อกอินใหม่ จะกลับมาเป็นคำขอใช้งาน ต้องอนุมัติอีกครั้ง\n\nถ้าแค่ต้องการพักการใช้งาน ให้ตั้งสถานะเป็น disabled แทน`)) return;
+      b.disabled = true; b.textContent = "…";
+      const err = await deleteUser(p.id);
+      if (err) { alert("ลบไม่สำเร็จ: " + err.message); b.disabled = false; b.textContent = "ลบ"; }
+      else onDone && onDone();
+    }));
+}
+
+function fmtTime(iso){
+  if (!iso) return "-";
+  try { return new Date(iso).toLocaleString("th-TH", { dateStyle:"short", timeStyle:"short" }); }
+  catch { return iso; }
+}
+
+// =====================================================================
+//  เพิ่มผู้ใช้แบบ manual (อีเมลที่อนุญาตล่วงหน้า)
+// =====================================================================
+export async function loadInvites() {
+  const { data, error } = await supabase
+    .from("user_invites").select("*").order("created_at", { ascending: false });
+  if (error) { console.error(error); return []; }
+  return data || [];
+}
+
+export async function addInvite({ email, full_name, rank, role }) {
+  const { data: { session } } = await supabase.auth.getSession();
+  const { error } = await supabase.from("user_invites").upsert({
+    email: (email || "").trim().toLowerCase(),
+    full_name: (full_name || "").trim() || null,
+    rank: (rank || "").trim() || null,
+    role,
+    invited_by: session?.user?.id,
+  }, { onConflict: "email" });
+  return error;
+}
+
+export async function deleteInvite(email) {
+  const { error } = await supabase.from("user_invites").delete().eq("email", email);
+  return error;
+}
+
+export function renderInvites(tbody, invites, profiles, onDone) {
+  const byEmail = new Map(profiles.map((p) => [String(p.email || "").toLowerCase(), p]));
+  tbody.innerHTML = invites.length ? invites.map((iv) => {
+    const p = byEmail.get(iv.email);
+    const state = !p
+      ? `<span style="color:var(--warn);font-weight:600">รอเข้าสู่ระบบครั้งแรก</span>`
+      : p.status === "active"
+        ? `<span style="color:var(--good);font-weight:600">✓ ใช้งานแล้ว</span>`
+        : `<span style="color:var(--muted);font-weight:600">มีบัญชีแล้ว · ${esc(p.status)}</span>`;
+    return `
+    <tr data-email="${esc(iv.email)}">
+      <td>
+        <div style="font-weight:600">${esc(iv.full_name || "-")}</div>
+        <div class="muted mono" style="font-size:12px">${esc(iv.email)}</div>
+      </td>
+      <td>${esc(iv.rank || "-")}</td>
+      <td>${esc(ROLE_LABEL[iv.role] || iv.role)}</td>
+      <td style="font-size:12.5px">${state}</td>
+      <td><button class="btn sm" data-del style="color:var(--crit)">ลบ</button></td>
+    </tr>`;
+  }).join("")
+  : `<tr><td colspan="5" class="empty">ยังไม่มีอีเมลที่เพิ่มไว้</td></tr>`;
+
+  tbody.querySelectorAll("[data-del]").forEach((b) =>
+    b.addEventListener("click", async (e) => {
+      const email = e.target.closest("tr").dataset.email;
+      if (!confirm(`ลบ ${email} ออกจากรายชื่อที่อนุญาต?\n(ถ้าเจ้าของอีเมลเข้าใช้งานแล้ว บัญชียังอยู่ — ปิดสิทธิ์ได้ที่ตาราง "ผู้ใช้ในระบบ")`)) return;
+      b.disabled = true;
+      const err = await deleteInvite(email);
+      if (err) { alert("ลบไม่สำเร็จ: " + err.message); b.disabled = false; }
+      else onDone();
+    }));
+}
+
+// =====================================================================
+//  ประวัติการแก้ไข (audit_log · migration_32) — อ่านได้เฉพาะ admin
+// =====================================================================
+export const AUDIT_TABLE_LABEL = {
+  missions:"ภารกิจ", mission_crew:"ลูกเรือในภารกิจ", flight_legs:"ขาบิน", post_flight_reports:"รายงานหลังบิน",
+  discrepancies:"ข้อขัดข้อง", safety_reports:"รายงานอันตราย", report_media:"ไฟล์แนบ",
+  crew_members:"ทะเบียนนักบิน", crew_aliases:"ชื่อเรียกอื่น", crew_unavailable:"วันไม่ว่าง",
+  queue_entries:"คิวบิน", crew_hours_carry:"ชม.ยกยอด", aircraft:"เครื่องบิน",
+  aircraft_status_history:"สถานภาพเครื่อง", aircraft_defects:"ข้อบกพร่องเครื่อง", aircraft_checks:"กำหนดตรวจ",
+  airfields:"สนามบิน", holidays:"วันหยุด", day_notes:"เวรประจำวัน", archive_log:"Export/เคลียร์",
+  profiles:"ผู้ใช้", user_invites:"เพิ่มผู้ใช้ล่วงหน้า",
+};
+const AUDIT_OP = { INSERT:["เพิ่ม","var(--good)"], UPDATE:["แก้","var(--warn)"], DELETE:["ลบ","var(--crit)"] };
+// ช่องที่ใช้บอกว่าแถวนี้คือ "อะไร" ตอนเพิ่ม/ลบ
+const AUDIT_NAME_KEYS = ["mission_name","callsign","full_name","code","email","tail_number","description",
+  "name","alias","off_date","log_date","entry_date","mission_date","note","total_hours","position","crew_name","file_name"];
+const AUDIT_HIDE = new Set(["id","created_at","created_by","updated_at","updated_by"]);
+
+export async function loadAudit({ table = "", before = null, limit = 100 } = {}) {
+  let q = supabase.from("audit_log").select("*").order("id", { ascending: false }).limit(limit);
+  if (table)  q = q.eq("table_name", table);
+  if (before) q = q.lt("id", before);
+  const { data, error } = await q;
+  return { rows: data || [], error };
+}
+
+const short = (v) => {
+  if (v === null || v === undefined || v === "") return "—";
+  const s = typeof v === "object" ? JSON.stringify(v) : String(v);
+  return s.length > 60 ? s.slice(0, 60) + "…" : s;
+};
+
+function auditDetail(r) {
+  if (r.op === "UPDATE") {
+    const keys = Object.keys(r.new_data || {}).filter((k) => !AUDIT_HIDE.has(k));
+    return keys.slice(0, 5).map((k) =>
+      `<div><span class="mono muted">${esc(k)}</span>: ${esc(short(r.old_data?.[k]))} → <b>${esc(short(r.new_data?.[k]))}</b></div>`
+    ).join("") + (keys.length > 5 ? `<div class="muted">… อีก ${keys.length - 5} ช่อง</div>` : "");
+  }
+  const d = (r.op === "INSERT" ? r.new_data : r.old_data) || {};
+  const parts = AUDIT_NAME_KEYS.filter((k) => d[k] !== null && d[k] !== undefined && d[k] !== "")
+    .slice(0, 4).map((k) => `<span class="mono muted">${esc(k)}</span>: ${esc(short(d[k]))}`);
+  return parts.join(" · ") || `<span class="mono muted">${esc(r.row_id || "")}</span>`;
+}
+
+export function renderAudit(tbody, rows, { append = false } = {}) {
+  const html = rows.map((r) => {
+    const [opTxt, opColor] = AUDIT_OP[r.op] || [r.op, "inherit"];
+    return `<tr>
+      <td class="mono" style="font-size:12px;white-space:nowrap">${esc(fmtTime(r.at))}</td>
+      <td style="font-size:12.5px">${esc(r.actor_email || "-")}</td>
+      <td style="white-space:nowrap"><b style="color:${opColor}">${opTxt}</b> ${esc(AUDIT_TABLE_LABEL[r.table_name] || r.table_name)}</td>
+      <td style="font-size:12.5px;line-height:1.6">${auditDetail(r)}</td>
+    </tr>`;
+  }).join("");
+  if (append) tbody.insertAdjacentHTML("beforeend", html);
+  else tbody.innerHTML = html || `<tr><td colspan="4" class="empty">ยังไม่มีประวัติ</td></tr>`;
+}

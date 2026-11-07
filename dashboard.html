@@ -1,0 +1,271 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<!-- CSP: อนุญาตเฉพาะโดเมนที่ใช้จริง · เพิ่มโดเมนใหม่ (CDN/API) ต้องแก้ทุกหน้า -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob: https://iljapjszrjuzjjbtxctu.supabase.co; media-src 'self' blob: https://iljapjszrjuzjjbtxctu.supabase.co; connect-src 'self' data: https://iljapjszrjuzjjbtxctu.supabase.co wss://iljapjszrjuzjjbtxctu.supabase.co; worker-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'">
+<meta name="referrer" content="same-origin">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Flight Operation · ภารกิจ</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bai+Jamjuree:wght@600;700&family=IBM+Plex+Sans+Thai:wght@400;500;600&family=IBM+Plex+Mono&display=swap">
+<link rel="stylesheet" href="css/style.css">
+<style>
+  .cal-head{display:flex;align-items:center;gap:14px;margin-bottom:14px;flex-wrap:wrap}
+  .cal-title{font-family:"Bai Jamjuree",sans-serif;font-weight:700;font-size:22px;min-width:190px}
+  .cal{display:grid;grid-template-columns:repeat(7,1fr);gap:6px}
+  .dow{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:.06em;text-transform:uppercase;
+       color:var(--faint);text-align:center;padding:6px 0;font-weight:500}
+  .day{position:relative;min-height:82px;background:var(--surface);border:1px solid var(--line);
+       border-radius:10px;padding:8px 9px;cursor:pointer;text-align:start;font:inherit;color:inherit;
+       display:flex;flex-direction:column;gap:6px;transition:border-color .12s,background .12s}
+  .day:hover{border-color:var(--primary);background:var(--primary-soft)}
+  .day.blank{background:transparent;border-color:transparent;cursor:default}
+  .day.blank:hover{background:transparent}
+  .day .num{font-size:13px;font-weight:600;color:var(--muted);font-variant-numeric:tabular-nums}
+  .day.today{border-color:var(--accent);border-width:2px}
+  .day.today .num{color:var(--accent)}
+  .day .cnt{display:inline-flex;align-items:center;gap:5px;background:var(--primary);color:#fff;
+            border-radius:999px;padding:3px 10px;font-size:12px;font-weight:600;align-self:flex-start}
+  .day .cnt svg{width:15px;height:15px;fill:currentColor;transform:rotate(45deg);flex:none}
+  .day .cnt.pend svg{color:#FF5A52}                      /* มีภารกิจยังไม่รายงานหลังบิน */
+  .day.none{opacity:.62}
+  .day.weekend{background:var(--surface-2)}
+  .legend{display:flex;gap:16px;font-size:12.5px;color:var(--muted);margin-top:16px;flex-wrap:wrap}
+  .legend i{display:inline-block;width:11px;height:11px;border-radius:3px;margin-inline-end:6px;vertical-align:-1px}
+  @media(max-width:620px){ .day{min-height:62px;padding:6px} .day .cnt{padding:2px 7px;font-size:11px} }
+
+  /* ---- ไฟล์ภารกิจล่วงหน้า ---- */
+  .filebox{display:flex;align-items:center;gap:12px;flex-wrap:wrap;background:var(--surface);border:1px solid var(--line);
+           border-radius:12px;padding:12px 16px;margin-bottom:16px;box-shadow:var(--shadow)}
+  .filebox .ic{font-size:22px}
+  .filebox .fn{font-weight:700;font-size:14px;word-break:break-all}
+  .filebox .meta{font-size:12px;color:var(--muted)}
+  .filebox .acts{margin-inline-start:auto;display:flex;gap:8px;flex-wrap:wrap}
+  .filebox .drop{flex:1 1 100%;border:2px dashed var(--line-strong);border-radius:10px;padding:18px;text-align:center;cursor:pointer;
+                 background:var(--surface-2);font-size:13px;color:var(--muted);transition:border-color .15s,background .15s}
+  .filebox .drop:hover,.filebox .drop.over{border-color:var(--primary);background:var(--primary-soft)}
+  .filebox .drop b{font-size:14.5px;color:var(--ink)}
+  .filebox .drop.busy{pointer-events:none;opacity:.6}
+</style>
+</head>
+<body>
+<main>
+  <div class="wrap">
+    <div class="page-head">
+      <h1>ภารกิจ</h1>
+      <div class="sub">กดที่วันเพื่อดูสรุปภารกิจของวันนั้น · ไฟล์ภารกิจล่วงหน้าอยู่ล่างสุดของหน้า</div>
+    </div>
+
+    <div class="cal-head">
+      <button class="btn sm" id="prev">←</button>
+      <div class="cal-title" id="title">—</div>
+      <button class="btn sm" id="next">→</button>
+      <button class="btn sm ghost" id="today">วันนี้</button>
+      <a class="btn sm primary" id="addBtn" href="#" hidden style="margin-inline-start:auto">+ เพิ่มภารกิจ</a>
+    </div>
+
+    <div class="cal" id="dow"></div>
+    <div class="cal" id="grid" style="margin-top:6px"></div>
+
+    <div class="legend">
+      <span><i style="background:var(--primary)"></i>จำนวนภารกิจในวันนั้น</span>
+      <span><i style="background:var(--accent)"></i>วันนี้</span>
+      <span><svg viewBox="0 0 24 24" aria-hidden="true" style="width:13px;height:13px;fill:#FF5A52;transform:rotate(45deg);vertical-align:-2px;margin-inline-end:5px"><path d="M21 16v-2l-8-5V3.5c0-.83-.67-1.5-1.5-1.5S10 2.67 10 3.5V9l-8 5v2l8-2.5V19l-2 1.5V22l3.5-1 3.5 1v-1.5L13 19v-5.5l8 2.5z"/></svg>มีภารกิจที่ยังไม่รายงานหลังบิน (ไม่นับ STBY)</span>
+    </div>
+
+    <details id="offRangeBox" hidden style="background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:12px 16px;margin-top:22px;box-shadow:var(--shadow)">
+      <summary style="cursor:pointer;font-weight:600;font-size:14px">🟥 ตั้ง "ไม่ว่าง" ของนักบินเป็นช่วงวันที่ (กรอกทีเดียว ไม่ต้องไล่ทีละวัน)</summary>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:end;margin-top:12px">
+        <div><label style="font-size:12px">นักบิน</label><br><select id="orPilot" style="min-width:210px"></select></div>
+        <div><label style="font-size:12px">ตั้งแต่วันที่</label><br><input type="date" id="orFrom" style="width:auto"></div>
+        <div><label style="font-size:12px">ถึงวันที่</label><br><input type="date" id="orTo" style="width:auto"></div>
+        <div style="flex:1;min-width:160px"><label style="font-size:12px">หมายเหตุ (ถ้ามี)</label><br><input id="orNote" placeholder="เช่น ลาพักผ่อน / ราชการ" style="width:100%"></div>
+        <button class="btn sm primary" id="orApply">ทำเครื่องหมายไม่ว่าง</button>
+        <button class="btn sm ghost" id="orClear">ลบช่วงนี้</button>
+      </div>
+      <div id="orMsg" style="font-size:12.5px;margin-top:8px;min-height:16px"></div>
+    </details>
+
+    <!-- ไฟล์ภารกิจล่วงหน้า (เก็บไว้ไฟล์เดียว · อัปใหม่ = แทนที่ของเดิม) -->
+    <div class="filebox" id="fileBox" style="margin-top:22px;margin-bottom:0">
+      <span class="ic">📁</span>
+      <div><div class="meta">ไฟล์ภารกิจล่วงหน้า (ล่าสุด)</div>
+        <div class="fn" id="fbName">กำลังโหลด…</div><div class="meta" id="fbMeta"></div></div>
+      <div class="acts">
+        <button class="btn sm primary" id="fbDown" hidden>⬇️ ดาวน์โหลด</button>
+      </div>
+      <!-- อัปโหลด (ผู้วางแผน): ลาก PDF มาวาง หรือกดเลือกไฟล์ — แบบเดียวกับนำเข้าใบสถานภาพ -->
+      <label class="drop" id="fbDrop" hidden>
+        <input type="file" id="fbFile" accept="application/pdf,.pdf" hidden>
+        <b>📄 ลากไฟล์ PDF มาวางที่นี่</b> หรือกดเพื่อเลือกไฟล์ · อัปใหม่ = แทนที่ไฟล์เดิม
+      </label>
+    </div>
+
+  </div>
+</main>
+
+<script type="module">
+  import { requireAuth, canPlan } from "./js/auth.js";
+  import { renderTopbar } from "./js/ui.js";
+  import { loadMonthCounts, loadMonthUnreported, isoLocal, esc } from "./js/missions.js";
+  import { getSharedFile, uploadSharedFile, downloadSharedFile } from "./js/duty.js";
+  import { loadCrew } from "./js/crew.js";
+  import { addUnavailable, removeUnavailable } from "./js/queue.js";
+  import { MAX_OFF_DAYS } from "./js/availability.js";
+
+  const profile = await requireAuth();
+  if (profile) {
+    renderTopbar(profile);
+
+    const DOW = ["อา","จ","อ","พ","พฤ","ศ","ส"];
+    document.getElementById("dow").innerHTML = DOW.map(d=>`<div class="dow">${d}</div>`).join("");
+
+    const TH_MONTH = ["มกราคม","กุมภาพันธ์","มีนาคม","เมษายน","พฤษภาคม","มิถุนายน",
+                      "กรกฎาคม","สิงหาคม","กันยายน","ตุลาคม","พฤศจิกายน","ธันวาคม"];
+
+    let view = new Date(); view.setDate(1);
+    const todayStr = isoLocal(new Date());
+
+    if (canPlan(profile)) {
+      const a = document.getElementById("addBtn");
+      a.hidden = false;
+      a.href = `mission.html?new=1&date=${todayStr}`;
+    }
+
+    // ---------- ตั้ง "ไม่ว่าง" เป็นช่วงวันที่ — ทุกสิทธิ์ที่ลงไม่ว่างได้ (admin/ผู้วางแผน/นักบิน/ลูกเรือ · migration_31) ----------
+    if (["admin", "planner", "pilot", "crew"].includes(profile.role)) {
+      document.getElementById("offRangeBox").hidden = false;
+      const fr = document.getElementById("orFrom"), to = document.getElementById("orTo");
+      const msg = document.getElementById("orMsg");
+      fr.value = todayStr; to.value = todayStr;
+      loadCrew(false).then((crew) => {
+        document.getElementById("orPilot").innerHTML = `<option value="">— เลือกนักบิน —</option>` +
+          crew.map(c => `<option value="${c.id}">${esc(c.full_name)} (${esc(c.code)})</option>`).join("");
+      });
+      const datesBetween = (x, z) => {
+        const out = []; if (!x || !z) return out;
+        let d = new Date(x + "T00:00:00"); const end = new Date(z + "T00:00:00");
+        if (end < d) return out;
+        for (; d <= end; d.setDate(d.getDate() + 1)) out.push(isoLocal(d));
+        return out;
+      };
+      const readRange = () => {
+        const id = document.getElementById("orPilot").value;
+        const ds = datesBetween(fr.value, to.value);
+        if (!id) { msg.style.color = "var(--crit)"; msg.textContent = "กรุณาเลือกนักบิน"; return null; }
+        if (!ds.length) { msg.style.color = "var(--crit)"; msg.textContent = "ช่วงวันที่ไม่ถูกต้อง (วันสิ้นสุดต้องไม่ก่อนวันเริ่ม)"; return null; }
+        if (ds.length > MAX_OFF_DAYS) { msg.style.color = "var(--crit)"; msg.textContent = `ตั้งได้ครั้งละไม่เกิน ${MAX_OFF_DAYS} วัน`; return null; }
+        return { id, ds };
+      };
+      const shortD = (s) => { const [, mo, da] = s.split("-").map(Number); return `${da}/${mo}`; };
+      document.getElementById("orApply").addEventListener("click", async (e) => {
+        const r = readRange(); if (!r) return;
+        e.target.disabled = true; msg.style.color = "var(--muted)"; msg.textContent = "กำลังบันทึก…";
+        const err = await addUnavailable(r.id, r.ds, document.getElementById("orNote").value);
+        e.target.disabled = false;
+        if (err) { msg.style.color = "var(--crit)"; msg.textContent = "บันทึกไม่สำเร็จ: " + err.message; return; }
+        msg.style.color = "var(--good)"; msg.textContent = `ตั้งไม่ว่าง ${r.ds.length} วัน (${shortD(r.ds[0])}–${shortD(r.ds[r.ds.length-1])}) แล้ว`;
+      });
+      document.getElementById("orClear").addEventListener("click", async (e) => {
+        const r = readRange(); if (!r) return;
+        e.target.disabled = true; msg.style.color = "var(--muted)"; msg.textContent = "กำลังลบ…";
+        const err = await removeUnavailable(r.id, r.ds);
+        e.target.disabled = false;
+        if (err) { msg.style.color = "var(--crit)"; msg.textContent = "ลบไม่สำเร็จ: " + err.message; return; }
+        msg.style.color = "var(--good)"; msg.textContent = `ลบสถานะไม่ว่าง ${r.ds.length} วันแล้ว`;
+      });
+    }
+
+    // ไอคอนเครื่องบิน (SVG ใช้สีตามข้อความ — เปลี่ยนเป็นสีแดงได้ ต่างจาก emoji)
+    const PLANE = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 16v-2l-8-5V3.5c0-.83-.67-1.5-1.5-1.5S10 2.67 10 3.5V9l-8 5v2l8-2.5V19l-2 1.5V22l3.5-1 3.5 1v-1.5L13 19v-5.5l8 2.5z"/></svg>`;
+    async function render() {
+      const y = view.getFullYear(), m = view.getMonth();
+      document.getElementById("title").textContent = `${TH_MONTH[m]} ${y + 543}`;
+
+      const [counts, unrep] = await Promise.all([loadMonthCounts(y, m), loadMonthUnreported(y, m)]);
+      const firstDow = new Date(y, m, 1).getDay();
+      const daysInMonth = new Date(y, m + 1, 0).getDate();
+
+      let html = "";
+      for (let i = 0; i < firstDow; i++) html += `<div class="day blank"></div>`;
+      for (let d = 1; d <= daysInMonth; d++) {
+        const date = isoLocal(new Date(y, m, d));
+        const n = counts[date] || 0;
+        const pend = date <= todayStr ? (unrep.get(date) || 0) : 0;   // ถึงวันนี้แล้วแต่ยังไม่รายงาน (วันข้างหน้ายังไม่บิน)
+        const dow = new Date(y, m, d).getDay();
+        const cls = ["day", n ? "" : "none", (dow===0||dow===6) ? "weekend" : "",
+                     date === todayStr ? "today" : ""].filter(Boolean).join(" ");
+        html += `<button class="${cls}" data-date="${date}">
+                   <span class="num">${d}</span>
+                   ${n ? `<span class="cnt${pend ? " pend" : ""}"${pend ? ` title="ยังไม่รายงานหลังบิน ${pend} ภารกิจ"` : ""}>${PLANE} ${n}</span>` : ``}
+                 </button>`;
+      }
+      const grid = document.getElementById("grid");
+      grid.innerHTML = html;
+      grid.querySelectorAll("[data-date]").forEach((b) =>
+        b.addEventListener("click", () => location.href = `day.html?date=${b.dataset.date}`));
+    }
+
+    document.getElementById("prev").addEventListener("click", () => { view.setMonth(view.getMonth()-1); render(); });
+    document.getElementById("next").addEventListener("click", () => { view.setMonth(view.getMonth()+1); render(); });
+    document.getElementById("today").addEventListener("click", () => { view = new Date(); view.setDate(1); render(); });
+    render();
+
+    const planner = canPlan(profile);
+    const TH_MON = ["ม.ค.","ก.พ.","มี.ค.","เม.ย.","พ.ค.","มิ.ย.","ก.ค.","ส.ค.","ก.ย.","ต.ค.","พ.ย.","ธ.ค."];
+    const thShort = (d) => { const [y, m, dd] = d.split("-").map(Number); return `${dd} ${TH_MON[m - 1]}${String(y + 543).slice(-2)}`; };
+
+    // =================== ไฟล์ภารกิจล่วงหน้า ===================
+    const SLOT = "advance_missions";
+    let curFile = null;
+    async function loadFileBox() {
+      const { file, error } = await getSharedFile(SLOT);
+      curFile = file;
+      const name = document.getElementById("fbName"), meta = document.getElementById("fbMeta");
+      if (error) { name.textContent = "— ยังใช้งานไม่ได้ —"; meta.textContent = error.message; }
+      else if (!file) { name.textContent = "— ยังไม่มีไฟล์ —"; meta.textContent = planner ? "ลากไฟล์ PDF มาวางด้านล่างเพื่อเพิ่ม" : ""; }
+      else {
+        name.textContent = file.file_name;
+        const t = new Date(file.uploaded_at);
+        const kb = file.size_bytes ? (file.size_bytes > 1048576 ? (file.size_bytes / 1048576).toFixed(1) + " MB" : Math.ceil(file.size_bytes / 1024) + " KB") : "";
+        meta.textContent = `อัปเดต ${thShort(isoLocal(t))} ${String(t.getHours()).padStart(2, "0")}:${String(t.getMinutes()).padStart(2, "0")}` +
+          `${file.uploader ? " · โดย " + file.uploader : ""}${kb ? " · " + kb : ""}`;
+      }
+      document.getElementById("fbDown").hidden = !file;
+      document.getElementById("fbDrop").hidden = !planner || !!error;
+    }
+    document.getElementById("fbDown").addEventListener("click", async (e) => {
+      if (!curFile) return;
+      const btn = e.currentTarget; btn.disabled = true; const t = btn.textContent; btn.textContent = "กำลังดาวน์โหลด…";
+      const err = await downloadSharedFile(curFile);
+      btn.disabled = false; btn.textContent = t;
+      if (err) alert("ดาวน์โหลดไม่สำเร็จ: " + err.message);
+    });
+    const fbDrop = document.getElementById("fbDrop");
+    async function uploadAdvance(f) {
+      if (!f || fbDrop.classList.contains("busy")) return;
+      if (!/\.pdf$/i.test(f.name) && f.type !== "application/pdf") { alert("รองรับเฉพาะไฟล์ PDF"); return; }
+      if (f.size > 50 * 1048576) { alert("ไฟล์ใหญ่เกิน 50 MB"); return; }
+      if (curFile && !confirm(`อัปโหลด "${f.name}" แทนไฟล์เดิม "${curFile.file_name}"?\n(ไฟล์เดิมจะถูกลบ)`)) return;
+      document.getElementById("fbName").textContent = "กำลังอัปโหลด…";
+      fbDrop.classList.add("busy");
+      const err = await uploadSharedFile(SLOT, f, profile.full_name || profile.email);
+      fbDrop.classList.remove("busy");
+      if (err) alert("อัปโหลดไม่สำเร็จ: " + err.message);
+      loadFileBox();
+    }
+    document.getElementById("fbFile").addEventListener("change", (e) => {
+      const f = e.target.files[0]; e.target.value = "";
+      uploadAdvance(f);
+    });
+    ["dragover", "dragenter"].forEach(ev => fbDrop.addEventListener(ev, (e) => { e.preventDefault(); fbDrop.classList.add("over"); }));
+    ["dragleave", "drop"].forEach(ev => fbDrop.addEventListener(ev, () => fbDrop.classList.remove("over")));
+    fbDrop.addEventListener("drop", (e) => { e.preventDefault(); uploadAdvance(e.dataTransfer.files[0]); });
+    loadFileBox();
+
+  }
+</script>
+</body>
+</html>
