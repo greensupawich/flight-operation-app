@@ -38,25 +38,18 @@ export async function loadLegs(missionId) {
   return data || [];
 }
 
-// แทนที่ขาทั้งชุด (ลำดับ = leg_no ตามที่เรียงบนหน้าจอ)
+// แทนที่ขาทั้งชุด (ลำดับ = leg_no ตามที่เรียงบนหน้าจอ) — ลบ+ใส่ในคำสั่งเดียวที่ฐานข้อมูล (migration_58)
+//  ล้มกลางทาง = ย้อนกลับทั้งหมด ขาเดิมไม่หาย · ยอด ชม.รวมของรายงานฐานข้อมูลคำนวณใหม่เอง
 export async function replaceLegs(missionId, legs) {
-  const { error: delErr } = await supabase.from("flight_legs").delete().eq("mission_id", missionId);
-  if (delErr) return delErr;
-  const rows = (legs || []).map((l, i) => ({
-    mission_id: missionId,
-    leg_no: i + 1,
+  const rows = (legs || []).map((l) => ({
     from_point: (l.from_point || "").trim(),
     to_point: (l.to_point || "").trim(),
     hours: Number(l.hours) || 0,
     vip: !!l.vip,                                     // ขานี้มีคณะวัง (migration_26)
   }));
-  if (!rows.length) return null;
-  let { error } = await supabase.from("flight_legs").insert(rows);
-  // ยังไม่ได้รัน migration_26 → บันทึกขาโดยไม่มีช่องคณะวัง แล้วแจ้งเตือน
-  if (error && /vip/.test(error.message)) {
-    ({ error } = await supabase.from("flight_legs").insert(rows.map(({ vip, ...r }) => r)));
-    if (!error && rows.some((r) => r.vip)) return { warning: "บันทึกแล้ว แต่ช่อง \"คณะวัง\" ยังไม่ถูกเก็บ — ต้องรัน migration_26_vip_legs.sql" };
-  }
+  const { error } = await supabase.rpc("replace_flight_legs", { p_mission: missionId, p_legs: rows });
+  if (error && /flight_legs_hours_range/.test(error.message))
+    return { message: "ชม.บินแต่ละขาต้องอยู่ระหว่าง 0–24 ชม." };
   return error;
 }
 

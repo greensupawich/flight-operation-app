@@ -355,7 +355,7 @@
           <input data-f="from_point" value="${esc(l.from_point)}" placeholder="จาก">
           <span class="arrow">→</span>
           <input data-f="to_point" value="${esc(l.to_point)}" placeholder="ถึง">
-          <input class="hrs" data-f="hours" type="number" step="0.1" min="0" value="${l.hours ?? 0}">
+          <input class="hrs" data-f="hours" type="number" step="0.1" min="0" max="24" value="${l.hours ?? 0}">
           ${vipMode ? `<label class="vip" title="ขานี้มีคณะวังอยู่บนเครื่อง"><input type="checkbox" data-vip ${l.vip ? "checked" : ""}><span class="vip-lbl">คณะวัง</span></label>` : ""}
           <span class="ops">
             <button class="ibtn" data-up title="เลื่อนขึ้น" ${i === 0 ? "disabled" : ""}>↑</button>

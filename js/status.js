@@ -147,12 +147,10 @@ export async function loadDefects() {
   });
   return map;
 }
+// ลบ+ใส่ทั้งชุดในคำสั่งเดียวที่ฐานข้อมูล (migration_58) · ล้ม = รายการเดิมยังอยู่ครบ
 export async function saveDefects(aircraftId, descriptions) {
-  await supabase.from("aircraft_defects").delete().eq("aircraft_id", aircraftId);
-  const rows = (descriptions || []).map((t,i) => ({ aircraft_id: aircraftId, seq: i+1, description: cleanDefect(t) }))
-    .filter(r => r.description);
-  if (!rows.length) return null;
-  const { error } = await supabase.from("aircraft_defects").insert(rows);
+  const items = (descriptions || []).map(cleanDefect).filter(Boolean);
+  const { error } = await supabase.rpc("replace_aircraft_defects", { p_aircraft: aircraftId, p_items: items });
   return error;
 }
 
@@ -168,10 +166,8 @@ export async function loadChecks() {
   return map;
 }
 export async function saveChecks(aircraftId, list) {
-  await supabase.from("aircraft_checks").delete().eq("aircraft_id", aircraftId);
-  const rows = (list || []).map((c,i) => ({ aircraft_id: aircraftId, seq: i+1, name: (c.name||"").trim(), due_text: (c.due_text||"").trim() || null }))
+  const items = (list || []).map(c => ({ name: (c.name||"").trim(), due_text: (c.due_text||"").trim() || null }))
     .filter(r => r.name);
-  if (!rows.length) return null;
-  const { error } = await supabase.from("aircraft_checks").insert(rows);
+  const { error } = await supabase.rpc("replace_aircraft_checks", { p_aircraft: aircraftId, p_items: items });
   return error;
 }

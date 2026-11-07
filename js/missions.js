@@ -157,24 +157,16 @@ export async function saveMission(id, fields, crew) {
     missionId = data.id;
   }
 
-  // แทนที่ลูกเรือทั้งชุด (ลบของเดิมแล้วใส่ใหม่ — ง่ายและตรงกับฟอร์ม)
-  const { error: delErr } = await supabase.from("mission_crew").delete().eq("mission_id", missionId);
-  if (delErr) return { error: delErr, id: missionId };
-
+  // แทนที่ลูกเรือทั้งชุด — ลบ+ใส่ในคำสั่งเดียวที่ฐานข้อมูล (migration_58) · ล้ม = ลูกเรือเดิมยังอยู่ครบ
   const rows = (crew || [])
     .filter((c) => c.crew_name && c.crew_name.trim())
-    .map((c, i) => ({
-      mission_id: missionId,
+    .map((c) => ({
       position: c.position,
       crew_name: c.crew_name.trim(),
       crew_member_id: c.crew_member_id || null,
-      sort_order: i,
     }));
-
-  if (rows.length) {
-    const { error } = await supabase.from("mission_crew").insert(rows);
-    if (error) return { error, id: missionId };
-  }
+  const { error } = await supabase.rpc("replace_mission_crew", { p_mission: missionId, p_crew: rows });
+  if (error) return { error, id: missionId };
   return { id: missionId };
 }
 
