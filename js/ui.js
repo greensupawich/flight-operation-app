@@ -17,6 +17,7 @@ const LINKS = [
   { href: "checklist.html", label: "Checklist", plannerOnly: true },
   { href: "support.html",   label: "ขอสนับสนุน", plannerOnly: true },
   { href: "stats.html",     label: "สถิติ" },
+  { href: "safety.html",    label: "นิรภัย" },
   { href: "archive.html",   label: "ย้อนหลัง" },
   { href: "https://greensupawich.github.io/flightplan/", label: "Flight Plan ↗", external: true },
   { href: "admin.html",     label: "ผู้ดูแล", adminOnly: true },

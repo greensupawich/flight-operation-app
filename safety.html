@@ -1,0 +1,312 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<!-- CSP: อนุญาตเฉพาะโดเมนที่ใช้จริง · เพิ่มโดเมนใหม่ (CDN/API) ต้องแก้ทุกหน้า -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob: https://iljapjszrjuzjjbtxctu.supabase.co; media-src 'self' blob: https://iljapjszrjuzjjbtxctu.supabase.co; connect-src 'self' data: https://iljapjszrjuzjjbtxctu.supabase.co wss://iljapjszrjuzjjbtxctu.supabase.co; worker-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'">
+<meta name="referrer" content="same-origin">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Flight Operation · Dashboard นิรภัย</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bai+Jamjuree:wght@600;700&family=IBM+Plex+Sans+Thai:wght@400;500;600&family=IBM+Plex+Mono&display=swap">
+<link rel="stylesheet" href="css/style.css">
+<style>
+  main .wrap{max-width:1560px}
+  .sd{--viz-1:#2a78d6;--viz-2:#eb6834;--viz-none:#a9b4c2;--viz-grid:#e4e9ef}
+  @media (prefers-color-scheme:dark){:root:where(:not([data-theme="light"])) .sd{--viz-1:#3987e5;--viz-2:#d95926;--viz-none:#55657a;--viz-grid:#243040}}
+  :root[data-theme="dark"] .sd{--viz-1:#3987e5;--viz-2:#d95926;--viz-none:#55657a;--viz-grid:#243040}
+  .sd-head{display:flex;align-items:flex-end;justify-content:space-between;gap:14px;flex-wrap:wrap;margin:6px 0 4px}
+  .sd-head h2{font-family:"Bai Jamjuree",sans-serif;font-size:24px;line-height:1.25;margin:0}
+  .sd-head .en{font-size:12.5px;letter-spacing:.06em;color:var(--muted);font-weight:600}
+  .sd-pick{display:flex;flex-direction:column;gap:3px;font-size:12px;color:var(--muted)}
+  .sd-pick input{width:auto;font:inherit;font-size:15px;color:var(--ink)}
+  .sd-src{font-size:12.5px;color:var(--muted);margin:0 0 12px}
+  .sd-err{padding:12px 14px;border:1px solid var(--crit);background:var(--crit-soft);border-radius:10px;margin-bottom:12px;display:none}
+  .sd-grid{display:grid;gap:12px;margin-bottom:12px}
+  .sd-top{grid-template-columns:repeat(4,minmax(130px,1fr)) minmax(240px,1.5fr) minmax(250px,1.6fr)}
+  .sd-mid{grid-template-columns:minmax(0,1.25fr) minmax(0,1fr) minmax(0,1.25fr)}
+  .sd-bot{grid-template-columns:minmax(0,2.4fr) minmax(0,1fr)}
+  .sd-card{background:var(--surface);border:1px solid var(--line);border-radius:12px;box-shadow:var(--shadow);padding:14px 16px;min-width:0}
+  .sd-card h3{font-family:"Bai Jamjuree",sans-serif;font-size:14.5px;font-weight:600;margin:0 0 10px;color:var(--ink)}
+  .sd-kpi{display:flex;flex-direction:column;justify-content:space-between;min-height:128px}
+  .sd-kpi .l{font-size:12px;font-weight:600;letter-spacing:.03em;color:var(--muted)}
+  .sd-kpi .n{font-family:"Bai Jamjuree",sans-serif;font-weight:700;font-size:38px;line-height:1.1;margin:8px 0}
+  .sd-kpi .u{font-size:11.5px;letter-spacing:.05em;color:var(--muted)}
+  .seg{display:flex;gap:2px;height:22px;margin:4px 0 12px}
+  .seg i{display:block;height:100%;min-width:3px}
+  .seg i:first-child{border-radius:4px 0 0 4px}.seg i:last-child{border-radius:0 4px 4px 0}.seg i:only-child{border-radius:4px}
+  .lg{display:flex;flex-direction:column;gap:6px;font-size:13px}
+  .lg div{display:flex;align-items:center;gap:8px}.lg b{font-weight:600;margin-inline-start:auto;font-variant-numeric:tabular-nums}
+  .lg .dot{width:10px;height:10px;border-radius:3px;flex:none}
+  .bars{display:grid;grid-template-columns:max-content minmax(40px,1fr) max-content;gap:7px 10px;align-items:center;font-size:13px}
+  .bars .tr{height:13px;display:flex;align-items:center}
+  .bars .br{height:13px;border-radius:0 4px 4px 0;background:var(--viz-1);min-width:2px}
+  .bars .br.none{background:var(--viz-none)}
+  .bars .v{font-variant-numeric:tabular-nums;font-weight:600;text-align:end}
+  .bars .row{display:contents}
+  .bars.tight{gap:5px 10px;font-size:12.5px}
+  table.sdt{width:100%;border-collapse:collapse;font-size:13.5px}
+  .sdt th{font-size:12px;font-weight:600;color:var(--muted);text-align:start;padding:0 8px 6px 0;border-bottom:1px solid var(--line-strong)}
+  .sdt td{padding:7px 8px 7px 0;border-bottom:1px solid var(--line);vertical-align:top}
+  .sdt tr:last-child td{border-bottom:0}
+  .sdt .c{text-align:end;white-space:nowrap;font-variant-numeric:tabular-nums;padding-right:0}
+  .sdt th.c{padding-right:0}
+  .sdt .tx{white-space:pre-line;overflow-wrap:anywhere}
+  .sdt .sys{font-weight:600}
+  .sdt tr.muted td{color:var(--muted)}
+  .sd-empty{color:var(--muted);font-size:13.5px;padding:8px 0}
+  #trend{position:relative}
+  #trend svg{display:block;width:100%;height:260px;touch-action:pan-y}
+  #trend text{font-size:11.5px;fill:var(--muted);font-family:inherit}
+  #trend .lab{fill:var(--ink);font-weight:600;font-size:12.5px}
+  .sd details{margin-top:8px;font-size:13px}.sd summary{cursor:pointer;color:var(--muted)}
+  .sd-tt{position:fixed;z-index:50;pointer-events:none;background:var(--ink);color:var(--surface);font-size:12.5px;line-height:1.5;padding:6px 9px;border-radius:7px;display:none;max-width:260px}
+  .sd-ov p{margin:0 0 10px;font-size:14px;line-height:1.65}.sd-ov p:last-child{margin-bottom:0}
+  @media (max-width:1240px){.sd-top{grid-template-columns:repeat(4,minmax(0,1fr))}.sd-top .w2{grid-column:span 2}.sd-mid{grid-template-columns:repeat(2,minmax(0,1fr))}.sd-mid .wide{grid-column:span 2}.sd-bot{grid-template-columns:minmax(0,1fr)}}
+  @media (max-width:720px){.sd-top{grid-template-columns:repeat(2,minmax(0,1fr))}.sd-mid{grid-template-columns:minmax(0,1fr)}.sd-mid .wide{grid-column:auto}.sd-kpi{min-height:104px}.sd-kpi .n{font-size:30px}}
+</style>
+</head>
+<body>
+<main>
+  <div class="wrap sd">
+    <div class="sd-head">
+      <h2>ระบบมอนิเตอร์ข้อขัดข้องอากาศยาน<div class="en">AIRCRAFT DEFECT MONITORING DASHBOARD</div></h2>
+      <label class="sd-pick">ข้อมูลล่าสุด<input type="date" id="reportDate"></label>
+    </div>
+    <p class="sd-src" id="srcNote"></p>
+    <div class="sd-err" id="err"></div>
+
+    <div class="sd-grid sd-top">
+      <div class="sd-card sd-kpi"><div class="l">✈ TOTAL FLIGHT</div><div class="n" id="kFlights">—</div><div class="u">FLIGHTS</div></div>
+      <div class="sd-card sd-kpi"><div class="l">🕒 TOTAL FLIGHT HOURS</div><div class="n" id="kHours">—</div><div class="u">HOURS</div></div>
+      <div class="sd-card sd-kpi"><div class="l">⚠️ FLIGHT WITH DEFECT</div><div class="n" id="kDefect">—</div><div class="u">FLIGHTS</div></div>
+      <div class="sd-card sd-kpi"><div class="l">🎯 % DEFECT RATE</div><div class="n" id="kRate">—</div><div class="u">OF FLIGHTS</div></div>
+      <div class="sd-card w2"><h3>เที่ยวบินตามแบบอากาศยาน</h3><div id="byType"></div></div>
+      <div class="sd-card w2"><h3>เที่ยวบินตามหมายเลขอากาศยาน</h3><div id="byTail"></div></div>
+    </div>
+
+    <div class="sd-grid sd-mid">
+      <div class="sd-card"><h3>ข้อขัดข้องที่พบล่าสุด (7 วันย้อนหลัง)</h3><div id="recent"></div></div>
+      <div class="sd-card"><h3 id="sysTitle">สรุปข้อขัดข้องตามระบบ</h3><div id="bySys"></div></div>
+      <div class="sd-card wide"><h3>Defect / ข้อขัดข้อง (เรียงตามจำนวน · ทั้งหมดที่ผ่านมา)</h3><div id="allSys"></div></div>
+    </div>
+
+    <div class="sd-grid sd-bot">
+      <div class="sd-card"><h3>แนวโน้มอัตราข้อขัดข้อง (DEFECT RATE)</h3><div id="trend"></div>
+        <details><summary>ดูเป็นตาราง</summary><div id="trendTable"></div></details></div>
+      <div class="sd-card sd-ov"><h3>สรุปภาพรวม</h3><div id="overview"></div></div>
+    </div>
+  </div>
+</main>
+<div class="sd-tt" id="tt" role="status"></div>
+
+<script type="module">
+  import { requireAuth } from "./js/auth.js";
+  import { renderTopbar } from "./js/ui.js";
+  import { supabase } from "./js/supabase.js";
+  import { esc } from "./js/esc.js";
+  import { defectLabel } from "./js/reports.js";
+
+  const profile = await requireAuth();
+  if (!profile) throw new Error("no auth");
+  renderTopbar(profile);
+
+  // ก่อนวันนี้อ่านจาก defect_history (Google Form) · ตั้งแต่วันนี้อ่านจากรายงานหลังบินในระบบ
+  const LIVE_FROM = "2026-11-01";
+  const NO_DEFECT = "ไม่มีข้อขัดข้อง";
+  const $ = (id) => document.getElementById(id);
+  const pad = (n) => String(n).padStart(2, "0");
+  const ymd = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  const TH_M = ["ม.ค.","ก.พ.","มี.ค.","เม.ย.","พ.ค.","มิ.ย.","ก.ค.","ส.ค.","ก.ย.","ต.ค.","พ.ย.","ธ.ค."];
+  const monthTH = (ym) => `${TH_M[+ym.slice(5, 7) - 1]} ${String(+ym.slice(0, 4) + 543).slice(2)}`;
+  const dateTH = (s) => `${+s.slice(8, 10)} ${monthTH(s.slice(0, 7))}`;
+  const num = (v) => Number(v || 0).toLocaleString("en-US", { maximumFractionDigits: 1 });
+  const pct = (v) => `${(v * 100).toFixed(1)}%`;
+  const showErr = (m) => { const e = $("err"); e.style.display = "block"; e.textContent = m; };
+
+  // ดึงครบทุกแถว (PostgREST จำกัดครั้งละ 1000)
+  async function fetchAll(build) {
+    const out = [];
+    for (let from = 0; ; from += 1000) {
+      const { data, error } = await build().range(from, from + 999);
+      if (error) throw error;
+      out.push(...(data || []));
+      if (!data || data.length < 1000) return out;
+    }
+  }
+  const tail3 = (t) => String(t ?? "").slice(-3);
+
+  let flights = [], stats = { daily: [], defect: [], aircraft: [] }, fleet = [];
+  try {
+    const [hist, reps, disc, ac, sd, sdd, sam] = await Promise.all([
+      fetchAll(() => supabase.from("defect_history").select("flight_date,aircraft_type,tail,hours,systems,detail").order("id")),
+      fetchAll(() => supabase.from("post_flight_reports")
+        .select("mission_id,total_hours,defect_systems,missions!inner(mission_date,aircraft(tail_number,type))")
+        .gte("missions.mission_date", LIVE_FROM).order("id")),
+      fetchAll(() => supabase.from("discrepancies").select("mission_id,description").gte("reported_date", LIVE_FROM).order("id")),
+      fetchAll(() => supabase.from("aircraft").select("id,tail_number,type").order("tail_number")),
+      fetchAll(() => supabase.from("stats_daily").select("stat_date,flights,hours").gte("stat_date", LIVE_FROM).order("stat_date")),
+      fetchAll(() => supabase.from("stats_defect_daily").select("stat_date,system,flights").gte("stat_date", LIVE_FROM).order("stat_date")),
+      fetchAll(() => supabase.from("stats_aircraft_monthly").select("ym,aircraft_id,flights").gte("ym", LIVE_FROM).order("ym")),
+    ]);
+    fleet = ac;
+    const detailOf = new Map();
+    for (const d of disc) if (d.mission_id) detailOf.set(d.mission_id, [...(detailOf.get(d.mission_id) || []), String(d.description || "").trim()]);
+    flights = [
+      ...hist.map((h) => ({ date: h.flight_date, type: h.aircraft_type, tail: h.tail, hours: +h.hours, systems: h.systems || [], detail: h.detail || "", specified: true })),
+      ...reps.map((r) => ({ date: r.missions.mission_date, type: r.missions.aircraft?.type || "", tail: tail3(r.missions.aircraft?.tail_number),
+        hours: +r.total_hours, systems: r.defect_systems || [], specified: r.defect_systems != null,
+        detail: (detailOf.get(r.mission_id) || []).filter(Boolean).join("\n") })),
+    ];
+    stats = { daily: sd, defect: sdd, aircraft: sam };
+  } catch (e) {
+    showErr("โหลดข้อมูลไม่สำเร็จ: " + (e.message || e));
+  }
+
+  // รวมเป็นรายเดือน: เที่ยวบินดิบ + เดือนที่เคลียร์แล้ว (stats_*)
+  const months = new Map();
+  const blank = () => ({ flights: 0, hours: 0, defect: 0, none: 0, unspecified: 0, sys: new Map(), type: new Map(), tail: new Map(), tailDefect: new Map() });
+  const M = (ym) => months.get(ym) || months.set(ym, blank()).get(ym);
+  const inc = (map, k, n = 1) => map.set(k, (map.get(k) || 0) + n);
+  for (const f of flights) {
+    const m = M(f.date.slice(0, 7));
+    m.flights++; m.hours += f.hours; inc(m.type, f.type); inc(m.tail, f.tail);
+    if (!f.specified) m.unspecified++;
+    else if (f.systems.length) { m.defect++; inc(m.tailDefect, f.tail); new Set(f.systems).forEach((s) => inc(m.sys, s)); }
+    else m.none++;
+  }
+  for (const s of stats.daily) { const m = M(s.stat_date.slice(0, 7)); m.flights += +s.flights; m.hours += +s.hours; }
+  for (const s of stats.defect) {
+    const m = M(s.stat_date.slice(0, 7));
+    if (s.system === "_any") m.defect += +s.flights;
+    else if (s.system === "_reported") m.none += +s.flights;
+    else if (!s.system.startsWith("_")) inc(m.sys, s.system, +s.flights);
+  }
+  const acById = new Map(fleet.map((a) => [a.id, a]));
+  for (const s of stats.aircraft) {
+    const m = M(String(s.ym).slice(0, 7)), a = acById.get(s.aircraft_id);
+    if (a) { inc(m.type, a.type, +s.flights); inc(m.tail, tail3(a.tail_number), +s.flights); }
+  }
+  // เดือนที่เคลียร์: _reported นับทุกเที่ยวที่ระบุแล้ว → หักเที่ยวที่พบข้อขัดข้องออก
+  for (const ym of new Set(stats.defect.map((s) => s.stat_date.slice(0, 7)))) {
+    const m = M(ym), any = stats.defect.filter((s) => s.stat_date.startsWith(ym) && s.system === "_any").reduce((a, s) => a + +s.flights, 0);
+    m.none = Math.max(0, m.none - any);
+  }
+  const yms = [...months.keys()].sort();
+  const series = (() => {
+    if (!yms.length) return [];
+    const out = []; let [y, m] = yms[0].split("-").map(Number);
+    const last = yms[yms.length - 1];
+    for (;;) { const k = `${y}-${pad(m)}`; const v = months.get(k); out.push({ ym: k, flights: v?.flights || 0, defect: v?.defect || 0, rate: v?.flights ? v.defect / v.flights : null });
+      if (k === last) break; if (++m > 12) { m = 1; y++; } }
+    return out;
+  })();
+
+  // ---------- tooltip ----------
+  const tt = $("tt");
+  const tip = (html, x, y) => { tt.innerHTML = html; tt.style.display = "block"; const r = tt.getBoundingClientRect();
+    tt.style.left = Math.max(8, Math.min(innerWidth - r.width - 8, x - r.width / 2)) + "px"; tt.style.top = Math.max(8, y - r.height - 12) + "px"; };
+  const hideTip = () => { tt.style.display = "none"; };
+
+  function barsHTML(rows, { tight = false } = {}) {
+    const max = Math.max(1, ...rows.map((r) => r.n));
+    return `<div class="bars${tight ? " tight" : ""}">` + rows.map((r) =>
+      `<div class="row" data-tip="${esc(`${r.label}: ${r.n.toLocaleString()} เที่ยว`)}"><span>${esc(r.label)}</span><span class="tr"><span class="br${r.none ? " none" : ""}" style="width:${(r.n / max) * 100}%"></span></span><span class="v">${r.n.toLocaleString()}</span></div>`).join("") + `</div>`;
+  }
+
+  function renderTrend(selected) {
+    const box = $("trend");
+    if (!series.length) { box.innerHTML = `<div class="sd-empty">ยังไม่มีข้อมูล</div>`; return; }
+    const W = Math.max(320, box.clientWidth), H = 260, L = 42, R = 18, T = 26, B = 28;
+    const X = (i) => L + (series.length < 2 ? (W - L - R) / 2 : (i * (W - L - R)) / (series.length - 1));
+    const Y = (v) => T + (1 - v) * (H - T - B);
+    const every = Math.max(1, Math.ceil(series.length / Math.floor((W - L - R) / 62)));
+    let path = "", pen = false;
+    series.forEach((s, i) => { if (s.rate == null) { pen = false; return; } path += `${pen ? "L" : "M"}${X(i).toFixed(1)} ${Y(s.rate).toFixed(1)}`; pen = true; });
+    const grid = [0, .25, .5, .75, 1].map((v) => `<line x1="${L}" x2="${W - R}" y1="${Y(v)}" y2="${Y(v)}" stroke="var(--viz-grid)"/><text x="${L - 8}" y="${Y(v) + 4}" text-anchor="end">${v * 100}%</text>`).join("");
+    const xlab = series.map((s, i) => (i % every === 0 || s.ym === selected) && !(s.ym !== selected && series[i + 1]?.ym === selected && every > 1) ? `<text x="${X(i)}" y="${H - 8}" text-anchor="middle">${monthTH(s.ym)}</text>` : "").join("");
+    const lastI = series.length - 1;
+    const dots = series.map((s, i) => s.rate == null ? "" : `<circle cx="${X(i)}" cy="${Y(s.rate)}" r="${s.ym === selected ? 6 : 4}" fill="var(--viz-1)" stroke="var(--surface)" stroke-width="2"/>`).join("");
+    const labelAt = (i) => { const s = series[i]; if (!s || s.rate == null) return ""; const a = i === lastI && X(i) > W - 60 ? "end" : "middle"; return `<text class="lab" x="${X(i)}" y="${Y(s.rate) - 11}" text-anchor="${a}">${pct(s.rate)}</text>`; };
+    const selI = series.findIndex((s) => s.ym === selected);
+    box.innerHTML = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="แนวโน้มอัตราข้อขัดข้องรายเดือน">${grid}${xlab}<line id="xh" y1="${T}" y2="${H - B}" stroke="var(--line-strong)" visibility="hidden"/><path d="${path}" fill="none" stroke="var(--viz-1)" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>${dots}${labelAt(lastI)}${selI >= 0 && selI !== lastI ? labelAt(selI) : ""}</svg>`;
+    const svg = box.querySelector("svg"), xh = svg.querySelector("#xh");
+    const move = (ev) => { const b = svg.getBoundingClientRect(), px = (ev.clientX - b.left) * (W / b.width);
+      let i = series.length < 2 ? 0 : Math.round(((px - L) / (W - L - R)) * (series.length - 1)); i = Math.max(0, Math.min(series.length - 1, i));
+      const s = series[i]; xh.setAttribute("x1", X(i)); xh.setAttribute("x2", X(i)); xh.setAttribute("visibility", "visible");
+      tip(`<b>${esc(monthTH(s.ym))}</b><br>${s.rate == null ? "ไม่มีเที่ยวบิน" : `Defect Rate ${pct(s.rate)}<br>พบข้อขัดข้อง ${s.defect} จาก ${s.flights} เที่ยว`}`, b.left + X(i) * (b.width / W), b.top + (s.rate == null ? H / 2 : Y(s.rate)) * (b.height / H)); };
+    svg.addEventListener("pointermove", move);
+    svg.addEventListener("pointerleave", () => { xh.setAttribute("visibility", "hidden"); hideTip(); });
+  }
+
+  function overviewHTML(ym, m) {
+    if (!m?.flights) return `<div class="sd-empty">เดือน ${esc(monthTH(ym))} ยังไม่มีเที่ยวบิน</div>`;
+    const rate = m.defect / m.flights, ps = []; const i = series.findIndex((s) => s.ym === ym), prev = i > 0 ? series[i - 1] : null;
+    let trend = "";
+    if (prev?.rate != null) { const d = (rate - prev.rate) * 100; trend = Math.abs(d) < 0.05 ? ` เท่ากับเดือนก่อน` : ` ${d > 0 ? "▲ เพิ่มขึ้น" : "▼ ลดลง"} ${Math.abs(d).toFixed(1)} จุดจากเดือนก่อน (${pct(prev.rate)})`; }
+    ps.push(`เดือน <b>${esc(monthTH(ym))}</b> บิน <b>${m.flights}</b> เที่ยว รวม <b>${num(m.hours)}</b> ชม. พบข้อขัดข้อง <b>${m.defect}</b> เที่ยว คิดเป็น <b>${pct(rate)}</b>${trend}`);
+    const top = [...m.sys].sort((a, b) => b[1] - a[1]).slice(0, 3);
+    if (top.length) ps.push(`ระบบที่พบมากสุด: ${top.map(([s, n]) => `<b>${esc(defectLabel(s))}</b> (${n})`).join(" · ")}`);
+    const t = [...m.tailDefect].sort((a, b) => b[1] - a[1])[0];
+    if (t) ps.push(`เครื่องที่พบข้อขัดข้องมากสุด: <b>No.${esc(t[0])}</b> (${t[1]} จาก ${m.tail.get(t[0]) || 0} เที่ยว)`);
+    if (m.unspecified) ps.push(`มีรายงาน ${m.unspecified} เที่ยวที่ยังไม่ระบุระบบ (นับเป็นไม่พบข้อขัดข้อง)`);
+    return ps.map((p) => `<p>${p}</p>`).join("");
+  }
+
+  function render() {
+    const date = $("reportDate").value || ymd(new Date()), ym = date.slice(0, 7), m = months.get(ym) || blank();
+    $("kFlights").textContent = m.flights.toLocaleString();
+    $("kHours").textContent = num(m.hours);
+    $("kDefect").textContent = m.defect.toLocaleString();
+    $("kRate").textContent = m.flights ? pct(m.defect / m.flights) : "—";
+    $("sysTitle").textContent = `สรุปข้อขัดข้องตามระบบ · ${monthTH(ym)}`;
+
+    const types = ["ATR72-600", "ATR72-500"].map((t, i) => ({ t, n: m.type.get(t) || 0, c: i ? "var(--viz-2)" : "var(--viz-1)" }));
+    const tot = types.reduce((a, x) => a + x.n, 0);
+    $("byType").innerHTML = tot ? `<div class="seg">${types.filter((x) => x.n).map((x) => `<i style="flex:${x.n};background:${x.c}" data-tip="${esc(`${x.t}: ${x.n} เที่ยว (${pct(x.n / tot)})`)}"></i>`).join("")}</div>
+      <div class="lg">${types.map((x) => `<div><span class="dot" style="background:${x.c}"></span>${x.t}<b>${x.n} · ${pct(x.n / tot)}</b></div>`).join("")}</div>` : `<div class="sd-empty">ไม่มีเที่ยวบินในเดือนนี้</div>`;
+
+    const tails = [...new Set([...fleet.map((a) => tail3(a.tail_number)), ...m.tail.keys()])].filter(Boolean).sort();
+    $("byTail").innerHTML = barsHTML(tails.map((t) => ({ label: `No.${t}`, n: m.tail.get(t) || 0 })), { tight: true });
+
+    // 7 วันย้อนหลัง (รวมวันที่เลือก) — เหมือนสูตรในไฟล์อ้างอิง: จัดกลุ่มตาม "ระบบ : รายละเอียด"
+    const from = new Date(`${date}T00:00:00`); from.setDate(from.getDate() - 7); const fromS = ymd(from);
+    const grouped = new Map(); let clean = 0;
+    for (const f of flights) { if (f.date < fromS || f.date > date) continue;
+      if (f.systems.length) { const sys = f.systems.map(defectLabel).join(", "), k = `${sys}\u0000${f.detail}`; const g = grouped.get(k) || { sys, detail: f.detail, n: 0 }; g.n++; grouped.set(k, g); }
+      else if (f.specified) clean++; }
+    const list = [...grouped.values()].sort((a, b) => b.n - a.n || a.sys.localeCompare(b.sys, "th"));
+    $("recent").innerHTML = list.length || clean ? `<table class="sdt"><thead><tr><th>รายการข้อขัดข้อง</th><th class="c">จำนวนครั้ง</th></tr></thead><tbody>` +
+      list.map((g) => `<tr><td class="tx"><span class="sys">${esc(g.sys)}</span>${g.detail ? " : " + esc(g.detail) : ""}</td><td class="c">${g.n}</td></tr>`).join("") +
+      (clean ? `<tr class="muted"><td>${NO_DEFECT}</td><td class="c">${clean}</td></tr>` : "") + `</tbody></table>` : `<div class="sd-empty">ไม่มีข้อมูลใน 7 วันนี้</div>`;
+
+    const sysRows = [...m.sys].sort((a, b) => b[1] - a[1]);
+    $("bySys").innerHTML = sysRows.length ? `<table class="sdt"><thead><tr><th>ระบบ</th><th class="c">เที่ยว</th><th class="c">% ของเที่ยวที่พบ</th></tr></thead><tbody>` +
+      sysRows.map(([s, n]) => `<tr><td>${esc(defectLabel(s))}</td><td class="c">${n}</td><td class="c">${pct(n / m.defect)}</td></tr>`).join("") + `</tbody></table>` : `<div class="sd-empty">${m.flights ? "ไม่พบข้อขัดข้องในเดือนนี้" : "ไม่มีเที่ยวบินในเดือนนี้"}</div>`;
+
+    $("overview").innerHTML = overviewHTML(ym, months.get(ym));
+    renderTrend(ym);
+  }
+
+  // ทั้งหมดที่ผ่านมา (ไม่ขึ้นกับวันที่ที่เลือก)
+  (() => {
+    const all = new Map(); let none = 0;
+    for (const m of months.values()) { none += m.none; m.sys.forEach((n, s) => inc(all, s, n)); }
+    const rows = [...all].map(([s, n]) => ({ label: defectLabel(s), n }));
+    if (none) rows.push({ label: NO_DEFECT, n: none, none: true });
+    rows.sort((a, b) => b.n - a.n);
+    $("allSys").innerHTML = rows.length ? barsHTML(rows, { tight: true }) : `<div class="sd-empty">ยังไม่มีข้อมูล</div>`;
+    $("trendTable").innerHTML = `<table class="sdt"><thead><tr><th>เดือน</th><th class="c">เที่ยวบินรวม</th><th class="c">ข้อขัดข้อง</th><th class="c">Defect Rate</th></tr></thead><tbody>` +
+      series.map((s) => `<tr><td>${esc(monthTH(s.ym))}</td><td class="c">${s.flights}</td><td class="c">${s.defect}</td><td class="c">${s.rate == null ? "—" : pct(s.rate)}</td></tr>`).join("") + `</tbody></table>`;
+  })();
+
+  $("srcNote").textContent = `ข้อมูลถึง 31 ต.ค. 69 จาก Google Form · ตั้งแต่ ${dateTH(LIVE_FROM)} จากรายงานหลังบินในระบบ`;
+  document.addEventListener("pointerover", (e) => { const t = e.target.closest?.("[data-tip]"); if (!t) { if (!e.target.closest?.("#trend")) hideTip(); return; } const r = t.getBoundingClientRect(); tip(esc(t.dataset.tip), e.clientX || r.left + r.width / 2, r.top); });
+  $("reportDate").value = ymd(new Date());
+  $("reportDate").addEventListener("change", render);
+  let rz; new ResizeObserver(() => { clearTimeout(rz); rz = setTimeout(() => renderTrend(($("reportDate").value || ymd(new Date())).slice(0, 7)), 120); }).observe($("trend"));
+  render();
+</script>
+</body>
+</html>
