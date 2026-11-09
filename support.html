@@ -52,6 +52,7 @@
   table.sr tr.r-yel td{background:var(--sr-yel)}   table.sr tr.r-yel td:first-child{box-shadow:inset 4px 0 0 var(--sr-yel-b)}
   table.sr tr.r-grn td{background:var(--sr-grn)}   table.sr tr.r-grn td:first-child{box-shadow:inset 4px 0 0 var(--sr-grn-b)}
   table.sr tr.saving td{opacity:.7}
+  table.sr tr.past td.ms input{text-decoration:line-through}
   table.sr td.empty{padding:30px;text-align:center;color:var(--faint)}
   table.sr td.rm button .tx{margin-inline-start:3px}
   @media (max-width:1280px){ table.sr td.rm button .tx{display:none} table.sr td.rm button{padding:3px 6px} }
@@ -149,14 +150,13 @@
     return r.doc_signed && r.doc_sent ? "grn" : "yel";
   };
 
-  // เรียงตามวันที่ จากใกล้วันนี้สุด → ไกลสุด (ผู้ใช้ขอ 6 พ.ย. 69)
-  //  วันนี้/ข้างหน้า ก่อน (ใกล้ → ไกล) · ตามด้วยวันที่ผ่านมาแล้ว (เพิ่งผ่าน → นานแล้ว) · ไม่มีวันที่ = ท้ายสุด · วันเดียวกัน = ตามลำดับที่เพิ่ม
+  // เรียงตามวันที่ เก่า → ใหม่ ต่อเนื่องกันทั้งรายการ · ไม่มีวันที่ไว้ท้ายสุด (ผู้ใช้ขอ 9 พ.ย. 69)
+  //  ภารกิจที่เลยวันไปแล้วอยู่ตามลำดับวันที่เดิม แต่ขีดทับชื่อภารกิจ (isPast / tr.past)
+  const isPast = (r) => !!r.req_date && r.req_date < todayStr;
   const byDate = (a, b) => {
-    const k = (r) => !r.req_date ? [2, ""] : r.req_date >= todayStr ? [0, r.req_date] : [1, r.req_date];
-    const [ga, da] = k(a), [gb, db] = k(b);
-    if (ga !== gb) return ga - gb;
-    const c = ga === 1 ? db.localeCompare(da) : da.localeCompare(db);
-    return c || String(a.created_at).localeCompare(String(b.created_at));
+    if (!a.req_date !== !b.req_date) return a.req_date ? -1 : 1;
+    return String(a.req_date || "").localeCompare(String(b.req_date || ""))
+      || String(a.created_at).localeCompare(String(b.created_at));
   };
 
   async function load() {
@@ -186,7 +186,7 @@
     const txt = (f, ph) => `<input type="text" data-f="${f}" value="${esc(r[f] || "")}" placeholder="${ph}">`;
     const ck = (f, label) => `<td class="ck" data-l="${label}"><input type="checkbox" data-f="${f}" ${r[f] ? "checked" : ""} ${noDoc ? "disabled" : ""}
         title="${label}${noDoc ? " (ไม่มีเอกสาร)" : ""}" aria-label="${label}"></td>`;
-    return `<tr data-id="${r.id}" class="${c ? "r-" + c : ""}">
+    return `<tr data-id="${r.id}" class="${c ? "r-" + c : ""}${isPast(r) ? " past" : ""}">
       <td class="dt" data-l="วันที่"><input type="date" data-f="req_date" value="${r.req_date || ""}"></td>
       <td class="ms" data-l="ภารกิจ">${txt("mission", "ภารกิจ")}</td>
       <td class="rt" data-l="เส้นทาง">${txt("route", "เส้นทาง")}</td>
