@@ -24,7 +24,7 @@
   .sd-src{font-size:12.5px;color:var(--muted);margin:0 0 12px}
   .sd-err{padding:12px 14px;border:1px solid var(--crit);background:var(--crit-soft);border-radius:10px;margin-bottom:12px;display:none}
   .sd-grid{display:grid;gap:12px;margin-bottom:12px}
-  .sd-top{grid-template-columns:repeat(4,minmax(130px,1fr)) minmax(240px,1.5fr) minmax(250px,1.6fr)}
+  .sd-top{grid-template-columns:repeat(4,minmax(120px,1fr)) minmax(280px,1.9fr) minmax(310px,2fr)}
   .sd-mid{grid-template-columns:minmax(0,1.25fr) minmax(0,1fr) minmax(0,1.25fr)}
   .sd-bot{grid-template-columns:minmax(0,2.4fr) minmax(0,1fr)}
   .sd-card{background:var(--surface);border:1px solid var(--line);border-radius:12px;box-shadow:var(--shadow);padding:14px 16px;min-width:0}
@@ -33,9 +33,17 @@
   .sd-kpi .l{font-size:12px;font-weight:600;letter-spacing:.03em;color:var(--muted)}
   .sd-kpi .n{font-family:"Bai Jamjuree",sans-serif;font-weight:700;font-size:38px;line-height:1.1;margin:8px 0}
   .sd-kpi .u{font-size:11.5px;letter-spacing:.05em;color:var(--muted)}
-  .seg{display:flex;gap:2px;height:22px;margin:4px 0 12px}
-  .seg i{display:block;height:100%;min-width:3px}
-  .seg i:first-child{border-radius:4px 0 0 4px}.seg i:last-child{border-radius:0 4px 4px 0}.seg i:only-child{border-radius:4px}
+  .pie text{font-family:inherit;font-size:13px;font-variant-numeric:tabular-nums}
+  .pie .cnt{fill:#16202e;font-weight:700}
+  .pie .out{fill:var(--ink);font-weight:600}
+  .pie .nm{fill:var(--ink);font-weight:700}
+  .pie .pc{fill:var(--muted);font-weight:600}
+  .pie .ld{stroke:var(--line-strong);fill:none}
+  .pie path,.pie circle{stroke:var(--surface);stroke-width:2}
+  .pie-type{display:block;width:100%;max-width:360px;height:auto;margin:0 auto}
+  .pie-tail{display:flex;align-items:center;justify-content:center;gap:14px;flex-wrap:wrap}
+  .pie-tail svg{flex:0 0 176px;width:176px;height:176px}
+  .pie-tail .lg{flex:1 1 110px;max-width:170px}
   .lg{display:flex;flex-direction:column;gap:6px;font-size:13px}
   .lg div{display:flex;align-items:center;gap:8px}.lg b{font-weight:600;margin-inline-start:auto;font-variant-numeric:tabular-nums}
   .lg .dot{width:10px;height:10px;border-radius:3px;flex:none}
@@ -209,6 +217,40 @@
     tt.style.left = Math.max(8, Math.min(innerWidth - r.width - 8, x - r.width / 2)) + "px"; tt.style.top = Math.max(8, y - r.height - 12) + "px"; };
   const hideTip = () => { tt.style.display = "none"; };
 
+  // ---------- แผนภูมิวงกลม (เริ่ม 12 นาฬิกา ตามเข็ม · สีผูกกับแบบ/หมายเลขเครื่อง) ----------
+  const TYPE_COLOR = { "ATR72-600": "#ec762d", "ATR72-500": "#4f81ee" };
+  const TAIL_COLOR = { "301": "#57a55a", "302": "#ec762d", "303": "#69bbc3", "313": "#4f81ee", "315": "#d64545", "316": "#f2c140" };
+  const polar = (cx, cy, r, a) => [cx + r * Math.sin(a), cy - r * Math.cos(a)];
+  function slices(items) {
+    const total = items.reduce((a, x) => a + x.n, 0); let at = 0;
+    return items.filter((x) => x.n > 0).map((x) => { const share = x.n / total, a0 = at, a1 = at + share * 2 * Math.PI; at = a1; return { ...x, share, a0, a1, mid: (a0 + a1) / 2 }; });
+  }
+  function sliceSVG(x, cx, cy, r) {
+    const t = `data-tip="${esc(`${x.label}: ${x.n} เที่ยว (${pct(x.share)})`)}"`;
+    if (x.share > 0.9999) return `<circle cx="${cx}" cy="${cy}" r="${r}" fill="${x.color}" ${t}/>`;
+    const [x0, y0] = polar(cx, cy, r, x.a0), [x1, y1] = polar(cx, cy, r, x.a1);
+    return `<path d="M${cx} ${cy}L${x0.toFixed(2)} ${y0.toFixed(2)}A${r} ${r} 0 ${x.a1 - x.a0 > Math.PI ? 1 : 0} 1 ${x1.toFixed(2)} ${y1.toFixed(2)}Z" fill="${x.color}" ${t}/>`;
+  }
+  function countLabel(x, cx, cy, r) {
+    const big = x.share >= 0.06, [lx, ly] = polar(cx, cy, big ? r * 0.68 : r + 11, x.mid);
+    return `<text class="${big ? "cnt" : "out"}" x="${lx.toFixed(1)}" y="${(ly + 4.5).toFixed(1)}" text-anchor="middle">${x.n}</text>`;
+  }
+  function typePie(items) {
+    const W = 340, H = 212, cx = 170, cy = 106, r = 92, s = slices(items);
+    const callouts = s.map((x) => {
+      const right = x.share > 0.9999 || Math.sin(x.mid) >= 0, [ax, ay] = polar(cx, cy, r * 0.94, x.mid), y = Math.max(24, Math.min(H - 24, ay));
+      const edge = right ? W - 4 : 4, anchor = right ? "end" : "start";
+      return `<polyline class="ld" points="${ax.toFixed(1)},${ay.toFixed(1)} ${ax.toFixed(1)},${y.toFixed(1)} ${edge},${y.toFixed(1)}"/>
+        <text class="nm" x="${edge}" y="${y - 6}" text-anchor="${anchor}">${esc(x.label)}</text><text class="pc" x="${edge}" y="${y + 17}" text-anchor="${anchor}">${pct(x.share)}</text>`;
+    }).join("");
+    return `<svg class="pie pie-type" viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(s.map((x) => `${x.label} ${x.n} เที่ยว`).join(", "))}">${s.map((x) => sliceSVG(x, cx, cy, r)).join("")}${s.map((x) => countLabel(x, cx, cy, r)).join("")}${callouts}</svg>`;
+  }
+  function tailPie(items) {
+    const S = 176, c = S / 2, r = 70, s = slices(items);
+    return `<div class="pie-tail"><svg class="pie" viewBox="0 0 ${S} ${S}" role="img" aria-label="${esc(items.map((x) => `${x.label} ${x.n} เที่ยว`).join(", "))}">${s.map((x) => sliceSVG(x, c, c, r)).join("")}${s.map((x) => countLabel(x, c, c, r)).join("")}</svg>
+      <div class="lg">${items.map((x) => `<div><span class="dot" style="background:${x.color}"></span>${esc(x.label)}<b>${x.n}</b></div>`).join("")}</div></div>`;
+  }
+
   function barsHTML(rows, { tight = false } = {}) {
     const max = Math.max(1, ...rows.map((r) => r.n));
     return `<div class="bars${tight ? " tight" : ""}">` + rows.map((r) =>
@@ -262,13 +304,10 @@
     $("kRate").textContent = m.flights ? pct(m.defect / m.flights) : "—";
     $("sysTitle").textContent = `สรุปข้อขัดข้องตามระบบ · ${monthTH(ym)}`;
 
-    const types = ["ATR72-600", "ATR72-500"].map((t, i) => ({ t, n: m.type.get(t) || 0, c: i ? "var(--viz-2)" : "var(--viz-1)" }));
-    const tot = types.reduce((a, x) => a + x.n, 0);
-    $("byType").innerHTML = tot ? `<div class="seg">${types.filter((x) => x.n).map((x) => `<i style="flex:${x.n};background:${x.c}" data-tip="${esc(`${x.t}: ${x.n} เที่ยว (${pct(x.n / tot)})`)}"></i>`).join("")}</div>
-      <div class="lg">${types.map((x) => `<div><span class="dot" style="background:${x.c}"></span>${x.t}<b>${x.n} · ${pct(x.n / tot)}</b></div>`).join("")}</div>` : `<div class="sd-empty">ไม่มีเที่ยวบินในเดือนนี้</div>`;
-
+    const noFlight = `<div class="sd-empty">ไม่มีเที่ยวบินในเดือนนี้</div>`;
+    $("byType").innerHTML = m.flights ? typePie(["ATR72-600", "ATR72-500"].map((t) => ({ label: t, n: m.type.get(t) || 0, color: TYPE_COLOR[t] }))) : noFlight;
     const tails = [...new Set([...fleet.map((a) => tail3(a.tail_number)), ...m.tail.keys()])].filter(Boolean).sort();
-    $("byTail").innerHTML = barsHTML(tails.map((t) => ({ label: `No.${t}`, n: m.tail.get(t) || 0 })), { tight: true });
+    $("byTail").innerHTML = m.flights ? tailPie(tails.map((t) => ({ label: `No.${t}`, n: m.tail.get(t) || 0, color: TAIL_COLOR[t] || "#8593a5" }))) : noFlight;
 
     // 7 วันย้อนหลัง (รวมวันที่เลือก) — เหมือนสูตรในไฟล์อ้างอิง: จัดกลุ่มตาม "ระบบ : รายละเอียด"
     const from = new Date(`${date}T00:00:00`); from.setDate(from.getDate() - 7); const fromS = ymd(from);
