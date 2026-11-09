@@ -19,6 +19,9 @@
   .sd-head{display:flex;align-items:flex-end;justify-content:space-between;gap:14px;flex-wrap:wrap;margin:6px 0 4px}
   .sd-head h2{font-family:"Bai Jamjuree",sans-serif;font-size:24px;line-height:1.25;margin:0}
   .sd-head .en{font-size:12.5px;letter-spacing:.06em;color:var(--muted);font-weight:600}
+  .sd-tools{display:flex;align-items:flex-end;gap:10px;flex-wrap:wrap}
+  .sd-presets{display:flex;gap:6px;flex-wrap:wrap}
+  .sd-presets .on{background:var(--primary);border-color:var(--primary);color:var(--surface)}
   .sd-pick{display:flex;flex-direction:column;gap:3px;font-size:12px;color:var(--muted)}
   .sd-pick input{width:auto;font:inherit;font-size:15px;color:var(--ink)}
   .sd-src{font-size:12.5px;color:var(--muted);margin:0 0 12px}
@@ -80,7 +83,17 @@
   <div class="wrap sd">
     <div class="sd-head">
       <h2>ระบบมอนิเตอร์ข้อขัดข้องอากาศยาน<div class="en">AIRCRAFT DEFECT MONITORING DASHBOARD</div></h2>
-      <label class="sd-pick">ข้อมูลล่าสุด<input type="date" id="reportDate"></label>
+      <div class="sd-tools">
+        <div class="sd-presets" role="group" aria-label="เลือกช่วงเวลาสำเร็จรูป">
+          <button type="button" class="btn sm" data-p="month">เดือนนี้</button>
+          <button type="button" class="btn sm" data-p="prev">เดือนก่อน</button>
+          <button type="button" class="btn sm" data-p="fy">ปีงบนี้</button>
+          <button type="button" class="btn sm" data-p="all">ทั้งหมด</button>
+        </div>
+        <label class="sd-pick">ตั้งแต่<input type="date" id="dFrom"></label>
+        <label class="sd-pick">ถึง<input type="date" id="dTo"></label>
+        <button type="button" class="btn primary" id="xlsx">Export Excel</button>
+      </div>
     </div>
     <p class="sd-src" id="srcNote"></p>
     <div class="sd-err" id="err"></div>
@@ -95,9 +108,9 @@
     </div>
 
     <div class="sd-grid sd-mid">
-      <div class="sd-card"><h3>ข้อขัดข้องที่พบล่าสุด (7 วันย้อนหลัง)</h3><div id="recent"></div></div>
+      <div class="sd-card"><h3 id="recentTitle">ข้อขัดข้องที่พบล่าสุด (7 วันย้อนหลัง)</h3><div id="recent"></div></div>
       <div class="sd-card"><h3 id="sysTitle">สรุปข้อขัดข้องตามระบบ</h3><div id="bySys"></div></div>
-      <div class="sd-card wide"><h3>Defect / ข้อขัดข้อง (เรียงตามจำนวน · ทั้งหมดที่ผ่านมา)</h3><div id="allSys"></div></div>
+      <div class="sd-card wide"><h3>Defect / ข้อขัดข้อง (เรียงตามจำนวน)</h3><div id="allSys"></div></div>
     </div>
 
     <div class="sd-grid sd-bot">
@@ -115,6 +128,7 @@
   import { supabase } from "./js/supabase.js";
   import { esc } from "./js/esc.js";
   import { defectLabel } from "./js/reports.js";
+  import { loadExcelJS } from "./js/board-excel.js";
 
   const profile = await requireAuth();
   if (!profile) throw new Error("no auth");
@@ -162,9 +176,9 @@
     const detailOf = new Map();
     for (const d of disc) if (d.mission_id) detailOf.set(d.mission_id, [...(detailOf.get(d.mission_id) || []), String(d.description || "").trim()]);
     flights = [
-      ...hist.map((h) => ({ date: h.flight_date, type: h.aircraft_type, tail: h.tail, hours: +h.hours, systems: h.systems || [], detail: h.detail || "", specified: true })),
+      ...hist.map((h) => ({ date: h.flight_date, type: h.aircraft_type, tail: h.tail, hours: +h.hours, systems: h.systems || [], detail: h.detail || "", specified: true, src: "Google Form" })),
       ...reps.map((r) => ({ date: r.missions.mission_date, type: r.missions.aircraft?.type || "", tail: tail3(r.missions.aircraft?.tail_number),
-        hours: +r.total_hours, systems: r.defect_systems || [], specified: r.defect_systems != null,
+        hours: +r.total_hours, systems: r.defect_systems || [], specified: r.defect_systems != null, src: "รายงานหลังบิน",
         detail: (detailOf.get(r.mission_id) || []).filter(Boolean).join("\n") })),
     ];
     stats = { daily: sd, defect: sdd, aircraft: sam };
@@ -172,44 +186,41 @@
     showErr("โหลดข้อมูลไม่สำเร็จ: " + (e.message || e));
   }
 
-  // รวมเป็นรายเดือน: เที่ยวบินดิบ + เดือนที่เคลียร์แล้ว (stats_*)
-  const months = new Map();
+  // รวมตามช่วงวันที่: เที่ยวบินดิบ + เดือนที่เคลียร์แล้ว (stats_*)
   const blank = () => ({ flights: 0, hours: 0, defect: 0, none: 0, unspecified: 0, sys: new Map(), type: new Map(), tail: new Map(), tailDefect: new Map() });
-  const M = (ym) => months.get(ym) || months.set(ym, blank()).get(ym);
   const inc = (map, k, n = 1) => map.set(k, (map.get(k) || 0) + n);
-  for (const f of flights) {
-    const m = M(f.date.slice(0, 7));
-    m.flights++; m.hours += f.hours; inc(m.type, f.type); inc(m.tail, f.tail);
-    if (!f.specified) m.unspecified++;
-    else if (f.systems.length) { m.defect++; inc(m.tailDefect, f.tail); new Set(f.systems).forEach((s) => inc(m.sys, s)); }
-    else m.none++;
-  }
-  for (const s of stats.daily) { const m = M(s.stat_date.slice(0, 7)); m.flights += +s.flights; m.hours += +s.hours; }
-  for (const s of stats.defect) {
-    const m = M(s.stat_date.slice(0, 7));
-    if (s.system === "_any") m.defect += +s.flights;
-    else if (s.system === "_reported") m.none += +s.flights;
-    else if (!s.system.startsWith("_")) inc(m.sys, s.system, +s.flights);
-  }
   const acById = new Map(fleet.map((a) => [a.id, a]));
-  for (const s of stats.aircraft) {
-    const m = M(String(s.ym).slice(0, 7)), a = acById.get(s.aircraft_id);
-    if (a) { inc(m.type, a.type, +s.flights); inc(m.tail, tail3(a.tail_number), +s.flights); }
+  const monthEnd = (ym) => { const [y, m] = ym.split("-").map(Number); return `${ym}-${pad(new Date(y, m, 0).getDate())}`; };
+  function aggregate(from, to) {
+    const total = blank(), byMonth = new Map(); let partialFleet = false;
+    const both = (d, fn) => { const k = d.slice(0, 7); fn(total); fn(byMonth.get(k) || byMonth.set(k, blank()).get(k)); };
+    const inRange = (d) => d >= from && d <= to;
+    for (const f of flights) if (inRange(f.date)) both(f.date, (m) => {
+      m.flights++; m.hours += f.hours; inc(m.type, f.type); inc(m.tail, f.tail);
+      if (!f.specified) m.unspecified++;
+      else if (f.systems.length) { m.defect++; inc(m.tailDefect, f.tail); new Set(f.systems).forEach((s) => inc(m.sys, s)); }
+      else m.none++;
+    });
+    for (const s of stats.daily) if (inRange(s.stat_date)) both(s.stat_date, (m) => { m.flights += +s.flights; m.hours += +s.hours; });
+    for (const s of stats.defect) if (inRange(s.stat_date)) both(s.stat_date, (m) => {
+      const n = +s.flights;
+      if (s.system === "_any") { m.defect += n; m.none -= n; }       // _reported นับทุกเที่ยวที่ระบุแล้ว → หักเที่ยวที่พบออก
+      else if (s.system === "_reported") m.none += n;
+      else if (!s.system.startsWith("_")) inc(m.sys, s.system, n);
+    });
+    for (const s of stats.aircraft) {                                 // เดือนที่เคลียร์แล้วเก็บรายเครื่องเป็นรายเดือน
+      const ym = String(s.ym).slice(0, 7), a = acById.get(s.aircraft_id);
+      if (!a || `${ym}-01` > to || monthEnd(ym) < from) continue;
+      if (`${ym}-01` < from || monthEnd(ym) > to) { partialFleet = true; continue; }
+      both(`${ym}-01`, (m) => { inc(m.type, a.type, +s.flights); inc(m.tail, tail3(a.tail_number), +s.flights); });
+    }
+    const yms = [...byMonth.keys()].sort(), series = [];
+    if (yms.length) { let [y, m] = yms[0].split("-").map(Number);
+      for (;;) { const k = `${y}-${pad(m)}`, v = byMonth.get(k);
+        series.push({ ym: k, flights: v?.flights || 0, defect: v?.defect || 0, rate: v?.flights ? v.defect / v.flights : null });
+        if (k === yms[yms.length - 1]) break; if (++m > 12) { m = 1; y++; } } }
+    return { total, series, partialFleet };
   }
-  // เดือนที่เคลียร์: _reported นับทุกเที่ยวที่ระบุแล้ว → หักเที่ยวที่พบข้อขัดข้องออก
-  for (const ym of new Set(stats.defect.map((s) => s.stat_date.slice(0, 7)))) {
-    const m = M(ym), any = stats.defect.filter((s) => s.stat_date.startsWith(ym) && s.system === "_any").reduce((a, s) => a + +s.flights, 0);
-    m.none = Math.max(0, m.none - any);
-  }
-  const yms = [...months.keys()].sort();
-  const series = (() => {
-    if (!yms.length) return [];
-    const out = []; let [y, m] = yms[0].split("-").map(Number);
-    const last = yms[yms.length - 1];
-    for (;;) { const k = `${y}-${pad(m)}`; const v = months.get(k); out.push({ ym: k, flights: v?.flights || 0, defect: v?.defect || 0, rate: v?.flights ? v.defect / v.flights : null });
-      if (k === last) break; if (++m > 12) { m = 1; y++; } }
-    return out;
-  })();
 
   // ---------- tooltip ----------
   const tt = $("tt");
@@ -257,9 +268,10 @@
       `<div class="row" data-tip="${esc(`${r.label}: ${r.n.toLocaleString()} เที่ยว`)}"><span>${esc(r.label)}</span><span class="tr"><span class="br${r.none ? " none" : ""}" style="width:${(r.n / max) * 100}%"></span></span><span class="v">${r.n.toLocaleString()}</span></div>`).join("") + `</div>`;
   }
 
-  function renderTrend(selected) {
-    const box = $("trend");
-    if (!series.length) { box.innerHTML = `<div class="sd-empty">ยังไม่มีข้อมูล</div>`; return; }
+  let curSeries = [];
+  function renderTrend() {
+    const box = $("trend"), series = curSeries;
+    if (!series.length) { box.innerHTML = `<div class="sd-empty">ไม่มีข้อมูลในช่วงนี้</div>`; return; }
     const W = Math.max(320, box.clientWidth), H = 260, L = 42, R = 18, T = 26, B = 28;
     const X = (i) => L + (series.length < 2 ? (W - L - R) / 2 : (i * (W - L - R)) / (series.length - 1));
     const Y = (v) => T + (1 - v) * (H - T - B);
@@ -267,12 +279,11 @@
     let path = "", pen = false;
     series.forEach((s, i) => { if (s.rate == null) { pen = false; return; } path += `${pen ? "L" : "M"}${X(i).toFixed(1)} ${Y(s.rate).toFixed(1)}`; pen = true; });
     const grid = [0, .25, .5, .75, 1].map((v) => `<line x1="${L}" x2="${W - R}" y1="${Y(v)}" y2="${Y(v)}" stroke="var(--viz-grid)"/><text x="${L - 8}" y="${Y(v) + 4}" text-anchor="end">${v * 100}%</text>`).join("");
-    const xlab = series.map((s, i) => (i % every === 0 || s.ym === selected) && !(s.ym !== selected && series[i + 1]?.ym === selected && every > 1) ? `<text x="${X(i)}" y="${H - 8}" text-anchor="middle">${monthTH(s.ym)}</text>` : "").join("");
+    const xlab = series.map((s, i) => i % every === 0 || i === series.length - 1 ? `<text x="${X(i)}" y="${H - 8}" text-anchor="middle">${monthTH(s.ym)}</text>` : "").join("");
     const lastI = series.length - 1;
-    const dots = series.map((s, i) => s.rate == null ? "" : `<circle cx="${X(i)}" cy="${Y(s.rate)}" r="${s.ym === selected ? 6 : 4}" fill="var(--viz-1)" stroke="var(--surface)" stroke-width="2"/>`).join("");
+    const dots = series.map((s, i) => s.rate == null ? "" : `<circle cx="${X(i)}" cy="${Y(s.rate)}" r="4" fill="var(--viz-1)" stroke="var(--surface)" stroke-width="2"/>`).join("");
     const labelAt = (i) => { const s = series[i]; if (!s || s.rate == null) return ""; const a = i === lastI && X(i) > W - 60 ? "end" : "middle"; return `<text class="lab" x="${X(i)}" y="${Y(s.rate) - 11}" text-anchor="${a}">${pct(s.rate)}</text>`; };
-    const selI = series.findIndex((s) => s.ym === selected);
-    box.innerHTML = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="แนวโน้มอัตราข้อขัดข้องรายเดือน">${grid}${xlab}<line id="xh" y1="${T}" y2="${H - B}" stroke="var(--line-strong)" visibility="hidden"/><path d="${path}" fill="none" stroke="var(--viz-1)" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>${dots}${labelAt(lastI)}${selI >= 0 && selI !== lastI ? labelAt(selI) : ""}</svg>`;
+    box.innerHTML = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="แนวโน้มอัตราข้อขัดข้องรายเดือน">${grid}${xlab}<line id="xh" y1="${T}" y2="${H - B}" stroke="var(--line-strong)" visibility="hidden"/><path d="${path}" fill="none" stroke="var(--viz-1)" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>${dots}${labelAt(lastI)}</svg>`;
     const svg = box.querySelector("svg"), xh = svg.querySelector("#xh");
     const move = (ev) => { const b = svg.getBoundingClientRect(), px = (ev.clientX - b.left) * (W / b.width);
       let i = series.length < 2 ? 0 : Math.round(((px - L) / (W - L - R)) * (series.length - 1)); i = Math.max(0, Math.min(series.length - 1, i));
@@ -282,70 +293,165 @@
     svg.addEventListener("pointerleave", () => { xh.setAttribute("visibility", "hidden"); hideTip(); });
   }
 
-  function overviewHTML(ym, m) {
-    if (!m?.flights) return `<div class="sd-empty">เดือน ${esc(monthTH(ym))} ยังไม่มีเที่ยวบิน</div>`;
-    const rate = m.defect / m.flights, ps = []; const i = series.findIndex((s) => s.ym === ym), prev = i > 0 ? series[i - 1] : null;
+  // ---------- ช่วงเวลา ----------
+  const $from = $("dFrom"), $to = $("dTo");
+  const parse = (s) => new Date(`${s}T00:00:00`);
+  const addDays = (s, n) => { const d = parse(s); d.setDate(d.getDate() + n); return ymd(d); };
+  const addMonths = (ym, n) => { const [y, m] = ym.split("-").map(Number), d = new Date(y, m - 1 + n, 1); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}`; };
+  const rangeTH = (a, b) => a === b ? dateTH(a) : `${dateTH(a)} – ${dateTH(b)}`;
+  const dayCount = (a, b) => Math.round((parse(b) - parse(a)) / 86400000) + 1;
+  const firstDataDate = () => flights.reduce((a, f) => (f.date < a ? f.date : a), ymd(new Date()));
+  function preset(k) {
+    const t = ymd(new Date()), ym = t.slice(0, 7);
+    if (k === "month") return [`${ym}-01`, t];
+    if (k === "prev") { const p = addMonths(ym, -1); return [`${p}-01`, monthEnd(p)]; }
+    if (k === "fy") { const y = +t.slice(0, 4), fy = +t.slice(5, 7) >= 10 ? y : y - 1; return [`${fy}-10-01`, t]; }
+    return [firstDataDate(), t];
+  }
+  // ช่วงก่อนหน้าไว้เทียบ: เดือนเดียวกับวันที่ 1 → เดือนก่อนทั้งเดือน · เต็มเดือน → จำนวนเดือนเท่ากัน · อื่นๆ → จำนวนวันเท่ากัน
+  function prevRange(a, b) {
+    const ma = a.slice(0, 7), mb = b.slice(0, 7), first = a.endsWith("-01");
+    if (first && ma === mb) { const p = addMonths(ma, -1); return [`${p}-01`, monthEnd(p)]; }
+    if (first && b === monthEnd(mb)) { const [y1, m1] = ma.split("-").map(Number), [y2, m2] = mb.split("-").map(Number), n = (y2 - y1) * 12 + m2 - m1 + 1; return [`${addMonths(ma, -n)}-01`, monthEnd(addMonths(mb, -n))]; }
+    const n = dayCount(a, b); return [addDays(a, -n), addDays(a, -1)];
+  }
+  function overviewHTML(a, b, m) {
+    if (!m.flights) return `<div class="sd-empty">ช่วง ${esc(rangeTH(a, b))} ไม่มีเที่ยวบิน</div>`;
+    const rate = m.defect / m.flights, ps = [], [pa, pb] = prevRange(a, b), prev = aggregate(pa, pb).total;
     let trend = "";
-    if (prev?.rate != null) { const d = (rate - prev.rate) * 100; trend = Math.abs(d) < 0.05 ? ` เท่ากับเดือนก่อน` : ` ${d > 0 ? "▲ เพิ่มขึ้น" : "▼ ลดลง"} ${Math.abs(d).toFixed(1)} จุดจากเดือนก่อน (${pct(prev.rate)})`; }
-    ps.push(`เดือน <b>${esc(monthTH(ym))}</b> บิน <b>${m.flights}</b> เที่ยว รวม <b>${num(m.hours)}</b> ชม. พบข้อขัดข้อง <b>${m.defect}</b> เที่ยว คิดเป็น <b>${pct(rate)}</b>${trend}`);
-    const top = [...m.sys].sort((a, b) => b[1] - a[1]).slice(0, 3);
+    if (prev.flights) { const pr = prev.defect / prev.flights, d = (rate - pr) * 100; const was = `ช่วงก่อนหน้า (${esc(rangeTH(pa, pb))}: ${pct(pr)})`; trend = Math.abs(d) < 0.05 ? ` เท่ากับ${was}` : ` ${d > 0 ? "▲ เพิ่มขึ้น" : "▼ ลดลง"} ${Math.abs(d).toFixed(1)} จุดจาก${was}`; }
+    ps.push(`ช่วง <b>${esc(rangeTH(a, b))}</b> บิน <b>${m.flights.toLocaleString()}</b> เที่ยว รวม <b>${num(m.hours)}</b> ชม. พบข้อขัดข้อง <b>${m.defect.toLocaleString()}</b> เที่ยว คิดเป็น <b>${pct(rate)}</b>${trend}`);
+    const top = [...m.sys].sort((x, y) => y[1] - x[1]).slice(0, 3);
     if (top.length) ps.push(`ระบบที่พบมากสุด: ${top.map(([s, n]) => `<b>${esc(defectLabel(s))}</b> (${n})`).join(" · ")}`);
-    const t = [...m.tailDefect].sort((a, b) => b[1] - a[1])[0];
+    const t = [...m.tailDefect].sort((x, y) => y[1] - x[1])[0];
     if (t) ps.push(`เครื่องที่พบข้อขัดข้องมากสุด: <b>No.${esc(t[0])}</b> (${t[1]} จาก ${m.tail.get(t[0]) || 0} เที่ยว)`);
     if (m.unspecified) ps.push(`มีรายงาน ${m.unspecified} เที่ยวที่ยังไม่ระบุระบบ (นับเป็นไม่พบข้อขัดข้อง)`);
     return ps.map((p) => `<p>${p}</p>`).join("");
   }
 
+  // 7 วันย้อนหลังจากวันสิ้นสุด (รวมวันสิ้นสุด) — เหมือนสูตรในไฟล์อ้างอิง: จัดกลุ่มตาม "ระบบ : รายละเอียด"
+  function recentList(to) {
+    const fromS = addDays(to, -7), grouped = new Map(); let clean = 0;
+    for (const f of flights) { if (f.date < fromS || f.date > to) continue;
+      if (f.systems.length) { const sys = f.systems.map(defectLabel).join(", "), k = `${sys}\u0000${f.detail}`; const g = grouped.get(k) || { sys, detail: f.detail, n: 0 }; g.n++; grouped.set(k, g); }
+      else if (f.specified) clean++; }
+    return { list: [...grouped.values()].sort((a, b) => b.n - a.n || a.sys.localeCompare(b.sys, "th")), clean };
+  }
+  const fleetTails = (m) => [...new Set([...fleet.map((a) => tail3(a.tail_number)), ...m.tail.keys()])].filter(Boolean).sort();
+  const rankedSystems = (m) => {
+    const rows = [...m.sys].map(([s, n]) => ({ label: defectLabel(s), n }));
+    if (m.none > 0) rows.push({ label: NO_DEFECT, n: m.none, none: true });
+    return rows.sort((a, b) => b.n - a.n);
+  };
+
+  let cur = null;
   function render() {
-    const date = $("reportDate").value || ymd(new Date()), ym = date.slice(0, 7), m = months.get(ym) || blank();
+    const a = $from.value, b = $to.value;
+    if (!a || !b) return;
+    cur = { a, b, ...aggregate(a, b) };
+    const m = cur.total;
+    document.querySelectorAll(".sd-presets button").forEach((x) => { const [pa, pb] = preset(x.dataset.p); x.classList.toggle("on", pa === a && pb === b); });
+    $("srcNote").textContent = `ช่วงข้อมูล ${rangeTH(a, b)} (${dayCount(a, b).toLocaleString()} วัน) · ข้อมูลถึง 31 ต.ค. 69 จาก Google Form · ตั้งแต่ ${dateTH(LIVE_FROM)} จากรายงานหลังบินในระบบ${cur.partialFleet ? " · เดือนที่เคลียร์แล้วแยกตามเครื่องได้เมื่อเลือกทั้งเดือน" : ""}`;
     $("kFlights").textContent = m.flights.toLocaleString();
     $("kHours").textContent = num(m.hours);
     $("kDefect").textContent = m.defect.toLocaleString();
     $("kRate").textContent = m.flights ? pct(m.defect / m.flights) : "—";
-    $("sysTitle").textContent = `สรุปข้อขัดข้องตามระบบ · ${monthTH(ym)}`;
 
-    const noFlight = `<div class="sd-empty">ไม่มีเที่ยวบินในเดือนนี้</div>`;
-    $("byType").innerHTML = m.flights ? typePie(["ATR72-600", "ATR72-500"].map((t) => ({ label: t, n: m.type.get(t) || 0, color: TYPE_COLOR[t] }))) : noFlight;
-    const tails = [...new Set([...fleet.map((a) => tail3(a.tail_number)), ...m.tail.keys()])].filter(Boolean).sort();
-    $("byTail").innerHTML = m.flights ? tailPie(tails.map((t) => ({ label: `No.${t}`, n: m.tail.get(t) || 0, color: TAIL_COLOR[t] || "#8593a5" }))) : noFlight;
+    const noFlight = `<div class="sd-empty">ไม่มีเที่ยวบินในช่วงนี้</div>`;
+    const typeN = ["ATR72-600", "ATR72-500"].reduce((x, t) => x + (m.type.get(t) || 0), 0);
+    $("byType").innerHTML = typeN ? typePie(["ATR72-600", "ATR72-500"].map((t) => ({ label: t, n: m.type.get(t) || 0, color: TYPE_COLOR[t] }))) : noFlight;
+    $("byTail").innerHTML = typeN ? tailPie(fleetTails(m).map((t) => ({ label: `No.${t}`, n: m.tail.get(t) || 0, color: TAIL_COLOR[t] || "#8593a5" }))) : noFlight;
 
-    // 7 วันย้อนหลัง (รวมวันที่เลือก) — เหมือนสูตรในไฟล์อ้างอิง: จัดกลุ่มตาม "ระบบ : รายละเอียด"
-    const from = new Date(`${date}T00:00:00`); from.setDate(from.getDate() - 7); const fromS = ymd(from);
-    const grouped = new Map(); let clean = 0;
-    for (const f of flights) { if (f.date < fromS || f.date > date) continue;
-      if (f.systems.length) { const sys = f.systems.map(defectLabel).join(", "), k = `${sys}\u0000${f.detail}`; const g = grouped.get(k) || { sys, detail: f.detail, n: 0 }; g.n++; grouped.set(k, g); }
-      else if (f.specified) clean++; }
-    const list = [...grouped.values()].sort((a, b) => b.n - a.n || a.sys.localeCompare(b.sys, "th"));
+    $("recentTitle").textContent = `ข้อขัดข้องที่พบล่าสุด (7 วันย้อนหลังถึง ${dateTH(b)})`;
+    const { list, clean } = recentList(b);
     $("recent").innerHTML = list.length || clean ? `<table class="sdt"><thead><tr><th>รายการข้อขัดข้อง</th><th class="c">จำนวนครั้ง</th></tr></thead><tbody>` +
       list.map((g) => `<tr><td class="tx"><span class="sys">${esc(g.sys)}</span>${g.detail ? " : " + esc(g.detail) : ""}</td><td class="c">${g.n}</td></tr>`).join("") +
       (clean ? `<tr class="muted"><td>${NO_DEFECT}</td><td class="c">${clean}</td></tr>` : "") + `</tbody></table>` : `<div class="sd-empty">ไม่มีข้อมูลใน 7 วันนี้</div>`;
 
-    const sysRows = [...m.sys].sort((a, b) => b[1] - a[1]);
+    const sysRows = [...m.sys].sort((x, y) => y[1] - x[1]);
     $("bySys").innerHTML = sysRows.length ? `<table class="sdt"><thead><tr><th>ระบบ</th><th class="c">เที่ยว</th><th class="c">% ของเที่ยวที่พบ</th></tr></thead><tbody>` +
-      sysRows.map(([s, n]) => `<tr><td>${esc(defectLabel(s))}</td><td class="c">${n}</td><td class="c">${pct(n / m.defect)}</td></tr>`).join("") + `</tbody></table>` : `<div class="sd-empty">${m.flights ? "ไม่พบข้อขัดข้องในเดือนนี้" : "ไม่มีเที่ยวบินในเดือนนี้"}</div>`;
+      sysRows.map(([s, n]) => `<tr><td>${esc(defectLabel(s))}</td><td class="c">${n}</td><td class="c">${pct(n / m.defect)}</td></tr>`).join("") + `</tbody></table>` : `<div class="sd-empty">${m.flights ? "ไม่พบข้อขัดข้องในช่วงนี้" : "ไม่มีเที่ยวบินในช่วงนี้"}</div>`;
+    const ranked = rankedSystems(m);
+    $("allSys").innerHTML = ranked.length ? barsHTML(ranked, { tight: true }) : `<div class="sd-empty">ไม่มีข้อมูลในช่วงนี้</div>`;
 
-    $("overview").innerHTML = overviewHTML(ym, months.get(ym));
-    renderTrend(ym);
+    $("overview").innerHTML = overviewHTML(a, b, m);
+    curSeries = cur.series;
+    renderTrend();
+    $("trendTable").innerHTML = `<table class="sdt"><thead><tr><th>เดือน</th><th class="c">เที่ยวบินรวม</th><th class="c">ข้อขัดข้อง</th><th class="c">Defect Rate</th></tr></thead><tbody>` +
+      curSeries.map((s) => `<tr><td>${esc(monthTH(s.ym))}</td><td class="c">${s.flights}</td><td class="c">${s.defect}</td><td class="c">${s.rate == null ? "—" : pct(s.rate)}</td></tr>`).join("") + `</tbody></table>`;
   }
 
-  // ทั้งหมดที่ผ่านมา (ไม่ขึ้นกับวันที่ที่เลือก)
-  (() => {
-    const all = new Map(); let none = 0;
-    for (const m of months.values()) { none += m.none; m.sys.forEach((n, s) => inc(all, s, n)); }
-    const rows = [...all].map(([s, n]) => ({ label: defectLabel(s), n }));
-    if (none) rows.push({ label: NO_DEFECT, n: none, none: true });
-    rows.sort((a, b) => b.n - a.n);
-    $("allSys").innerHTML = rows.length ? barsHTML(rows, { tight: true }) : `<div class="sd-empty">ยังไม่มีข้อมูล</div>`;
-    $("trendTable").innerHTML = `<table class="sdt"><thead><tr><th>เดือน</th><th class="c">เที่ยวบินรวม</th><th class="c">ข้อขัดข้อง</th><th class="c">Defect Rate</th></tr></thead><tbody>` +
-      series.map((s) => `<tr><td>${esc(monthTH(s.ym))}</td><td class="c">${s.flights}</td><td class="c">${s.defect}</td><td class="c">${s.rate == null ? "—" : pct(s.rate)}</td></tr>`).join("") + `</tbody></table>`;
-  })();
+  // ---------- Export Excel (ตามช่วงวันที่ที่เลือก) ----------
+  const xDate = (s) => { const [y, m, d] = s.split("-").map(Number); return new Date(Date.UTC(y, m - 1, d)); };
+  async function exportExcel() {
+    if (!cur) return;
+    const btn = $("xlsx"), label = btn.textContent;
+    btn.disabled = true; btn.textContent = "กำลังสร้างไฟล์…";
+    try {
+      const ExcelJS = await loadExcelJS(), wb = new ExcelJS.Workbook(), { a, b, total: m, series } = cur;
+      const head = (row) => row.eachCell((c) => { c.font = { bold: true }; c.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFE5EDF4" } }; c.alignment = { vertical: "middle", wrapText: true }; });
+      const ws = wb.addWorksheet("สรุป");
+      ws.columns = [{ width: 38 }, { width: 14 }, { width: 16 }, { width: 14 }];
+      ws.addRow(["ระบบมอนิเตอร์ข้อขัดข้องอากาศยาน (AIRCRAFT DEFECT MONITORING)"]).font = { bold: true, size: 14 };
+      ws.addRow([`ช่วงข้อมูล ${rangeTH(a, b)} (${dayCount(a, b)} วัน)`]);
+      ws.addRow(["ข้อมูลถึง 31 ต.ค. 69 จาก Google Form · ตั้งแต่ 1 พ.ย. 69 จากรายงานหลังบินในระบบ"]);
+      const block = (title, cols, rows, fmt = {}) => {
+        ws.addRow([]); ws.addRow([title]).font = { bold: true, size: 12 }; head(ws.addRow(cols));
+        rows.forEach((r) => { const row = ws.addRow(r); Object.entries(fmt).forEach(([i, f]) => { row.getCell(+i).numFmt = f; }); });
+      };
+      const of = (n, d) => (d ? n / d : null);
+      ws.addRow([]);
+      ws.addRow(["ตัวชี้วัด"]).font = { bold: true, size: 12 };
+      head(ws.addRow(["รายการ", "ค่า"]));
+      ws.addRow(["TOTAL FLIGHT (เที่ยว)", m.flights]);
+      ws.addRow(["TOTAL FLIGHT HOURS (ชม.)", Math.round(m.hours * 100) / 100]).getCell(2).numFmt = "#,##0.0";
+      ws.addRow(["FLIGHT WITH DEFECT (เที่ยว)", m.defect]);
+      ws.addRow(["% DEFECT RATE", of(m.defect, m.flights)]).getCell(2).numFmt = "0.0%";
+      const typeTotal = ["ATR72-600", "ATR72-500"].reduce((x, t) => x + (m.type.get(t) || 0), 0);
+      block("เที่ยวบินตามแบบอากาศยาน", ["แบบ", "เที่ยวบิน", "สัดส่วน"], ["ATR72-600", "ATR72-500"].map((t) => [t, m.type.get(t) || 0, of(m.type.get(t) || 0, typeTotal)]), { 3: "0.0%" });
+      block("เที่ยวบินตามหมายเลขอากาศยาน", ["หมายเลข", "เที่ยวบิน", "สัดส่วน"], fleetTails(m).map((t) => [`No.${t}`, m.tail.get(t) || 0, of(m.tail.get(t) || 0, typeTotal)]), { 3: "0.0%" });
+      block("สรุปข้อขัดข้องตามระบบ", ["ระบบ", "เที่ยวบิน", "% ของเที่ยวที่พบ"], [...m.sys].sort((x, y) => y[1] - x[1]).map(([s, n]) => [defectLabel(s), n, of(n, m.defect)]), { 3: "0.0%" });
+      block("แนวโน้มอัตราข้อขัดข้องรายเดือน", ["เดือน", "เที่ยวบินรวม", "ข้อขัดข้อง (เที่ยว)", "Defect Rate"], series.map((s) => [monthTH(s.ym), s.flights, s.defect, s.rate]), { 4: "0.0%" });
 
-  $("srcNote").textContent = `ข้อมูลถึง 31 ต.ค. 69 จาก Google Form · ตั้งแต่ ${dateTH(LIVE_FROM)} จากรายงานหลังบินในระบบ`;
+      const wf = wb.addWorksheet("รายการเที่ยวบิน", { views: [{ state: "frozen", ySplit: 1 }] });
+      wf.columns = [{ width: 12 }, { width: 13 }, { width: 10 }, { width: 8 }, { width: 34 }, { width: 62 }, { width: 15 }];
+      head(wf.addRow(["วันที่", "แบบอากาศยาน", "หมายเลข", "ชม.บิน", "ระบบที่ขัดข้อง", "รายละเอียดข้อขัดข้อง", "แหล่งข้อมูล"]));
+      const rows = flights.filter((f) => f.date >= a && f.date <= b).sort((x, y) => x.date.localeCompare(y.date));
+      for (const f of rows) {
+        const r = wf.addRow([xDate(f.date), f.type, f.tail, f.hours, !f.specified ? "ยังไม่ระบุ" : f.systems.length ? f.systems.map(defectLabel).join(", ") : NO_DEFECT, f.detail || "", f.src]);
+        r.getCell(1).numFmt = "dd/mm/yyyy"; r.getCell(4).numFmt = "0.0"; r.getCell(5).alignment = r.getCell(6).alignment = { wrapText: true, vertical: "top" };
+      }
+      if (rows.length) wf.autoFilter = { from: "A1", to: `G${rows.length + 1}` };
+
+      const wr = wb.addWorksheet("ข้อขัดข้อง 7 วันล่าสุด");
+      wr.columns = [{ width: 34 }, { width: 70 }, { width: 12 }];
+      wr.addRow([`7 วันย้อนหลังถึง ${dateTH(b)}`]).font = { bold: true };
+      head(wr.addRow(["ระบบ", "รายละเอียด", "จำนวนครั้ง"]));
+      const { list, clean } = recentList(b);
+      list.forEach((g) => { const r = wr.addRow([g.sys, g.detail || "", g.n]); r.getCell(1).alignment = r.getCell(2).alignment = { wrapText: true, vertical: "top" }; });
+      if (clean) wr.addRow([NO_DEFECT, "", clean]);
+
+      const buf = await wb.xlsx.writeBuffer();
+      const url = URL.createObjectURL(new Blob([buf], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }));
+      const link = Object.assign(document.createElement("a"), { href: url, download: `Dashboard นิรภัย ${a} ถึง ${b}.xlsx` });
+      document.body.append(link); link.click(); link.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 10000);
+    } catch (e) {
+      showErr("Export ไม่สำเร็จ: " + (e.message || e));
+    } finally {
+      btn.disabled = false; btn.textContent = label;
+    }
+  }
+
+  // ---------- เริ่มทำงาน ----------
   document.addEventListener("pointerover", (e) => { const t = e.target.closest?.("[data-tip]"); if (!t) { if (!e.target.closest?.("#trend")) hideTip(); return; } const r = t.getBoundingClientRect(); tip(esc(t.dataset.tip), e.clientX || r.left + r.width / 2, r.top); });
-  $("reportDate").value = ymd(new Date());
-  $("reportDate").addEventListener("change", render);
-  let rz; new ResizeObserver(() => { clearTimeout(rz); rz = setTimeout(() => renderTrend(($("reportDate").value || ymd(new Date())).slice(0, 7)), 120); }).observe($("trend"));
-  render();
+  const setRange = ([a, b]) => { $from.value = a; $to.value = b; render(); };
+  $from.addEventListener("change", () => { if ($to.value && $from.value > $to.value) $to.value = $from.value; render(); });
+  $to.addEventListener("change", () => { if ($from.value && $to.value < $from.value) $from.value = $to.value; render(); });
+  document.querySelector(".sd-presets").addEventListener("click", (e) => { const p = e.target.closest("[data-p]"); if (p) setRange(preset(p.dataset.p)); });
+  $("xlsx").addEventListener("click", exportExcel);
+  let rz; new ResizeObserver(() => { clearTimeout(rz); rz = setTimeout(renderTrend, 120); }).observe($("trend"));
+  setRange(preset("month"));
 </script>
 </body>
 </html>
