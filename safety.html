@@ -374,6 +374,138 @@
 
   // ---------- Export Excel (ตามช่วงวันที่ที่เลือก) ----------
   const xDate = (s) => { const [y, m, d] = s.split("-").map(Number); return new Date(Date.UTC(y, m - 1, d)); };
+  // ---------- ชีต Dashboard ในไฟล์ Excel (หน้าตาตาม DASHBOARD ของไฟล์อ้างอิง) ----------
+  const XC = { bg: "#0B1320", card: "#172236", ink: "#FFFFFF", muted: "#A0AABF", grid: "#2B3A52", bar: "#4F81EE", none: "#5B6B82", rate: "#EF4444", dark: "#16202E" };
+  const argb = (h) => "FF" + h.slice(1);
+  const XF = `font-family="Tahoma,sans-serif"`;
+  const xSvg = (W, H, body) => `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" ${XF}><rect width="${W}" height="${H}" fill="${XC.card}"/>${body}</svg>`;
+  async function svgToPng(svg, W, H, scale = 2) {
+    const url = URL.createObjectURL(new Blob([svg], { type: "image/svg+xml" }));
+    try {
+      const img = new Image();
+      await new Promise((ok, bad) => { img.onload = ok; img.onerror = () => bad(new Error("แปลงกราฟเป็นภาพไม่สำเร็จ")); img.src = url; });
+      const cv = document.createElement("canvas"); cv.width = W * scale; cv.height = H * scale;
+      const c = cv.getContext("2d"); c.scale(scale, scale); c.drawImage(img, 0, 0, W, H);
+      return cv.toDataURL("image/png");
+    } finally { URL.revokeObjectURL(url); }
+  }
+  const xSlice = (x, cx, cy, r) => {
+    if (x.share > 0.9999) return `<circle cx="${cx}" cy="${cy}" r="${r}" fill="${x.color}"/>`;
+    const [x0, y0] = polar(cx, cy, r, x.a0), [x1, y1] = polar(cx, cy, r, x.a1);
+    return `<path d="M${cx} ${cy}L${x0.toFixed(2)} ${y0.toFixed(2)}A${r} ${r} 0 ${x.a1 - x.a0 > Math.PI ? 1 : 0} 1 ${x1.toFixed(2)} ${y1.toFixed(2)}Z" fill="${x.color}" stroke="${XC.card}" stroke-width="2"/>`;
+  };
+  const xCount = (x, cx, cy, r) => { const big = x.share >= 0.06, [lx, ly] = polar(cx, cy, big ? r * 0.68 : r + 13, x.mid);
+    return `<text x="${lx.toFixed(1)}" y="${(ly + 6).toFixed(1)}" text-anchor="middle" font-size="16" font-weight="700" fill="${big ? XC.dark : XC.ink}">${x.n}</text>`; };
+  function xTypePie(items) {
+    const W = 420, H = 270, cx = 210, cy = 135, r = 108, s = slices(items);
+    const out = s.map((x) => { const right = x.share > 0.9999 || Math.sin(x.mid) >= 0, [ax, ay] = polar(cx, cy, r * 0.94, x.mid), y = Math.max(32, Math.min(H - 32, ay)), edge = right ? W - 8 : 8, an = right ? "end" : "start";
+      return `<polyline points="${ax.toFixed(1)},${ay.toFixed(1)} ${ax.toFixed(1)},${y.toFixed(1)} ${edge},${y.toFixed(1)}" fill="none" stroke="${XC.muted}"/><text x="${edge}" y="${y - 7}" text-anchor="${an}" font-size="14" font-weight="700" fill="${XC.ink}">${esc(x.label)}</text><text x="${edge}" y="${y + 19}" text-anchor="${an}" font-size="14" font-weight="700" fill="${XC.muted}">${pct(x.share)}</text>`; }).join("");
+    return xSvg(W, H, s.map((x) => xSlice(x, cx, cy, r)).join("") + s.map((x) => xCount(x, cx, cy, r)).join("") + out);
+  }
+  function xTailPie(items) {
+    const W = 420, H = 270, cx = 142, cy = 135, r = 108, s = slices(items), gap = Math.min(36, 230 / items.length), y0 = cy - ((items.length - 1) * gap) / 2;
+    const lg = items.map((x, i) => `<rect x="290" y="${y0 + i * gap - 8}" width="16" height="16" rx="3" fill="${x.color}"/><text x="314" y="${y0 + i * gap + 6}" font-size="15" font-weight="700" fill="${XC.ink}">${esc(x.label)}</text><text x="410" y="${y0 + i * gap + 6}" text-anchor="end" font-size="15" fill="${XC.muted}">${x.n}</text>`).join("");
+    return xSvg(W, H, s.map((x) => xSlice(x, cx, cy, r)).join("") + s.map((x) => xCount(x, cx, cy, r)).join("") + lg);
+  }
+  function xBars(rows) {
+    const W = 420, H = 270, L = 168, R = 44, n = rows.length, rh = Math.min(30, (H - 12) / n), y0 = (H - rh * n) / 2, max = Math.max(1, ...rows.map((x) => x.n)), bh = Math.min(13, rh * 0.62), fs = Math.min(12, rh * 0.78);
+    return xSvg(W, H, rows.map((x, i) => { const y = y0 + i * rh + rh / 2, w = Math.max(2, (x.n / max) * (W - L - R));
+      return `<text x="${L - 8}" y="${y + fs * 0.36}" text-anchor="end" font-size="${fs}" fill="${XC.muted}">${esc(x.label)}</text><rect x="${L}" y="${y - bh / 2}" width="${w}" height="${bh}" fill="${x.none ? XC.none : XC.bar}"/><text x="${L + w + 6}" y="${y + fs * 0.36}" font-size="${fs}" font-weight="700" fill="${XC.ink}">${x.n}</text>`; }).join(""));
+  }
+  function xTrend(series) {
+    const W = 900, H = 290, L = 46, Rr = 24, T = 28, B = 30, n = series.length;
+    const X = (i) => L + (n < 2 ? (W - L - Rr) / 2 : (i * (W - L - Rr)) / (n - 1)), Y = (v) => T + (1 - v) * (H - T - B);
+    const every = Math.max(1, Math.ceil(n / 16)); let d = "", pen = false;
+    series.forEach((s, i) => { if (s.rate == null) { pen = false; return; } d += `${pen ? "L" : "M"}${X(i).toFixed(1)} ${Y(s.rate).toFixed(1)}`; pen = true; });
+    const grid = [0, .25, .5, .75, 1].map((v) => `<line x1="${L}" x2="${W - Rr}" y1="${Y(v)}" y2="${Y(v)}" stroke="${XC.grid}"/><text x="${L - 8}" y="${Y(v) + 4}" text-anchor="end" font-size="12" fill="${XC.muted}">${v * 100}%</text>`).join("");
+    const pts = series.map((s, i) => { const tick = i % every === 0 || i === n - 1 ? `<text x="${X(i)}" y="${H - 9}" text-anchor="middle" font-size="12" fill="${XC.muted}">${esc(monthTH(s.ym))}</text>` : ""; if (s.rate == null) return tick;
+      const lab = n <= 18 || i === n - 1 ? `<text x="${X(i)}" y="${Y(s.rate) - 11}" text-anchor="${i === n - 1 ? "end" : i === 0 ? "start" : "middle"}" font-size="12" font-weight="700" fill="${XC.ink}">${pct(s.rate)}</text>` : "";
+      return `${tick}<circle cx="${X(i)}" cy="${Y(s.rate)}" r="4.5" fill="${XC.bar}" stroke="${XC.card}" stroke-width="2"/>${lab}`; }).join("");
+    return xSvg(W, H, `${grid}<path d="${d}" fill="none" stroke="${XC.bar}" stroke-width="2.5" stroke-linejoin="round"/>${pts}`);
+  }
+  async function addDashboardSheet(wb) {
+    const { a, b, total: m } = cur, LAST_COL = 26;                  // A = ขอบ · B–Y = เนื้อหา 24 คอลัมน์ · Z = ขอบ
+    const ws = wb.addWorksheet("Dashboard", { views: [{ showGridLines: false, zoomScale: 90 }], properties: { tabColor: { argb: "FFEF4444" } } });
+    ws.pageSetup = { orientation: "portrait", fitToPage: true, fitToWidth: 1, fitToHeight: 1, paperSize: 9, horizontalCentered: true };
+    ws.getColumn(1).width = 2; ws.getColumn(LAST_COL).width = 2;
+    for (let c = 2; c < LAST_COL; c++) ws.getColumn(c).width = 7.3;
+    const font = (o) => ({ name: "Tahoma", color: { argb: argb(XC.ink) }, size: 11, ...o });
+    const FILL = (h) => ({ type: "pattern", pattern: "solid", fgColor: { argb: argb(h) } });
+    const cards = [];
+    const put = (r1, c1, r2, c2, value, f, al) => { if (r1 !== r2 || c1 !== c2) ws.mergeCells(r1, c1, r2, c2); const x = ws.getCell(r1, c1); x.value = value; x.font = font(f); x.alignment = { vertical: "middle", wrapText: true, ...al }; return x; };
+    const card = (r1, c1, r2, c2) => cards.push([r1, c1, r2, c2]);
+    const title = (r, c1, c2, t) => put(r, c1, r, c2, t, { size: 12, bold: true, color: { argb: argb(XC.muted) } }, { indent: 1 });
+
+    // หัว
+    [[1, 8], [4, 8], [10, 10], [26, 10], [43, 10]].forEach(([r, h]) => { ws.getRow(r).height = h; });
+    put(2, 2, 3, 18, "ระบบมอนิเตอร์ข้อขัดข้องอากาศยาน\nAIRCRAFT DEFECT MONITORING DASHBOARD", { size: 15, bold: true }, { indent: 1 });
+    put(2, 19, 3, 25, `ช่วงข้อมูล\n${rangeTH(a, b)}`, { size: 12, bold: true }, { horizontal: "right", indent: 1 });
+    ws.getRow(2).height = 24; ws.getRow(3).height = 24;
+
+    // KPI 4 ช่อง (ช่องละ 6 คอลัมน์)
+    [["✈ TOTAL FLIGHT", m.flights, "#,##0", "FLIGHTS", XC.ink], ["🕒 TOTAL FLIGHT HOURS", Math.round(m.hours * 10) / 10, "#,##0.0", "HOURS", XC.ink],
+     ["⚠️ FLIGHT WITH DEFECT", m.defect, "#,##0", "FLIGHTS", XC.ink], ["🎯 % DEFECT RATE", m.flights ? m.defect / m.flights : "—", "0.0%", "OF FLIGHTS", XC.rate]].forEach(([l, v, nf, u, col], i) => {
+      const c1 = 2 + i * 6, c2 = c1 + 5;
+      card(5, c1, 9, c2);
+      put(5, c1, 5, c2, l, { size: 12, bold: true, color: { argb: argb(XC.muted) } }, { horizontal: "center" });
+      put(6, c1, 8, c2, v, { size: 32, bold: true, color: { argb: argb(col) } }, { horizontal: "center" }).numFmt = nf;
+      put(9, c1, 9, c2, u, { size: 11, color: { argb: argb(XC.muted) } }, { horizontal: "center" });
+    });
+    ws.getRow(5).height = 24; [6, 7, 8].forEach((r) => { ws.getRow(r).height = 20; }); ws.getRow(9).height = 22;
+
+    // แถวกราฟ 3 อัน (อันละ 8 คอลัมน์)
+    ws.getRow(11).height = 26; for (let r = 12; r <= 25; r++) ws.getRow(r).height = 15;
+    const typeItems = ["ATR72-600", "ATR72-500"].map((t) => ({ label: t, n: m.type.get(t) || 0, color: TYPE_COLOR[t] }));
+    const typeN = typeItems.reduce((x, i) => x + i.n, 0), ranked = rankedSystems(m);
+    const tailItems = fleetTails(m).map((t) => ({ label: `No.${t}`, n: m.tail.get(t) || 0, color: TAIL_COLOR[t] || "#8593A5" }));
+    const place = async (svg, W, H, col, row) => wsImage(ws, wb, await svgToPng(svg, W, H), col, row, W, H);
+    const charts = [["เที่ยวบินตามแบบอากาศยาน", typeN ? xTypePie(typeItems) : null], ["เที่ยวบินตามหมายเลขอากาศยาน", typeN ? xTailPie(tailItems) : null], ["Defect / ข้อขัดข้อง (เรียงตามจำนวน)", ranked.length ? xBars(ranked) : null]];
+    for (let i = 0; i < charts.length; i++) {
+      const c1 = 2 + i * 8, c2 = c1 + 7, [t, svg] = charts[i];
+      card(11, c1, 25, c2); title(11, c1, c2, t);
+      if (svg) await place(svg, 420, 270, c1 - 1 + 0.08, 11.1);
+      else put(12, c1, 25, c2, "ไม่มีข้อมูลในช่วงนี้", { color: { argb: argb(XC.muted) } }, { horizontal: "center" });
+    }
+
+    // แนวโน้ม + สรุปภาพรวม (ข้อมูลทั้งหมด)
+    ws.getRow(27).height = 26; for (let r = 28; r <= 42; r++) ws.getRow(r).height = 15;
+    card(27, 2, 42, 18); title(27, 2, 18, "แนวโน้มอัตราข้อขัดข้อง (DEFECT RATE) · ข้อมูลทั้งหมด");
+    if (curSeries.length) await place(xTrend(curSeries), 900, 290, 1 + 0.08, 27.05);
+    card(27, 19, 42, 25); title(27, 19, 25, "สรุปภาพรวม · ข้อมูลทั้งหมด");
+    put(28, 19, 42, 25, [...$("overview").querySelectorAll("p")].map((p) => p.textContent).join("\n\n") || "ยังไม่มีข้อมูล", { size: 11 }, { vertical: "top", indent: 1 });
+
+    // ตาราง: ข้อขัดข้อง 7 วัน + สรุปตามระบบ
+    const R0 = 44, { list, clean } = recentList(b), recent = [...list.map((g) => [`${g.sys}${g.detail ? " : " + g.detail : ""}`, g.n]), ...(clean ? [[NO_DEFECT, clean]] : [])];
+    const sysRows = [...m.sys].sort((x, y) => y[1] - x[1]), body = Math.max(recent.length, sysRows.length, 1), rEnd = R0 + 1 + body;
+    ws.getRow(R0).height = 26; ws.getRow(R0 + 1).height = 20;
+    card(R0, 2, rEnd, 13); title(R0, 2, 13, `ข้อขัดข้องที่พบล่าสุด (7 วันย้อนหลังถึง ${dateTH(b)})`);
+    card(R0, 14, rEnd, 25); title(R0, 14, 25, "สรุปข้อขัดข้องตามระบบ");
+    const th = { size: 10, bold: true, color: { argb: argb(XC.muted) } }, td = { size: 10 };
+    put(R0 + 1, 2, R0 + 1, 11, "รายการข้อขัดข้อง", th, { indent: 1 }); put(R0 + 1, 12, R0 + 1, 13, "จำนวนครั้ง", th, { horizontal: "center" });
+    put(R0 + 1, 14, R0 + 1, 21, "ระบบ", th, { indent: 1 }); put(R0 + 1, 22, R0 + 1, 23, "เที่ยว", th, { horizontal: "center" }); put(R0 + 1, 24, R0 + 1, 25, "% ของเที่ยวที่พบ", th, { horizontal: "center" });
+    for (let i = 0; i < body; i++) {
+      const r = R0 + 2 + i, e = recent[i], y = sysRows[i];
+      put(r, 2, r, 11, e ? e[0] : (i === 0 ? "ไม่มีข้อมูลใน 7 วันนี้" : ""), td, { vertical: "top", indent: 1 });
+      put(r, 12, r, 13, e ? e[1] : "", td, { horizontal: "center", vertical: "top" });
+      put(r, 14, r, 21, y ? defectLabel(y[0]) : (i === 0 ? "ไม่พบข้อขัดข้องในช่วงนี้" : ""), td, { vertical: "top", indent: 1 });
+      put(r, 22, r, 23, y ? y[1] : "", td, { horizontal: "center", vertical: "top" });
+      put(r, 24, r, 25, y ? y[1] / m.defect : "", td, { horizontal: "center", vertical: "top" }).numFmt = "0.0%";
+      const lines = e ? String(e[0]).split("\n").reduce((n, t) => n + Math.max(1, Math.ceil(t.length / 62)), 0) : 1;
+      ws.getRow(r).height = Math.max(20, lines * 14.5 + 6);
+    }
+
+    // พื้นหลัง + สีการ์ด + ช่องว่างระหว่างการ์ด
+    const LAST_ROW = rEnd + 1; ws.getRow(LAST_ROW).height = 10;
+    for (let r = 1; r <= LAST_ROW; r++) for (let c = 1; c <= LAST_COL; c++) ws.getCell(r, c).fill = FILL(XC.bg);
+    for (const [r1, c1, r2, c2] of cards) for (let r = r1; r <= r2; r++) for (let c = c1; c <= c2; c++) {
+      const x = ws.getCell(r, c), edge = { style: "thick", color: { argb: argb(XC.bg) } }; x.fill = FILL(XC.card);
+      x.border = { ...(r === r1 ? { top: edge } : {}), ...(r === r2 ? { bottom: edge } : {}), ...(c === c1 ? { left: edge } : {}), ...(c === c2 ? { right: edge } : {}) };
+    }
+  }
+  function wsImage(ws, wb, png, col, row, W, H) {
+    ws.addImage(wb.addImage({ base64: png, extension: "png" }), { tl: { col, row }, ext: { width: W, height: H } });
+  }
+
   async function exportExcel() {
     if (!cur) return;
     const btn = $("xlsx"), label = btn.textContent;
@@ -381,6 +513,7 @@
     try {
       const ExcelJS = await loadExcelJS(), wb = new ExcelJS.Workbook(), { a, b, total: m } = cur;
       const head = (row) => row.eachCell((c) => { c.font = { bold: true }; c.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFE5EDF4" } }; c.alignment = { vertical: "middle", wrapText: true }; });
+      await addDashboardSheet(wb);
       const ws = wb.addWorksheet("สรุป");
       ws.columns = [{ width: 38 }, { width: 14 }, { width: 16 }, { width: 14 }];
       ws.addRow(["ระบบมอนิเตอร์ข้อขัดข้องอากาศยาน (AIRCRAFT DEFECT MONITORING)"]).font = { bold: true, size: 14 };
