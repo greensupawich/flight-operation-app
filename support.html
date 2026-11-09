@@ -207,6 +207,7 @@
       <span><i class="ly"></i>ทำแล้ว เซ็น/ส่ง ยังไม่ครบ <b>${cnt.yel}</b></span>
       <span><i class="lg"></i>ครบแล้ว / ไม่มีเอกสาร <b>${cnt.grn}</b></span>
       ${cnt[""] ? `<span>ยังไม่เลือกเอกสาร <b>${cnt[""]}</b></span>` : ""}
+      <span><s>ชื่อภารกิจ</s> = เลยวันมาแล้ว</span>
       <span>· ${list.length} รายการ${$("showAll").checked ? " (ทุกเดือน)" : ""}</span>`;
     $("rows").innerHTML = list.length ? list.map(rowHTML).join("")
       : `<tr><td colspan="11" class="empty">ยังไม่มีรายการ — กด "+ เพิ่มแถว"</td></tr>`;
