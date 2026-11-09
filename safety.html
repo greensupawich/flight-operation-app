@@ -268,7 +268,7 @@
       `<div class="row" data-tip="${esc(`${r.label}: ${r.n.toLocaleString()} เที่ยว`)}"><span>${esc(r.label)}</span><span class="tr"><span class="br${r.none ? " none" : ""}" style="width:${(r.n / max) * 100}%"></span></span><span class="v">${r.n.toLocaleString()}</span></div>`).join("") + `</div>`;
   }
 
-  let curSeries = [];
+  const ALL = aggregate("0000-01-01", "9999-12-31"), curSeries = ALL.series;
   function renderTrend() {
     const box = $("trend"), series = curSeries;
     if (!series.length) { box.innerHTML = `<div class="sd-empty">ไม่มีข้อมูลในช่วงนี้</div>`; return; }
@@ -308,21 +308,17 @@
     if (k === "fy") { const y = +t.slice(0, 4), fy = +t.slice(5, 7) >= 10 ? y : y - 1; return [`${fy}-10-01`, t]; }
     return [firstDataDate(), t];
   }
-  // ช่วงก่อนหน้าไว้เทียบ: เดือนเดียวกับวันที่ 1 → เดือนก่อนทั้งเดือน · เต็มเดือน → จำนวนเดือนเท่ากัน · อื่นๆ → จำนวนวันเท่ากัน
-  function prevRange(a, b) {
-    const ma = a.slice(0, 7), mb = b.slice(0, 7), first = a.endsWith("-01");
-    if (first && ma === mb) { const p = addMonths(ma, -1); return [`${p}-01`, monthEnd(p)]; }
-    if (first && b === monthEnd(mb)) { const [y1, m1] = ma.split("-").map(Number), [y2, m2] = mb.split("-").map(Number), n = (y2 - y1) * 12 + m2 - m1 + 1; return [`${addMonths(ma, -n)}-01`, monthEnd(addMonths(mb, -n))]; }
-    const n = dayCount(a, b); return [addDays(a, -n), addDays(a, -1)];
-  }
-  function overviewHTML(a, b, m) {
-    if (!m.flights) return `<div class="sd-empty">ช่วง ${esc(rangeTH(a, b))} ไม่มีเที่ยวบิน</div>`;
-    const rate = m.defect / m.flights, ps = [], [pa, pb] = prevRange(a, b), prev = aggregate(pa, pb).total;
-    let trend = "";
-    if (prev.flights) { const pr = prev.defect / prev.flights, d = (rate - pr) * 100; const was = `ช่วงก่อนหน้า (${esc(rangeTH(pa, pb))}: ${pct(pr)})`; trend = Math.abs(d) < 0.05 ? ` เท่ากับ${was}` : ` ${d > 0 ? "▲ เพิ่มขึ้น" : "▼ ลดลง"} ${Math.abs(d).toFixed(1)} จุดจาก${was}`; }
-    ps.push(`ช่วง <b>${esc(rangeTH(a, b))}</b> บิน <b>${m.flights.toLocaleString()}</b> เที่ยว รวม <b>${num(m.hours)}</b> ชม. พบข้อขัดข้อง <b>${m.defect.toLocaleString()}</b> เที่ยว คิดเป็น <b>${pct(rate)}</b>${trend}`);
+  // สรุปภาพรวม + แนวโน้ม: ใช้ข้อมูลทั้งหมดเสมอ ไม่เปลี่ยนตามช่วงวันที่ที่เลือก
+  function overviewAll() {
+    const m = ALL.total, s = ALL.series;
+    if (!m.flights) return `<div class="sd-empty">ยังไม่มีข้อมูล</div>`;
+    const ps = [`ข้อมูลทั้งหมด <b>${esc(monthTH(s[0].ym))} – ${esc(monthTH(s[s.length - 1].ym))}</b> บิน <b>${m.flights.toLocaleString()}</b> เที่ยว รวม <b>${num(m.hours)}</b> ชม. พบข้อขัดข้อง <b>${m.defect.toLocaleString()}</b> เที่ยว คิดเป็น <b>${pct(m.defect / m.flights)}</b>`];
+    const withData = s.filter((x) => x.rate != null), last = withData[withData.length - 1], prev = withData[withData.length - 2];
+    if (last) { let trend = "";
+      if (prev) { const d = (last.rate - prev.rate) * 100; trend = Math.abs(d) < 0.05 ? ` เท่ากับ ${esc(monthTH(prev.ym))}` : ` ${d > 0 ? "▲ เพิ่มขึ้น" : "▼ ลดลง"} ${Math.abs(d).toFixed(1)} จุดจาก ${esc(monthTH(prev.ym))} (${pct(prev.rate)})`; }
+      ps.push(`เดือนล่าสุด <b>${esc(monthTH(last.ym))}</b> Defect Rate <b>${pct(last.rate)}</b> (${last.defect} จาก ${last.flights} เที่ยว)${trend}`); }
     const top = [...m.sys].sort((x, y) => y[1] - x[1]).slice(0, 3);
-    if (top.length) ps.push(`ระบบที่พบมากสุด: ${top.map(([s, n]) => `<b>${esc(defectLabel(s))}</b> (${n})`).join(" · ")}`);
+    if (top.length) ps.push(`ระบบที่พบมากสุด: ${top.map(([k, n]) => `<b>${esc(defectLabel(k))}</b> (${n})`).join(" · ")}`);
     const t = [...m.tailDefect].sort((x, y) => y[1] - x[1])[0];
     if (t) ps.push(`เครื่องที่พบข้อขัดข้องมากสุด: <b>No.${esc(t[0])}</b> (${t[1]} จาก ${m.tail.get(t[0]) || 0} เที่ยว)`);
     if (m.unspecified) ps.push(`มีรายงาน ${m.unspecified} เที่ยวที่ยังไม่ระบุระบบ (นับเป็นไม่พบข้อขัดข้อง)`);
@@ -374,11 +370,6 @@
     const ranked = rankedSystems(m);
     $("allSys").innerHTML = ranked.length ? barsHTML(ranked, { tight: true }) : `<div class="sd-empty">ไม่มีข้อมูลในช่วงนี้</div>`;
 
-    $("overview").innerHTML = overviewHTML(a, b, m);
-    curSeries = cur.series;
-    renderTrend();
-    $("trendTable").innerHTML = `<table class="sdt"><thead><tr><th>เดือน</th><th class="c">เที่ยวบินรวม</th><th class="c">ข้อขัดข้อง</th><th class="c">Defect Rate</th></tr></thead><tbody>` +
-      curSeries.map((s) => `<tr><td>${esc(monthTH(s.ym))}</td><td class="c">${s.flights}</td><td class="c">${s.defect}</td><td class="c">${s.rate == null ? "—" : pct(s.rate)}</td></tr>`).join("") + `</tbody></table>`;
   }
 
   // ---------- Export Excel (ตามช่วงวันที่ที่เลือก) ----------
@@ -388,7 +379,7 @@
     const btn = $("xlsx"), label = btn.textContent;
     btn.disabled = true; btn.textContent = "กำลังสร้างไฟล์…";
     try {
-      const ExcelJS = await loadExcelJS(), wb = new ExcelJS.Workbook(), { a, b, total: m, series } = cur;
+      const ExcelJS = await loadExcelJS(), wb = new ExcelJS.Workbook(), { a, b, total: m } = cur;
       const head = (row) => row.eachCell((c) => { c.font = { bold: true }; c.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFE5EDF4" } }; c.alignment = { vertical: "middle", wrapText: true }; });
       const ws = wb.addWorksheet("สรุป");
       ws.columns = [{ width: 38 }, { width: 14 }, { width: 16 }, { width: 14 }];
@@ -411,7 +402,7 @@
       block("เที่ยวบินตามแบบอากาศยาน", ["แบบ", "เที่ยวบิน", "สัดส่วน"], ["ATR72-600", "ATR72-500"].map((t) => [t, m.type.get(t) || 0, of(m.type.get(t) || 0, typeTotal)]), { 3: "0.0%" });
       block("เที่ยวบินตามหมายเลขอากาศยาน", ["หมายเลข", "เที่ยวบิน", "สัดส่วน"], fleetTails(m).map((t) => [`No.${t}`, m.tail.get(t) || 0, of(m.tail.get(t) || 0, typeTotal)]), { 3: "0.0%" });
       block("สรุปข้อขัดข้องตามระบบ", ["ระบบ", "เที่ยวบิน", "% ของเที่ยวที่พบ"], [...m.sys].sort((x, y) => y[1] - x[1]).map(([s, n]) => [defectLabel(s), n, of(n, m.defect)]), { 3: "0.0%" });
-      block("แนวโน้มอัตราข้อขัดข้องรายเดือน", ["เดือน", "เที่ยวบินรวม", "ข้อขัดข้อง (เที่ยว)", "Defect Rate"], series.map((s) => [monthTH(s.ym), s.flights, s.defect, s.rate]), { 4: "0.0%" });
+      block("แนวโน้มอัตราข้อขัดข้องรายเดือน (ข้อมูลทั้งหมด)", ["เดือน", "เที่ยวบินรวม", "ข้อขัดข้อง (เที่ยว)", "Defect Rate"], curSeries.map((s) => [monthTH(s.ym), s.flights, s.defect, s.rate]), { 4: "0.0%" });
 
       const wf = wb.addWorksheet("รายการเที่ยวบิน", { views: [{ state: "frozen", ySplit: 1 }] });
       wf.columns = [{ width: 12 }, { width: 13 }, { width: 10 }, { width: 8 }, { width: 34 }, { width: 62 }, { width: 15 }];
@@ -452,6 +443,10 @@
   $("xlsx").addEventListener("click", exportExcel);
   let rz; new ResizeObserver(() => { clearTimeout(rz); rz = setTimeout(renderTrend, 120); }).observe($("trend"));
   setRange(preset("month"));
+  renderTrend();
+  $("overview").innerHTML = overviewAll();
+  $("trendTable").innerHTML = `<table class="sdt"><thead><tr><th>เดือน</th><th class="c">เที่ยวบินรวม</th><th class="c">ข้อขัดข้อง</th><th class="c">Defect Rate</th></tr></thead><tbody>` +
+    curSeries.map((s) => `<tr><td>${esc(monthTH(s.ym))}</td><td class="c">${s.flights}</td><td class="c">${s.defect}</td><td class="c">${s.rate == null ? "—" : pct(s.rate)}</td></tr>`).join("") + `</tbody></table>`;
 </script>
 </body>
 </html>
