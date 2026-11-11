@@ -223,6 +223,13 @@ export function missionNameField(list) {
   const l = (list || []).map((x) => String(x || "").trim()).filter(Boolean);
   return l.length <= 1 ? (l[0] || "") : l.map((x, i) => `(${i + 1}) ${x}`).join(" / ");
 }
+// ป้ายในช่อง STBY หน้าหลัก = ชื่อภารกิจที่กรอก (ผู้ใช้ขอ 11 พ.ย. 69) · ตัดคำ "STBY" นำหน้าออก (หัวช่องมีแล้ว)
+//  ชื่อว่าง / มีแค่ "STBY" → ใช้แบบเครื่อง หรือ "ATR72-500/600"
+export function stbyLabel(m) {
+  const l = parseMissionNames(m).map((x) => x.replace(/^ST\s*-?\s*BY\b[\s\-:·]*/i, "").trim()).filter(Boolean);
+  if (!l.length) return String(m?.aircraft?.type || "").trim() || "ATR72-500/600";
+  return l.length > 1 ? l.map((x, i) => `(${i + 1}) ${x}`).join(" / ") : l[0];
+}
 // บรรทัดที่แสดงในช่องภารกิจ (การ์ด / Excel) · หลายภารกิจ → ขึ้นต้น (1) (2) …
 export const missionNameLines = (m) => {
   const l = parseMissionNames(m);

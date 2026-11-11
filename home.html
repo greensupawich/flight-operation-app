@@ -73,9 +73,10 @@
 
   /* ---- บล็อก STBY ---- */
   .acp-stby{border-top:2px solid var(--line-strong);background:var(--surface-2);padding:8px 10px}
-  .acp-stby .hd{display:flex;align-items:center;gap:8px;font-weight:700;font-size:12.5px;margin-bottom:5px}
+  .acp-stby .hd{display:flex;flex-wrap:wrap;align-items:center;gap:4px 8px;font-weight:700;font-size:12.5px;margin-bottom:5px}
   .acp-stby .hd .tag{font-family:"IBM Plex Mono",monospace;background:#fff;color:#16202E;
                      border:1px solid var(--line-strong);border-radius:5px;padding:1px 7px;font-size:11px}
+  .acp-stby .hd .tag.nm{min-width:0;overflow-wrap:anywhere}
   .acp-stby .cw{display:grid;grid-template-columns:38px 1fr;gap:1px 8px;font-size:11.5px}
   .acp-stby .cw .rl{font-family:"IBM Plex Mono",monospace;font-weight:700;color:var(--muted)}
   .acp-stby .poc{margin-top:5px;font-size:11px;color:var(--muted)}
@@ -176,7 +177,7 @@
 <script type="module">
   import { getCurrentProfile, canPlan } from "./js/auth.js";
   import { renderTopbar } from "./js/ui.js";
-  import { loadMissionsByDate, reportOf, loadCrewRoster, DEFAULT_CREW_SLOTS } from "./js/missions.js";
+  import { loadMissionsByDate, reportOf, loadCrewRoster, DEFAULT_CREW_SLOTS, stbyLabel } from "./js/missions.js";
   import { sheetHTML, orderMissions, hasCustomOrder, wireReorder, resetOrder, wireSheetDelete } from "./js/mission-sheet.js";
   import { loadAircraft, loadDefects, loadChecks, boardAsOf } from "./js/status.js";
   import { supabase } from "./js/supabase.js";
@@ -271,9 +272,9 @@
           return `<div class="rl">${r}</div><div>${list.map(c => `<span class="ed-c" data-crew="${c.id}">${esc(c.crew_name.trim())}</span>`).join("  ·  ")}
                     <span class="ed-c ed-plus" data-crew-add="${r}" title="เพิ่ม ${r}">+</span></div>`;
         }).join("") + (planner ? `<div class="ed-newline"><span class="ed-c" data-crew-new>+ เพิ่มลูกเรือ</span></div>` : "");
-        const acType = m.aircraft ? esc(m.aircraft.type || "ATR72-500/600") : "ATR72-500/600";
+        const label = esc(stbyLabel(m));                              // ป้าย = ชื่อภารกิจที่กรอก
         return `<div class="acp-stby" data-mid="${m.id}">
-          <div class="hd">${m.kind === "stby_dechochai" ? "STBY เดโชชัย" : "STBY"} <span class="tag">${acType}</span> <span class="tag">Callsign ${esc(m.callsign || "-")}</span></div>
+          <div class="hd">${m.kind === "stby_dechochai" ? "STBY เดโชชัย" : "STBY"} <span class="tag nm">${label}</span> <span class="tag">Callsign ${esc(m.callsign || "-")}</span></div>
           ${lines ? `<div class="cw">${lines}</div>` : `<div class="poc">— ยังไม่ระบุลูกเรือ —</div>`}
         </div>`;
       }).join("");
