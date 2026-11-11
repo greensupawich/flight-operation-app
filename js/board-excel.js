@@ -7,7 +7,7 @@
 //  • ไลบรารี ExcelJS โหลดเมื่อกดปุ่มเท่านั้น (pin เวอร์ชัน + SRI)
 // =====================================================================
 import { orderMissions } from "./mission-sheet.js";
-import { pocLines, missionNameLines } from "./missions.js";
+import { pocLines, missionNameLines, stbyLabel } from "./missions.js";
 
 const EXCELJS_URL = new URL("../vendor/exceljs-4.4.0.min.js", import.meta.url).href;   // เก็บในระบบเอง (vendor/README.md)
 const EXCELJS_SRI = "sha384-Pqp51FUN2/qzfxZxBCtF0stpc9ONI6MYZpVqmo8m20SoaQCzf+arZvACkLkirlPz";
@@ -227,10 +227,9 @@ function fillPanel(ws, aircraft, defMap, chkMap, stLabel) {
 function fillStby(ws, stbys) {
   const m = stbys[stbys.length - 1];
   if (!m) return;
-  const type = clean(m.aircraft?.type) || "ATR72-500/600";
-  const title = /^STBY/i.test(clean(m.mission_name)) ? clean(m.mission_name)       // ชื่อจากกระดาน เช่น "STBY ATR72-600"
-    : m.kind === "stby_dechochai" ? `STBY เดโชชัย ${type}` : `STBY ${type}`;
+  const title = `STBY ${clean(stbyLabel(m))}`;          // ป้ายเดียวกับช่อง STBY หน้าหลัก (ชื่อภารกิจที่กรอก · 11 พ.ย. 69)
   ws.getCell("A32").value = title;
+  ws.getCell("A32").alignment = { ...ws.getCell("A32").alignment, shrinkToFit: true };   // ชื่อยาว → ย่อให้พอดี A32:B32
   ws.getCell("C32").value = "Callsign";
   ws.getCell("D32").value = clean(m.callsign) || null;
   const rows = ROLE_ORDER.map((role) => ({ role, names: namesBy(m.mission_crew || [], role) }))
