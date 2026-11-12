@@ -1,7 +1,7 @@
 // =====================================================================
 //  missions.js — ปฏิทินภารกิจ + อ่าน/เขียนภารกิจ + ลูกเรือ
 // =====================================================================
-import { supabase } from "./supabase.js";
+import { supabase, SUPABASE_URL, SUPABASE_ANON_KEY } from "./supabase.js";
 
 // ---------- ชนิดภารกิจ (สีตามกระดานจัดบินจริง) ----------
 export const KINDS = {
@@ -115,7 +115,7 @@ export async function loadMissionsByDate(dateStr) {
     .eq("mission_date", dateStr)
     .order("created_at", { ascending: true });
   if (error) { console.error(error); return []; }
-  return data || [];
+  return (data || []).filter((m) => !pendingDel.has(m.id));      // ที่กำลังรอลบ (กดเลิกทำได้) ไม่แสดง
 }
 
 export async function getMission(id) {
@@ -179,6 +179,49 @@ export async function deleteMission(id) {
   const { error } = await supabase.from("missions").delete().eq("id", id);
   return error;
 }
+
+// ---------- ลบภารกิจแบบเลิกทำได้ (หน้าหลัก / หน้าภารกิจรายวัน · ผู้ใช้ขอ 12 พ.ย. 69) ----------
+//  กดลบ → การ์ดหายทันที แต่ลบจริงหลัง UNDO_MS · กด "เลิกทำ" ก่อนครบ = ไม่ลบเลย (ไม่ต้องกู้ข้อมูล)
+//  ปิด/ออกจากหน้าก่อนครบเวลา → ลบทันทีด้วย fetch keepalive (ไม่ทันจริง = ภารกิจยังอยู่ ไม่หาย)
+export const UNDO_MS = 10000;
+const pendingDel = new Map();                       // id → { timer, url, headers }
+export const isPendingDelete = (id) => pendingDel.has(id);
+export async function scheduleDeleteMission(id, onCommitted) {
+  const { data } = await supabase.auth.getSession();
+  const p = { url: `${SUPABASE_URL}/rest/v1/missions?id=eq.${encodeURIComponent(id)}`,
+              headers: { apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${data?.session?.access_token || SUPABASE_ANON_KEY}` } };
+  p.timer = setTimeout(async () => {
+    if (!pendingDel.has(id)) return;
+    pendingDel.delete(id);
+    onCommitted?.(await deleteMission(id));
+  }, UNDO_MS);
+  pendingDel.set(id, p);
+}
+// คืน true = ยกเลิกการลบทัน · false = ลบไปแล้ว
+export function undoDeleteMission(id) {
+  const p = pendingDel.get(id);
+  if (!p) return false;
+  clearTimeout(p.timer);
+  pendingDel.delete(id);
+  return true;
+}
+// กดลิงก์ไปหน้าอื่นระหว่างรอ → ลบให้เสร็จก่อนแล้วค่อยเปลี่ยนหน้า (ชัวร์กว่า keepalive)
+document.addEventListener("click", async (e) => {
+  const a = e.target.closest?.("a[href]");
+  if (!a || !pendingDel.size || e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey
+      || a.target === "_blank" || a.hasAttribute("download") || a.getAttribute("href").startsWith("#")) return;
+  e.preventDefault();
+  const ids = [...pendingDel.keys()];
+  ids.forEach((id) => clearTimeout(pendingDel.get(id).timer));
+  pendingDel.clear();
+  await Promise.all(ids.map((id) => deleteMission(id)));
+  location.href = a.href;
+}, true);
+// ปิดแท็บ / ออกจากหน้าแบบอื่น → ส่งคำสั่งลบแบบ keepalive (ไม่ทัน = ภารกิจยังอยู่)
+addEventListener("pagehide", () => {
+  pendingDel.forEach((p) => { try { fetch(p.url, { method: "DELETE", headers: p.headers, keepalive: true }).catch(() => {}); } catch {} });
+  pendingDel.clear();
+});
 
 // ---------- เครื่องบิน (รายการตายตัว 6 ลำ — seed ไว้ใน migration_02) ----------
 export async function loadAircraft() {

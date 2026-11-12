@@ -29,8 +29,8 @@ export const IS_PROD = /\.github\.io$/.test(location.hostname);   // เปิ�
 // เปิดจากเครื่อง (localhost): ใช้ DEV ถ้าตั้งไว้ · ยังไม่ตั้ง → ใช้ฐานจริง (แถบเมนูขึ้นป้ายแดงเตือน)
 export const DB_ENV = IS_PROD ? "prod" : (DEV.url && DEV.key ? "dev" : "prod-local");
 const CFG = DB_ENV === "dev" ? DEV : PROD;
-const SUPABASE_URL = CFG.url;
-const SUPABASE_ANON_KEY = CFG.key;
+export const SUPABASE_URL = CFG.url;
+export const SUPABASE_ANON_KEY = CFG.key;           // anon key เปิดเผยได้ (สิทธิ์จริงคุมด้วย RLS) · export ให้ลบภารกิจตอนปิดหน้า (missions.js)
 
 // โหลด SDK จาก CDN แบบ ESM แล้ว export client ให้ไฟล์อื่นใช้
 // pin เวอร์ชันแน่นอน (กัน CDN ส่งโค้ดใหม่ที่ไม่ได้ตรวจมาแทน) — อัปเดตเมื่อจำเป็นเท่านั้น

@@ -2,7 +2,7 @@
 //  mission-sheet.js — วาดการ์ดภารกิจแบบกระดานจัดบิน (ใช้ร่วม: หน้าหลัก + หน้าภารกิจรายวัน)
 //  คู่กับ css/sheet.css
 // =====================================================================
-import { KINDS, DEFAULT_KIND, kindStyle, PILOT_ROLES, OTHER_ROLES, acLabel, esc, reportOf, deleteMission, pocLines, missionNameLines, DEFAULT_CREW_SLOTS } from "./missions.js";
+import { KINDS, DEFAULT_KIND, kindStyle, PILOT_ROLES, OTHER_ROLES, acLabel, esc, reportOf, scheduleDeleteMission, undoDeleteMission, UNDO_MS, pocLines, missionNameLines, DEFAULT_CREW_SLOTS } from "./missions.js";
 import { supabase } from "./supabase.js";
 
 // ---------- แถวลูกเรือ ----------
@@ -44,7 +44,7 @@ export function sheetHTML(m, { planner = false, edit = false } = {}) {
       <span style="font-weight:700;font-size:13px">${esc(m.callsign || "-")}</span>
       <div class="sheet-actions">
         ${planner ? `<a class="btn sm" href="mission.html?id=${m.id}">แก้ไข</a>
-                     <button class="btn sm" data-del style="color:var(--crit)">ลบ</button>` : ``}
+                     <button class="btn sm" data-del data-name="${esc(missionNameLines(m).join(" / ") || m.callsign || "")}" style="color:var(--crit)">ลบ</button>` : ``}
         ${state === "cancelled"
           ? `<a class="btn sm rep-cancel" href="report.html?mission=${m.id}" title="ดู/แก้รายงาน">✕ ยกเลิก</a>`
           : state === "reported"
@@ -105,10 +105,48 @@ export function wireSheetDelete(container, onDone) {
       const id = e.target.closest(".sheet").dataset.id;
       if (!confirm("ลบภารกิจนี้? (ลบลูกเรือและรายงานที่ผูกอยู่ด้วย)")) return;
       b.disabled = true;
-      const err = await deleteMission(id);
-      if (err) { alert("ลบไม่สำเร็จ: " + err.message); b.disabled = false; }
-      else onDone();
+      // ลบแบบเลิกทำได้: การ์ดหายทันที · ลบจริงหลัง UNDO_MS (missions.js scheduleDeleteMission)
+      let t = null;
+      await scheduleDeleteMission(id, (err) => {
+        t?.close();
+        if (err) alert("ลบไม่สำเร็จ: " + err.message + " — ภารกิจยังอยู่");
+        onDone();
+      });
+      onDone();
+      t = undoToast(b.dataset.name ? `ลบภารกิจ "${b.dataset.name}" แล้ว` : "ลบภารกิจแล้ว", () => {
+        if (undoDeleteMission(id)) { onDone(); return true; }
+        return false;
+      });
     }));
+}
+
+// ---------- แถบ "เลิกทำ" มุมล่างจอ (ซ้อนกันได้หลายรายการ) ----------
+function undoToast(text, onUndo) {
+  let host = document.getElementById("undoHost");
+  if (!host) {
+    host = document.createElement("div");
+    host.id = "undoHost";
+    host.setAttribute("role", "status");
+    host.style.cssText = "position:fixed;left:50%;bottom:18px;transform:translateX(-50%);z-index:1000;display:flex;flex-direction:column;gap:8px;align-items:center;max-width:calc(100vw - 32px)";
+    document.body.append(host);
+  }
+  const el = document.createElement("div");
+  el.style.cssText = "display:flex;align-items:center;gap:12px;background:#16202E;color:#fff;border-radius:10px;padding:10px 14px;box-shadow:0 6px 20px rgba(0,0,0,.25);font-size:13.5px;max-width:100%";
+  el.innerHTML = `<span class="tx" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0"></span>
+    <span class="cd" style="color:#A0AABF;font-variant-numeric:tabular-nums"></span>
+    <button type="button" style="background:#fff;color:#16202E;border:0;border-radius:6px;padding:5px 12px;font-weight:700;cursor:pointer;white-space:nowrap">↶ เลิกทำ</button>`;
+  el.querySelector(".tx").textContent = text;
+  const end = Date.now() + UNDO_MS, cd = el.querySelector(".cd");
+  const tick = () => { cd.textContent = `${Math.max(0, Math.ceil((end - Date.now()) / 1000))} วิ`; };
+  tick();
+  const iv = setInterval(tick, 250);
+  const close = () => { clearInterval(iv); el.remove(); };
+  el.querySelector("button").addEventListener("click", () => {
+    if (!onUndo()) { cd.textContent = ""; el.querySelector(".tx").textContent = "ลบไปแล้ว — เลิกทำไม่ทัน"; setTimeout(close, 2500); return; }
+    close();
+  });
+  host.append(el);
+  return { close };
 }
 
 // =====================================================================
