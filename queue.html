@@ -139,6 +139,10 @@
   table.dgrid.hs td.hs-man::after,.hs-legend-man::after{content:"";position:absolute;top:0;right:0;border-style:solid;
        border-width:0 9px 9px 0;border-color:transparent #D32F2F transparent transparent}
   .hs-legend-man{position:relative;display:inline-block;background:var(--q-hol);padding:0 12px 0 6px;border-radius:3px}
+  /* ข้อความผล/ข้อผิดพลาดของใบรายชื่อ: ตารางยาว → ติดขอบล่างจอให้เห็นเสมอ */
+  #hsMsg{position:sticky;bottom:0;z-index:3;background:var(--surface);border:1px solid var(--line-strong);border-radius:8px;
+         padding:6px 10px;margin-top:6px;font-weight:600;box-shadow:0 -2px 8px rgba(0,0,0,.08)}
+  #hsMsg:empty{display:none}
   table.dgrid.hs td.hs-add{color:var(--faint);font-weight:700}
   table.dgrid.hs td.dg-ed:hover{background:var(--primary-soft)}
   table.dgrid.hs td.hs-base{min-width:84px;white-space:nowrap}
@@ -763,7 +767,9 @@
       return { name: "คิววันหยุด", rows, widths: [22, 8, ...Array(rs.ncol).fill(10), 10, 7, 11, 22] };
     }
     if (planner) {
-      const hsMsg = (t, ok) => { const el = document.getElementById("hsMsg"); el.style.color = ok ? "var(--good)" : "var(--crit)"; el.textContent = t; };
+      let hsMsgT = 0;                                        // ข้อความติดขอบล่างจอ → หายเอง (สำเร็จ 4 วิ · ผิดพลาด 12 วิ)
+      const hsMsg = (t, ok) => { const el = document.getElementById("hsMsg"); el.style.color = ok ? "var(--good)" : "var(--crit)"; el.textContent = t;
+        clearTimeout(hsMsgT); hsMsgT = setTimeout(() => { if (el.textContent === t) el.textContent = ""; }, ok ? 4000 : 12000); };
       holSheetEl.addEventListener("input", (e) => { if (e.target.id === "hsFind") renderHolSheet(); });
       // − / + จำนวนครั้งตั้งต้น (admin)
       holSheetEl.addEventListener("click", async (e) => {
@@ -790,7 +796,9 @@
       holSheetEl.addEventListener("click", (e) => {
         const td = e.target.closest("td.dg-c.dg-ed"); if (!td || td.querySelector("input")) return;
         const old = td.dataset.d, id = td.closest("tr").dataset.id;
-        td.innerHTML = `<input type="date" value="${old}" max="${todayStr}">`;
+        // ช่วงที่เพิ่มได้: หลังวันล่าสุดของตั้งต้น (หรือวันเริ่มนับคิว) ถึงวันนี้ → ปฏิทินเลือกวันนอกช่วงไม่ได้ (ผู้ใช้เจอ 12 พ.ย. 69)
+        const bl = (holData.count.get(id) || {}).last, minD = bl ? addDays(bl, 1) : HOLIDAY_QUEUE_START;
+        td.innerHTML = `<input type="date" value="${old}" min="${minD}" max="${todayStr}">`;
         const inp = td.firstElementChild; inp.focus(); try { inp.showPicker?.(); } catch {}
         let done = false;
         const yOk = (v) => { const y = +v.slice(0, 4); return y >= 2000 && y <= now.getFullYear() + 1; };
@@ -803,6 +811,7 @@
           if (v) {
             const b = holData.count.get(id) || { last: null }, r = holRanks.get(id);
             const why = v > todayStr ? "เพิ่มได้ถึงวันนี้เท่านั้น"
+              : !b.last && v < minD ? `ก่อนวันเริ่มนับคิววันหยุด (${thS(minD)})`
               : b.last && v <= b.last ? `วันที่นี้อยู่ในจำนวนตั้งต้นแล้ว (ตั้งต้นถึง ${thS(b.last)}) — ${baseAdmin ? "ใช้ − / + ที่คอลัมน์ ช่องว่าง แทน" : "ให้ admin ปรับจำนวนช่องว่างแทน"}`
               : (holData.base.get(id) || []).includes(v) || r.trips.some(t => t.includes(v)) ? `มีวันที่ ${thS(v)} อยู่แล้ว` : "";
             if (why) { hsMsg(why, false); return renderHolSheet(); }
