@@ -71,6 +71,20 @@
   .acp-chk .nm{font-family:"IBM Plex Mono",monospace;font-weight:700;color:var(--primary);min-width:46px}
   .acp-chk .due{color:var(--ink)}
 
+  /* ---- ภารกิจที่ลบ (กู้คืนจาก log · migration_62) ---- */
+  dialog.trash{border:1px solid var(--line-strong);border-radius:12px;padding:0;width:min(760px,calc(100vw - 32px));max-height:min(80vh,720px);
+               background:var(--surface);color:var(--ink);box-shadow:0 12px 40px rgba(0,0,0,.25)}
+  dialog.trash::backdrop{background:rgba(10,16,28,.45)}
+  dialog.trash .hd{display:flex;align-items:center;gap:10px;padding:12px 16px;border-bottom:1px solid var(--line);position:sticky;top:0;background:var(--surface)}
+  dialog.trash .hd b{flex:1}
+  dialog.trash .bd{padding:6px 16px 14px;overflow:auto}
+  dialog.trash .note{font-size:12px;color:var(--muted);margin:8px 0}
+  dialog.trash .it{display:grid;grid-template-columns:1fr auto;gap:4px 12px;align-items:center;padding:9px 0;border-bottom:1px solid var(--line)}
+  dialog.trash .it .nm{font-weight:600;overflow-wrap:anywhere}
+  dialog.trash .it .meta{font-size:12px;color:var(--muted);grid-column:1}
+  dialog.trash .it .act{grid-column:2;grid-row:1 / span 2}
+  dialog.trash .msg{font-size:12.5px;min-height:18px;margin-top:6px}
+
   /* ---- บล็อก STBY ---- */
   .acp-stby{border-top:2px solid var(--line-strong);background:var(--surface-2);padding:8px 10px}
   .acp-stby .hd{display:flex;flex-wrap:wrap;align-items:center;gap:4px 8px;font-weight:700;font-size:12.5px;margin-bottom:5px}
@@ -161,6 +175,7 @@
         <button class="btn sm ghost" id="repBtn" title="ข้อความรายงานภารกิจของวันที่ดูอยู่ สำหรับคัดลอกไปรายงานต่อ">📝 รายงานประจำวัน</button>
         <button class="btn sm ghost" id="sheetBtn" title="ตารางภารกิจประจำวัน (ฟอร์มรวมทุกฝูง) สำหรับคัดลอกไปวางใน Excel / Google Sheets">📋 ตารางภารกิจประจำวัน</button>
         <a class="btn sm ghost" href="status.html">สถานภาพเครื่อง</a>
+        <button class="btn sm ghost" id="trashBtn" hidden title="ภารกิจที่ลบไปแล้ว — กู้คืนได้">🗑 ภารกิจที่ลบ</button>
         <a class="btn sm primary" id="addBtn" href="#" hidden>+ เพิ่มภารกิจ</a>
       </div>
     </div>
@@ -483,6 +498,52 @@
       if (!lastData) return;
       openDailySheet({ title: document.getElementById("title").textContent, missions: lastData.missions, aircraft: lastData.aircraft });
     });
+
+    // ---- 🗑 ภารกิจที่ลบ: กู้คืนจาก audit_log (migration_62 · ผู้ใช้ขอ 12 พ.ย. 69) ----
+    //  ลบภายใน 10 วิ ใช้ปุ่ม "เลิกทำ" · เกินนั้นกู้ที่นี่ได้ (ภารกิจ + ลูกเรือ/ขาบิน/รายงาน ณ เวลาที่ลบ)
+    if (planner) {
+      const tb = document.getElementById("trashBtn");
+      tb.hidden = false;
+      const dlg = document.createElement("dialog");
+      dlg.className = "trash";
+      dlg.innerHTML = `<div class="hd"><b>🗑 ภารกิจที่ลบ</b><button type="button" class="btn sm ghost" data-close>ปิด</button></div>
+        <div class="bd"><p class="note">กู้คืนได้ทั้งภารกิจ ลูกเรือ ขาบิน และรายงาน ตามสภาพตอนที่ลบ · เก็บประวัติตั้งแต่ 14 ต.ค. 69</p>
+          <div class="msg" id="trMsg"></div><div id="trList">กำลังโหลด…</div></div>`;
+      document.body.append(dlg);
+      const trMsg = (t, ok) => { const m = dlg.querySelector("#trMsg"); m.style.color = ok ? "var(--good)" : "var(--crit)"; m.textContent = t; };
+      const thDT = (iso) => new Date(iso).toLocaleString("th-TH", { timeZone: "Asia/Bangkok", day: "numeric", month: "short", year: "2-digit", hour: "2-digit", minute: "2-digit" });
+      const thD = (d) => { const [y, mo, da] = d.split("-").map(Number); return `${da} ${TH_MONTH[mo - 1]} ${y + 543}`; };
+      async function loadTrash() {
+        const box = dlg.querySelector("#trList");
+        const { data, error } = await supabase.rpc("list_deleted_missions", { p_limit: 100 });
+        if (error) { box.textContent = /list_deleted_missions|schema cache|Could not find/i.test(error.message) ? "ยังไม่ได้รัน migration_62" : "โหลดไม่สำเร็จ: " + error.message; return; }
+        box.innerHTML = (data || []).length ? data.map((r) => `<div class="it">
+            <div class="nm">${esc(r.mission_name || "(ไม่มีชื่อ)")} <span class="muted" style="font-weight:400">· ${esc(r.callsign || "-")}</span></div>
+            <div class="meta">ภารกิจวันที่ ${r.mission_date ? thD(r.mission_date) : "-"} · ลูกเรือ ${r.crew_count} คน${r.other_count ? ` · ข้อมูลอื่น ${r.other_count} รายการ` : ""}
+              · ลบเมื่อ ${thDT(r.deleted_at)} โดย ${esc(r.deleted_by)}</div>
+            <div class="act">${r.restorable ? `<button type="button" class="btn sm" data-restore="${r.audit_id}" data-date="${r.mission_date || ""}">↶ กู้คืน</button>`
+              : `<span class="muted" style="font-size:12px">กู้แล้ว / มีอยู่</span>`}</div></div>`).join("")
+          : `<p class="note">ยังไม่มีภารกิจที่ถูกลบ</p>`;
+      }
+      tb.addEventListener("click", () => { trMsg(""); dlg.showModal(); loadTrash(); });
+      dlg.addEventListener("click", async (e) => {
+        if (e.target === dlg || e.target.closest("[data-close]")) return dlg.close();
+        const b = e.target.closest("[data-restore]"); if (!b) return;
+        const name = b.closest(".it").querySelector(".nm").textContent.trim();
+        if (!confirm(`กู้คืนภารกิจ "${name}"?`)) return;
+        b.disabled = true;
+        const { error } = await supabase.rpc("restore_deleted_mission", { p_audit_id: Number(b.dataset.restore) });
+        if (error) { b.disabled = false; return trMsg("กู้คืนไม่สำเร็จ: " + error.message, false); }
+        trMsg(`กู้คืน "${name}" แล้ว`, true);
+        await loadTrash();
+        const d = b.dataset.date;
+        if (d && d !== date) {                              // ภารกิจอยู่วันอื่น → พาไปวันนั้น
+          const [y, mo, da] = d.split("-").map(Number);
+          setView(new Date(y, mo - 1, da));
+        }
+        refresh();
+      });
+    }
 
     // ---- Export Excel: ฟอร์มกระดานจัดบินเดิม (js/board-excel.js) ----
     document.getElementById("xlsxBtn").addEventListener("click", async (e) => {
