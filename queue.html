@@ -143,6 +143,8 @@
   #hsMsg{position:sticky;bottom:0;z-index:3;background:var(--surface);border:1px solid var(--line-strong);border-radius:8px;
          padding:6px 10px;margin-top:6px;font-weight:600;box-shadow:0 -2px 8px rgba(0,0,0,.08)}
   #hsMsg:empty{display:none}
+  table.dgrid.hs td.hs-old{background:color-mix(in srgb, var(--q-hol) 40%, var(--surface));color:var(--muted);font-weight:500}
+  .hs-legend-old{display:inline-block;background:color-mix(in srgb, var(--q-hol) 40%, var(--surface));color:var(--muted);border:1px solid var(--line);padding:0 6px;border-radius:3px}
   table.dgrid.hs td.hs-add{color:var(--faint);font-weight:700}
   table.dgrid.hs td.dg-ed:hover{background:var(--primary-soft)}
   table.dgrid.hs td.hs-base{min-width:84px;white-space:nowrap}
@@ -210,7 +212,7 @@
   import { loadQueueMonth, loadEntries, saveEntry, deleteEntry, monthRange, secondPoint, airfieldKey,
            PILOT_POSITIONS, setHoliday, clearHoliday, saveAirfield,
            setInQueue, loadHistory, loadHolidaysBetween, loadUnavailableOn } from "./js/queue.js";
-  import { rankQueue, rankHolidayQueue, HOLIDAY_QUEUE_START, nextWorkingDay, isWeekend, addDays } from "./js/queue-rank.js";
+  import { rankQueue, rankHolidayQueue, HOLIDAY_QUEUE_START, nextWorkingDay, isWeekend, addDays, groupTrips } from "./js/queue-rank.js";
   import { loadDuty, loadHolidayBase, saveHolidayBaseCount, addDuty, removeDuty, saveDutyNote } from "./js/duty.js";
   import { mountDutyTabs } from "./js/duty-ui.js";
   import { loadCrew } from "./js/crew.js";
@@ -233,8 +235,8 @@
         <thead id="hsHead"></thead><tbody id="hsRows"><tr><td class="empty">กำลังโหลด…</td></tr></tbody></table></div>
       <div class="msgline" id="hsMsg"></div>
       <p class="muted" style="font-size:12px;line-height:1.6">ช่องสีเทา = จำนวนครั้งที่บินวันหยุด (นับแบบเดียวกับแทคเลขในคิววันหยุด · บินติดกันหลายวัน = 1 ช่อง) ·
-        ช่องเทาเปล่าข้างหน้า = จำนวนครั้งตั้งต้นตามตารางคิววันหยุด (ไม่มีวันที่)${baseAdmin ? " — admin กด − / + ที่คอลัมน์ ช่องว่าง เพื่อเพิ่ม/ลดช่องว่าง" : ""} ·
-        ช่องเทาวันที่แรก = วันบินวันหยุดล่าสุดตามข้อมูลตั้งต้นในฐานข้อมูล · ช่องเทามีวันที่ถัดไป = เที่ยวจริงในวันหยุด/เสาร์-อาทิตย์จากระบบ ·
+        ช่องเทาเปล่าข้างหน้า = จำนวนครั้งตั้งต้นตามตารางคิววันหยุด (ไม่มีวันที่)${baseAdmin ? " — admin กด − / + ที่คอลัมน์ ตั้งต้น เพื่อเพิ่ม/ลดจำนวนตั้งต้น" : ""} ·
+        <span class="hs-legend-old">ช่องเทาอ่อน</span> = วันบินวันหยุดที่มีในฐานข้อมูล รวมอยู่ในจำนวนตั้งต้นแล้ว (ไม่นับเพิ่ม · ช่องเทาเปล่าเหลือเฉพาะตั้งต้นที่ไม่มีวันที่) · ช่องเทามีวันที่ถัดไป = เที่ยวจริงในวันหยุด/เสาร์-อาทิตย์จากระบบ ·
         <span class="hs-legend-man">มุมแดง</span> = วันที่เพิ่มเอง (manual)${planner ? " — คลิกช่อง + เพื่อเพิ่มวันที่บิน · คลิกช่องมุมแดงเพื่อแก้/ลบ" : ""}</p>`;
     mountDutyTabs({ host: document.getElementById("dutyHost"), mainEl: document.getElementById("queueMain"),
                      mainLabel: "📊 คิวบิน", planner, loadCrew: () => loadCrew(false), exportSheets: exportQueueSheet,
@@ -699,11 +701,17 @@
     const thS = (d) => { const [y, m, dd] = d.split("-").map(Number); return `${dd} ${TH_MON_HS[m - 1]}${String(y + 543).slice(-2)}`; };
     const tripLabel = (t) => t.length === 1 ? thS(t[0])
       : t[0].slice(0, 7) === t[t.length - 1].slice(0, 7) ? `${Number(t[0].slice(8))}–${thS(t[t.length - 1])}` : `${thS(t[0])}–${thS(t[t.length - 1])}`;
-    // ช่องว่างข้างหน้า = ตั้งต้น − 1 ถ้ามีวันล่าสุด (ช่องสุดท้ายของตั้งต้นแสดงวันที่) · ไม่มีวันล่าสุด = ตั้งต้นทั้งหมด
-    const baseBlanks = (r, b) => b.last && r.base > 0 ? r.base - 1 : r.base;
-    // ช่องมีวันที่ (วันล่าสุดตั้งต้น + ครั้งที่นับต่อ) เรียงตามวันที่ — วันที่เพิ่มเองย้อนหลังก่อนวันล่าสุดตั้งต้นจึงแทรกตามลำดับ
-    const datedCells = (r, b, blanks, trips) => [...(blanks < r.base ? [{ baseLast: true, d: b.last }] : []), ...trips.map((x) => ({ ...x, d: x.t[0] }))]
+    // ช่องมีวันที่ทั้งหมด เรียงตามวันที่ (ผู้ใช้ขอ 12 พ.ย. 69):
+    //  old = วันบินวันหยุดในฐานข้อมูลที่รวมอยู่ในจำนวนตั้งต้นแล้ว (สีเทาอ่อน · ไม่นับเพิ่ม) · trips = ครั้งที่นับต่อ
+    const datedCells = (old, trips) => [...old.map((t) => ({ t, old: true, d: t[0] })), ...trips.map((x) => ({ ...x, d: x.t[0] }))]
       .sort((x, y) => x.d.localeCompare(y.d));
+    // วันในฐานข้อมูลที่ไม่ได้นับเป็นครั้งต่อ (≤ วันล่าสุดตั้งต้น) → กลุ่มวันติดกันเป็น 1 ช่อง · วันล่าสุดตั้งต้นที่ไม่มีในฐานข้อมูลก็แสดง
+    function oldTrips(id, r, b) {
+      const counted = new Set(r.trips.flat());
+      const ds = new Set((holData.base.get(id) || []).filter((d) => !counted.has(d) && (!b.last || d <= b.last)));
+      if (b.last && r.base > 0 && !counted.has(b.last)) ds.add(b.last);
+      return groupTrips([...ds].sort());
+    }
     function holSheetRows(all = false) {
       if (!holRanks || !holData?.count) return null;
       const q = all ? "" : (document.getElementById("hsFind")?.value || "").trim();
@@ -712,10 +720,11 @@
           .sort((x, y) => (holRanks.get(x.id).rank ?? 1e9) - (holRanks.get(y.id).rank ?? 1e9) || holRanks.get(x.id).idx - holRanks.get(y.id).idx)
           .map(c => {
           const r = holRanks.get(c.id), man = holData.manual.get(c.id) || new Set();
-          return { c, r, b: holData.count.get(c.id) || { count: 0, last: null },
+          const b = holData.count.get(c.id) || { count: 0, last: null }, old = oldTrips(c.id, r, b);
+          return { c, r, b, old, vis: Math.max(0, r.base - old.length),          // vis = ช่องเทาเปล่า (ตั้งต้นที่ไม่มีวันที่ในฐานข้อมูล)
                    trips: r.trips.map(t => ({ t, man: t.find(d => man.has(d)) || null })) };
         }) }));
-      const most = Math.max(0, ...groups.flatMap(g => g.list.map(x => x.r.base + x.trips.length)));
+      const most = Math.max(0, ...groups.flatMap(g => g.list.map(x => x.vis + x.old.length + x.trips.length)));
       return { groups, ncol: Math.max(20, most + (planner ? 1 : 0)) };
     }
     function renderHolSheet() {
@@ -723,16 +732,16 @@
       const rs = holSheetRows();
       if (!rs) { document.getElementById("hsRows").innerHTML = `<tr><td class="empty">${holData && !holData.count ? "ยังไม่มีจำนวนครั้งตั้งต้น (migration_41)" : "กำลังโหลด…"}</td></tr>`; return; }
       const { groups, ncol } = rs;
-      document.getElementById("hsHead").innerHTML = `<tr><th class="dg-nm">NAME</th><th>ช่องว่าง</th>${Array.from({ length: ncol }, (_, k) => `<th>${k + 1}</th>`).join("")}
+      document.getElementById("hsHead").innerHTML = `<tr><th class="dg-nm">NAME</th><th title="จำนวนครั้งตั้งต้นจากตารางคิววันหยุด">ตั้งต้น</th>${Array.from({ length: ncol }, (_, k) => `<th>${k + 1}</th>`).join("")}
         <th>จำนวนครั้ง</th><th>แทค</th><th>วันล่าสุด</th><th>หมายเหตุ</th></tr>`;
       const n = groups.reduce((a, g) => a + g.list.length, 0);
       document.getElementById("hsSub").textContent = `${n} คน · ${futureBox.checked ? "รวมวันหยุดที่จัดล่วงหน้า" : "นับถึงวันนี้"} (ตามช่องติ๊กในแท็บคิวบิน)`;
-      const row = ({ c, r, b, trips }) => {
-        const cells = [], blanks = baseBlanks(r, b);
-        for (let k = 0; k < blanks; k++)
+      const row = ({ c, r, b, trips, old, vis }) => {
+        const cells = [];
+        for (let k = 0; k < vis; k++)
           cells.push(`<td class="dg-c hs-g" title="ตั้งต้นจากตารางคิววันหยุด (ไม่มีวันที่)"></td>`);
-        datedCells(r, b, blanks, trips).forEach(({ t, man, baseLast }) => cells.push(baseLast   // เรียงตามวันที่ (วันที่เพิ่มย้อนหลังแทรกตามลำดับ)
-          ? `<td class="dg-c hs-g" title="วันบินวันหยุดล่าสุดตามข้อมูลตั้งต้นในฐานข้อมูล">${thS(b.last)}</td>`
+        datedCells(old, trips).forEach(({ t, man, old: o }) => cells.push(o   // เรียงตามวันที่ (วันที่เพิ่มย้อนหลังแทรกตามลำดับ)
+          ? `<td class="dg-c hs-old" title="วันที่ในฐานข้อมูล · รวมอยู่ในจำนวนตั้งต้นแล้ว (ไม่นับเพิ่ม)">${tripLabel(t)}</td>`
           : man
           ? `<td class="dg-c hs-g hs-man${planner ? " dg-ed" : ""}" data-d="${man}" title="เพิ่มเอง (manual)${planner ? " · คลิกเพื่อแก้/ลบ" : ""}">${tripLabel(t)}</td>`
           : `<td class="dg-c hs-g" title="จากตารางคิวบิน/ภารกิจ">${tripLabel(t)}</td>`));
@@ -740,7 +749,7 @@
         while (cells.length < ncol) cells.push(`<td class="dg-c"></td>`);
         const note = holData.notes.get(c.id) || "";
         return `<tr data-id="${c.id}"${r.inQueue ? "" : ' class="hs-out"'}><td class="dg-nm">${r.rank ? `<span class="hs-no">${r.rank}</span>` : ""}<span style="${qualStyle(c.position) || ""}">${esc(c.full_name)}</span>${r.inQueue ? "" : ` <span class="muted" title="ไม่ได้ติ๊กนับคิว">· ไม่นับคิว</span>`}</td>
-          <td class="dg-sum hs-base" title="ช่องเทาว่างข้างหน้า · ตั้งต้นรวม ${r.base} ครั้ง${b.last ? ` (ล่าสุด ${thS(b.last)})` : ""}">${baseAdmin ? `<button type="button" data-b="-1" ${blanks ? "" : "disabled"} aria-label="ลดช่องว่างข้างหน้า">−</button>` : ""}<b>${blanks}</b>${baseAdmin ? `<button type="button" data-b="1" aria-label="เพิ่มช่องว่างข้างหน้า">+</button>` : ""}</td>
+          <td class="dg-sum hs-base" title="จำนวนครั้งตั้งต้นรวม ${r.base} ครั้ง${b.last ? ` (ล่าสุด ${thS(b.last)})` : ""}">${baseAdmin ? `<button type="button" data-b="-1" ${r.base > (b.last ? 1 : 0) ? "" : "disabled"} aria-label="ลดจำนวนตั้งต้น">−</button>` : ""}<b>${r.base}</b>${baseAdmin ? `<button type="button" data-b="1" aria-label="เพิ่มจำนวนตั้งต้น">+</button>` : ""}</td>
           ${cells.join("")}
           <td class="dg-sum">${r.count}</td><td class="dg-sum">${r.tag ?? "-"}</td>
           <td class="dg-sum dg-last">${r.last ? thS(r.last) : ""}</td>
@@ -754,16 +763,16 @@
       const rs = holSheetRows(true);
       if (!rs) return null;
       const G = "#C9CCD1", S2 = "#F6F8FB", H = (v, x = {}) => ({ v, bg: S2, fg: "#5B6675", bold: true, ...x });
-      const rows = [[H("NAME", { align: "left" }), H("ช่องว่าง"), ...Array.from({ length: rs.ncol }, (_, i) => H(i + 1)), H("จำนวนครั้ง"), H("แทค"), H("วันล่าสุด"), H("หมายเหตุ")]];
+      const rows = [[H("NAME", { align: "left" }), H("ตั้งต้น"), ...Array.from({ length: rs.ncol }, (_, i) => H(i + 1)), H("จำนวนครั้ง"), H("แทค"), H("วันล่าสุด"), H("หมายเหตุ")]];
       rs.groups.forEach(g => {
         rows.push([H(g.title, { align: "left" })]);
-        g.list.forEach(({ c, r, b, trips }) => {
-          const q = QUAL_COLORS[c.position] || {}, blanks = baseBlanks(r, b);
-          const cells = [...Array.from({ length: blanks }, () => ({ v: "", bg: G })),
-                         ...datedCells(r, b, blanks, trips).map(({ t, man, baseLast }) => baseLast ? { v: thS(b.last), bg: G, mono: true }
+        g.list.forEach(({ c, r, b, trips, old, vis }) => {
+          const q = QUAL_COLORS[c.position] || {};
+          const cells = [...Array.from({ length: vis }, () => ({ v: "", bg: G })),
+                         ...datedCells(old, trips).map(({ t, man, old: o }) => o ? { v: tripLabel(t), bg: "#ECEEF1", fg: "#6B7480", mono: true, note: "รวมอยู่ในจำนวนตั้งต้นแล้ว (ไม่นับเพิ่ม)" }
                            : { v: tripLabel(t), bg: G, mono: true, ...(man ? { fg: "#C00000", note: "เพิ่มเอง (manual)" } : {}) })];
           while (cells.length < rs.ncol) cells.push({ v: "" });
-          rows.push([{ v: c.full_name, bg: q.bg, fg: q.fg, bold: true, align: "left" }, { v: blanks, bg: S2, bold: true }, ...cells,
+          rows.push([{ v: c.full_name, bg: q.bg, fg: q.fg, bold: true, align: "left" }, { v: r.base, bg: S2, bold: true }, ...cells,
                      { v: r.count, bold: true, bg: S2 }, { v: r.tag ?? "-", bold: true, bg: S2 }, { v: r.last ? thS(r.last) : "", bg: S2, fg: "#2F6AE0", mono: true },
                      { v: holData.notes.get(c.id) || "", align: "left" }]);
         });
@@ -785,7 +794,7 @@
         const err = await saveHolidayBaseCount(id, next, b.last);
         if (err) { btn.disabled = false; return hsMsg("บันทึกไม่สำเร็จ: " + err.message + (/row-level|policy/i.test(err.message) ? " — เฉพาะ admin" : ""), false); }
         holData.count.set(id, { ...b, count: next });
-        hsMsg(`ช่องว่างข้างหน้า ${b.last ? next - 1 : next} ช่อง · ตั้งต้นรวม ${next} ครั้ง`, true);
+        hsMsg(`จำนวนตั้งต้นรวม ${next} ครั้ง`, true);
         render();
       });
       // หมายเหตุ
