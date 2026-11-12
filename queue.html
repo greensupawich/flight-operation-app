@@ -643,6 +643,7 @@
         isUnavailable: (id) => off.has(id),
         baselineDays: holData.base,
         baselineCount: holData.count,
+        manualDays: holData.manual,                           // วันที่เพิ่มเองนับทุกวัน (ย้อนหลังได้ไม่จำกัด)
         until: countUntil(),                                  // ไม่ติ๊ก = นับถึงวันนี้ · ติ๊ก = รวมวันหยุดที่จัดล่วงหน้า
       });
     }
@@ -700,6 +701,9 @@
       : t[0].slice(0, 7) === t[t.length - 1].slice(0, 7) ? `${Number(t[0].slice(8))}–${thS(t[t.length - 1])}` : `${thS(t[0])}–${thS(t[t.length - 1])}`;
     // ช่องว่างข้างหน้า = ตั้งต้น − 1 ถ้ามีวันล่าสุด (ช่องสุดท้ายของตั้งต้นแสดงวันที่) · ไม่มีวันล่าสุด = ตั้งต้นทั้งหมด
     const baseBlanks = (r, b) => b.last && r.base > 0 ? r.base - 1 : r.base;
+    // ช่องมีวันที่ (วันล่าสุดตั้งต้น + ครั้งที่นับต่อ) เรียงตามวันที่ — วันที่เพิ่มเองย้อนหลังก่อนวันล่าสุดตั้งต้นจึงแทรกตามลำดับ
+    const datedCells = (r, b, blanks, trips) => [...(blanks < r.base ? [{ baseLast: true, d: b.last }] : []), ...trips.map((x) => ({ ...x, d: x.t[0] }))]
+      .sort((x, y) => x.d.localeCompare(y.d));
     function holSheetRows(all = false) {
       if (!holRanks || !holData?.count) return null;
       const q = all ? "" : (document.getElementById("hsFind")?.value || "").trim();
@@ -727,9 +731,9 @@
         const cells = [], blanks = baseBlanks(r, b);
         for (let k = 0; k < blanks; k++)
           cells.push(`<td class="dg-c hs-g" title="ตั้งต้นจากตารางคิววันหยุด (ไม่มีวันที่)"></td>`);
-        if (blanks < r.base)                                   // ช่องสุดท้ายของตั้งต้น = วันบินวันหยุดล่าสุดในฐานข้อมูล
-          cells.push(`<td class="dg-c hs-g" title="วันบินวันหยุดล่าสุดตามข้อมูลตั้งต้นในฐานข้อมูล">${thS(b.last)}</td>`);
-        trips.forEach(({ t, man }) => cells.push(man
+        datedCells(r, b, blanks, trips).forEach(({ t, man, baseLast }) => cells.push(baseLast   // เรียงตามวันที่ (วันที่เพิ่มย้อนหลังแทรกตามลำดับ)
+          ? `<td class="dg-c hs-g" title="วันบินวันหยุดล่าสุดตามข้อมูลตั้งต้นในฐานข้อมูล">${thS(b.last)}</td>`
+          : man
           ? `<td class="dg-c hs-g hs-man${planner ? " dg-ed" : ""}" data-d="${man}" title="เพิ่มเอง (manual)${planner ? " · คลิกเพื่อแก้/ลบ" : ""}">${tripLabel(t)}</td>`
           : `<td class="dg-c hs-g" title="จากตารางคิวบิน/ภารกิจ">${tripLabel(t)}</td>`));
         if (planner) cells.push(`<td class="dg-c dg-ed hs-add" data-d="" title="เพิ่มวันที่บินวันหยุด (manual)">+</td>`);
@@ -756,8 +760,8 @@
         g.list.forEach(({ c, r, b, trips }) => {
           const q = QUAL_COLORS[c.position] || {}, blanks = baseBlanks(r, b);
           const cells = [...Array.from({ length: blanks }, () => ({ v: "", bg: G })),
-                         ...(blanks < r.base ? [{ v: thS(b.last), bg: G, mono: true }] : []),
-                         ...trips.map(({ t, man }) => ({ v: tripLabel(t), bg: G, mono: true, ...(man ? { fg: "#C00000", note: "เพิ่มเอง (manual)" } : {}) }))];
+                         ...datedCells(r, b, blanks, trips).map(({ t, man, baseLast }) => baseLast ? { v: thS(b.last), bg: G, mono: true }
+                           : { v: tripLabel(t), bg: G, mono: true, ...(man ? { fg: "#C00000", note: "เพิ่มเอง (manual)" } : {}) })];
           while (cells.length < rs.ncol) cells.push({ v: "" });
           rows.push([{ v: c.full_name, bg: q.bg, fg: q.fg, bold: true, align: "left" }, { v: blanks, bg: S2, bold: true }, ...cells,
                      { v: r.count, bold: true, bg: S2 }, { v: r.tag ?? "-", bold: true, bg: S2 }, { v: r.last ? thS(r.last) : "", bg: S2, fg: "#2F6AE0", mono: true },
@@ -796,9 +800,8 @@
       holSheetEl.addEventListener("click", (e) => {
         const td = e.target.closest("td.dg-c.dg-ed"); if (!td || td.querySelector("input")) return;
         const old = td.dataset.d, id = td.closest("tr").dataset.id;
-        // ช่วงที่เพิ่มได้: หลังวันล่าสุดของตั้งต้น (หรือวันเริ่มนับคิว) ถึงวันนี้ → ปฏิทินเลือกวันนอกช่วงไม่ได้ (ผู้ใช้เจอ 12 พ.ย. 69)
-        const bl = (holData.count.get(id) || {}).last, minD = bl ? addDays(bl, 1) : HOLIDAY_QUEUE_START;
-        td.innerHTML = `<input type="date" value="${old}" min="${minD}" max="${todayStr}">`;
+        // เพิ่มย้อนหลังได้ไม่จำกัด ถึงวันนี้ (ผู้ใช้ขอ 12 พ.ย. 69 · migration_61) · วันหลังวันนี้เลือกไม่ได้
+        td.innerHTML = `<input type="date" value="${old}" min="2000-01-01" max="${todayStr}">`;
         const inp = td.firstElementChild; inp.focus(); try { inp.showPicker?.(); } catch {}
         let done = false;
         const yOk = (v) => { const y = +v.slice(0, 4); return y >= 2000 && y <= now.getFullYear() + 1; };
@@ -809,10 +812,8 @@
           done = true;
           if (!save || v === old || (!v && !old)) return renderHolSheet();
           if (v) {
-            const b = holData.count.get(id) || { last: null }, r = holRanks.get(id);
+            const r = holRanks.get(id);
             const why = v > todayStr ? "เพิ่มได้ถึงวันนี้เท่านั้น"
-              : !b.last && v < minD ? `ก่อนวันเริ่มนับคิววันหยุด (${thS(minD)})`
-              : b.last && v <= b.last ? `วันที่นี้อยู่ในจำนวนตั้งต้นแล้ว (ตั้งต้นถึง ${thS(b.last)}) — ${baseAdmin ? "ใช้ − / + ที่คอลัมน์ ช่องว่าง แทน" : "ให้ admin ปรับจำนวนช่องว่างแทน"}`
               : (holData.base.get(id) || []).includes(v) || r.trips.some(t => t.includes(v)) ? `มีวันที่ ${thS(v)} อยู่แล้ว` : "";
             if (why) { hsMsg(why, false); return renderHolSheet(); }
           }

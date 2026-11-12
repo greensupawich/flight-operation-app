@@ -110,6 +110,7 @@ const countTrips = (dates) => groupTrips(dates).length;
  * @param isUnavailable (crewId, date) => boolean
  * @param baselineDays  Map(crewId -> Iterable(date))  วันหยุดที่บินจากไฟล์ "นจบ." (ไม่กรองวันหยุดซ้ำ)
  * @param until     วันสุดท้ายที่นับ (รวมวันนั้น · ปกติ = วันนี้) — วันหยุดที่จัดล่วงหน้าไม่นับ · null = ไม่จำกัด
+ * @param manualDays Map(crewId -> Set(date))  วันที่เพิ่มเองในเว็บ (manual) — นับทุกวัน แม้ก่อนวันล่าสุดตั้งต้น / ก่อน since (ผู้ใช้ขอ 12 พ.ย. 69)
  * @param baselineCount Map(crewId -> {count, last}) | null  จำนวนครั้งตั้งต้นจากตารางคิววันหยุด (migration_41)
  *                      null = ไม่มีข้อมูล → count เป็น null (ไม่แสดง)
  * @returns Map(crewId -> { group, rank|null, count|null, last|null, tag|null, reason|null, off, base, trips })
@@ -117,7 +118,7 @@ const countTrips = (dates) => groupTrips(dates).length;
  *          tag = count − จำนวนครั้งน้อยสุดในกลุ่ม (เฉพาะที่ติ๊กนับคิว) · ทุกคนบินครบรอบ → เลขลดลงพร้อมกัน
  */
 export function rankHolidayQueue({ crew, target, since = HOLIDAY_QUEUE_START, isOff, flownDays, hasItemOn, isUnavailable,
-                                   baselineDays = new Map(), baselineCount = null, until = null }) {
+                                   baselineDays = new Map(), baselineCount = null, until = null, manualDays = new Map() }) {
   const upto = (d) => d < target && (!until || d <= until);
   const result = new Map();
   const groups = { IPP: [], CP: [] };
@@ -134,7 +135,8 @@ export function rankHolidayQueue({ crew, target, since = HOLIDAY_QUEUE_START, is
     let count = null, baseN = 0, trips = [];
     if (baselineCount) {
       const b = baselineCount.get(p.id) || { count: 0, last: null };
-      trips = groupTrips(days.filter((d) => (b.last ? d > b.last : d >= since)));
+      const man = manualDays.get(p.id) || new Set();
+      trips = groupTrips(days.filter((d) => (b.last ? d > b.last : d >= since) || man.has(d)));
       baseN = b.count;
       count = baseN + trips.length;
     }
