@@ -44,6 +44,11 @@
   table.q thead th.name{z-index:4;background:var(--surface-2)}
   table.q th.cnt, table.q td.cnt{min-width:58px;font-variant-numeric:tabular-nums;font-weight:700;background:var(--surface-2)}
   table.q th.cnt{color:var(--ink)}
+  /* ชื่อซ้ำท้ายตาราง (หลัง ST) — เลื่อนไปขวาสุดก็ยังเห็นชื่อ */
+  table.q th.name2, table.q td.name2{min-width:150px;text-align:start;padding:0 9px;white-space:nowrap;font-weight:600;
+                   background:var(--surface);color:var(--ink);border-left:2px solid var(--line-strong)}
+  table.q thead th.name2{background:var(--surface-2);color:var(--muted)}
+  table.q tr.noq td.name2{opacity:.55}
   table.q th.hol, table.q td.hol{background:var(--q-hol)}
   table.q td.off{background:var(--q-off)}
   table.q th.plan{cursor:pointer}
@@ -523,7 +528,7 @@
           const cls = [hol ? "hol" : "", planner ? "plan" : "", d === todayStr ? "today-col" : "", ranks && d === target ? "target" : ""].join(" ");
           const title = maps.holidayMap.has(d) ? ` title="${esc(maps.holidayMap.get(d))}"` : "";
           return `<th class="${cls}" data-date="${d}"${title}>${i + 1}<small>${TH_DOW[w]}</small></th>`;
-        }).join("") + `<th class="cnt">บินจริง</th><th class="cnt">ST</th></tr></thead><tbody>`;
+        }).join("") + `<th class="cnt">บินจริง</th><th class="cnt">ST</th><th class="name2">NAME</th></tr></thead><tbody>`;
 
       if (!data.crew.length) html += `<tr><td class="name">ยังไม่มีนักบินในทะเบียน</td></tr>`;
       data.crew.forEach(p => {
@@ -544,7 +549,8 @@
           html += `<td class="${cls}" data-date="${d}"${t ? ` title="${esc(t)}"` : ""}>${inner}</td>`;
         });
         const c = rowCounts(p.id);
-        html += `<td class="cnt" data-cnt="fly">${c.fly}</td><td class="cnt" data-cnt="st">${c.st}</td></tr>`;
+        html += `<td class="cnt" data-cnt="fly">${c.fly}</td><td class="cnt" data-cnt="st">${c.st}</td>` +
+          `<td class="name2" style="${qualStyle(p.position) || ""}" title="${esc(p.code)}">${esc(p.full_name)}</td></tr>`;
       });
       table.innerHTML = html + `</tbody>`;
       renderQueuePanel();
