@@ -311,6 +311,11 @@ export async function exportBoardXlsx({ days, stLabel, draft = false }) {
       const m = ws.model;
       const dst = wb.addWorksheet(name);
       dst.model = { ...m, name, mergeCells: m.merges };
+      // ตอนตั้ง merge ExcelJS เขียน style ของเซลล์มุมซ้ายบนทับเซลล์อื่นในช่วงที่รวม → เส้นขอบด้านใน/ขวา/ล่างของช่องรวมหาย (เส้นขาด)
+      //  → คืน style เดิมให้ทุกเซลล์จากชีตต้นทาง
+      ws.eachRow({ includeEmpty: true }, (row, r) => row.eachCell({ includeEmpty: true }, (cell, c) => {
+        dst.getCell(r, c).style = JSON.parse(JSON.stringify(cell.style || {}));
+      }));
     }
   }
 
