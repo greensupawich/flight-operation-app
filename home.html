@@ -85,6 +85,19 @@
   dialog.trash .it .act{grid-column:2;grid-row:1 / span 2}
   dialog.trash .msg{font-size:12.5px;min-height:18px;margin-top:6px}
 
+  /* ---- Export Excel หลายวัน ---- */
+  dialog.trash.xdlg{width:min(520px,calc(100vw - 32px))}
+  .xdlg .rng{display:flex;flex-wrap:wrap;gap:8px 12px;align-items:center;margin:10px 0 6px}
+  .xdlg .rng label{display:flex;gap:6px;align-items:center;font-size:13px}
+  .xdlg .rng input[type=date]{width:auto}
+  .xdlg .days{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:4px 10px;margin:6px 0 10px}
+  .xdlg .days label{display:flex;gap:6px;align-items:center;font-size:13px;padding:3px 0}
+  .xdlg .days label.we{color:var(--muted)}
+  .xdlg .mode{display:flex;gap:14px;font-size:13px;margin:4px 0 8px}
+  .xdlg label{margin:0;font-weight:500}
+  .xdlg input[type=checkbox], .xdlg input[type=radio]{width:auto;margin:0;flex:none}
+  .xdlg .ft{display:flex;gap:8px;justify-content:flex-end;align-items:center;padding-top:8px;border-top:1px solid var(--line)}
+
   /* ---- บล็อก STBY ---- */
   .acp-stby{border-top:2px solid var(--line-strong);background:var(--surface-2);padding:8px 10px}
   .acp-stby .hd{display:flex;flex-wrap:wrap;align-items:center;gap:4px 8px;font-weight:700;font-size:12.5px;margin-bottom:5px}
@@ -170,7 +183,8 @@
         <input type="date" id="datePick" style="width:auto">
         <button class="btn sm" id="nextDay" title="วันถัดไป">→</button>
         <button class="btn sm ghost" id="todayBtn">วันนี้</button>
-        <button class="btn sm ghost" id="xlsxBtn" title="ดาวน์โหลดเป็นไฟล์ Excel ตามฟอร์มกระดานจัดบินเดิม">📊 Export Excel</button>
+        <button class="btn sm ghost" id="xlsxBtn" title="ดาวน์โหลดเป็นไฟล์ Excel ตามฟอร์มกระดานจัดบินเดิม · เลือกได้หลายวัน (1 วัน = 1 ชีต)">📊 Export Excel</button>
+        <button class="btn sm ghost" id="draftBtn" title="Excel ฟอร์มเดียวกัน แต่ไม่มีชื่อลูกเรือและ callsign · เลือกได้หลายวัน">📄 Export Draft</button>
         <a class="btn sm ghost" id="dayLink" href="day.html">หน้าภารกิจ</a>
         <button class="btn sm ghost" id="repBtn" title="ข้อความรายงานภารกิจของวันที่ดูอยู่ สำหรับคัดลอกไปรายงานต่อ">📝 รายงานประจำวัน</button>
         <button class="btn sm ghost" id="sheetBtn" title="ตารางภารกิจประจำวัน (ฟอร์มรวมทุกฝูง) สำหรับคัดลอกไปวางใน Excel / Google Sheets">📋 ตารางภารกิจประจำวัน</button>
@@ -401,28 +415,35 @@
       wireSheetEdit(document.getElementById("sheets"), opts);
       wireSheetEdit(document.getElementById("acp"), opts);          // ช่อง STBY ใต้แผงสถานภาพเครื่อง
     }
+    // ข้อมูลกระดานของวันที่ day (หน้าจอ + Export Excel หลายวัน) · now = สถานภาพเครื่องปัจจุบัน (โหลดครั้งเดียวได้)
+    //  แผงสถานภาพ บ. = สถานภาพ ณ วันก่อนหน้า (เช่น กระดานวันที่ 4 → สถานภาพวันที่ 3) จากประวัติ (migration_54)
+    //  วันก่อนหน้าเป็นวันนี้/อนาคต (= กระดานพรุ่งนี้ขึ้นไป) → ข้อมูลปัจจุบัน
+    const loadCurrentStatus = () => Promise.all([loadAircraft(), loadDefects(), loadChecks()]);
+    async function loadBoard(day, now) {
+      const nx = new Date(day.getFullYear(), day.getMonth(), day.getDate() + 1);
+      const [all, [aircraftNow, defNow, chkNow], noteToday, noteNext] = await Promise.all([
+        loadMissionsByDate(ymd(day)), now || loadCurrentStatus(), loadDayNote(ymd(day)), loadDayNote(ymd(nx))
+      ]);
+      let aircraft = aircraftNow, defMap = defNow, chkMap = chkNow, hist = null;
+      const asOf = new Date(day.getFullYear(), day.getMonth(), day.getDate() - 1);
+      if (ymd(asOf) < ymd(new Date())) {
+        hist = await boardAsOf(ymd(asOf), aircraftNow, defNow, chkNow);
+        ({ aircraft, defMap, chkMap } = hist);
+      }
+      return { day, missions: all, aircraft, defMap, chkMap, noteToday, noteNext, hist, asOf };
+    }
     async function refresh() {
       updateHeader();
       const box = document.getElementById("sheets");
-      const [all, aircraftNow, defNow, chkNow, noteToday, noteNext] = await Promise.all([
-        loadMissionsByDate(date), loadAircraft(), loadDefects(), loadChecks(),
-        loadDayNote(date), loadDayNote(nextDate)
-      ]);
-      // แผงสถานภาพ บ. = สถานภาพ ณ วันก่อนหน้า (เช่น กระดานวันที่ 4 → สถานภาพวันที่ 3) จากประวัติ (migration_54)
-      //  วันก่อนหน้าเป็นวันนี้/อนาคต (= กระดานพรุ่งนี้ขึ้นไป) → ข้อมูลปัจจุบัน
-      let aircraft = aircraftNow, defMap = defNow, chkMap = chkNow;
-      acDay = new Date(view.getFullYear(), view.getMonth(), view.getDate() - 1);
-      histInfo = null;
-      if (ymd(acDay) < ymd(new Date())) {
-        histInfo = await boardAsOf(ymd(acDay), aircraftNow, defNow, chkNow);
-        ({ aircraft, defMap, chkMap } = histInfo);
-      }
+      const b = await loadBoard(view);
+      const { missions: all, aircraft, defMap, chkMap, noteToday, noteNext } = b;
+      acDay = b.asOf; histInfo = b.hist;
       // ช่อง STBY ล่างแผงสถานภาพ = เฉพาะชนิด "stby" อันสุดท้าย (สร้างล่าสุด) · STBY เดโชชัย / STBY (ภารกิจ) วางเป็นการ์ดเหมือนภารกิจปกติ
       const stbys = all.filter(m => m.kind === "stby").slice(-1);
       const list = orderMissions(all.filter(m => m.kind !== "stby"));   // ลำดับที่จัดเอง หรือ T/O
 
       renderAcp(aircraft, defMap, chkMap, stbys, noteToday, noteNext);
-      lastData = { day: view, missions: all, aircraft, defMap, chkMap, noteToday, noteNext };
+      lastData = b;
 
       const done = list.filter(m => m.status !== "cancelled" && reportOf(m)).length;
       const cancelled = list.filter(m => m.status === "cancelled").length;
@@ -546,19 +567,77 @@
     }
 
     // ---- Export Excel: ฟอร์มกระดานจัดบินเดิม (js/board-excel.js) ----
-    document.getElementById("xlsxBtn").addEventListener("click", async (e) => {
-      const btn = e.currentTarget;
-      if (!lastData) return;
-      btn.disabled = true; const label = btn.textContent; btn.textContent = "กำลังสร้างไฟล์…";
-      try {
-        const { skipped } = await exportBoardXlsx({ ...lastData, stLabel });
-        if (skipped) alert(`ฟอร์มมีการ์ดได้ 6 ใบ — มีภารกิจอีก ${skipped} รายการที่ไม่ได้ลงในไฟล์`);
-      } catch (err) {
-        alert("Export Excel ไม่สำเร็จ: " + (err.message || err));
-      } finally {
-        btn.disabled = false; btn.textContent = label;
+    //  เลือกช่วงวัน → 1 วัน = 1 ชีตในไฟล์เดียว (ติ๊กออกวันที่ไม่ต้องการได้) · Draft = ไม่มีชื่อลูกเรือ / callsign (ผู้ใช้ขอ 13 พ.ย. 69)
+    {
+      const MAX_DAYS = 31;
+      const DOW_S = ["อา.","จ.","อ.","พ.","พฤ.","ศ.","ส."], MON_S = ["ม.ค.","ก.พ.","มี.ค.","เม.ย.","พ.ค.","มิ.ย.","ก.ค.","ส.ค.","ก.ย.","ต.ค.","พ.ย.","ธ.ค."];
+      const pDate = (v) => { const [y, mo, da] = v.split("-").map(Number); return new Date(y, mo - 1, da); };
+      const dlg = document.createElement("dialog");
+      dlg.className = "trash xdlg";
+      dlg.innerHTML = `<div class="hd"><b>📊 Export Excel</b><button type="button" class="btn sm ghost" data-close>ปิด</button></div>
+        <div class="bd">
+          <div class="mode"><label><input type="radio" name="xmode" value="full" checked> ปกติ</label>
+            <label><input type="radio" name="xmode" value="draft"> Draft (ไม่มีชื่อลูกเรือ / callsign)</label></div>
+          <div class="rng"><label>ตั้งแต่ <input type="date" id="xFrom"></label><label>ถึง <input type="date" id="xTo"></label>
+            <button type="button" class="btn sm ghost" id="xAll">เลือกทั้งหมด</button><button type="button" class="btn sm ghost" id="xNone">ไม่เลือก</button></div>
+          <p class="note">1 วัน = 1 ชีต ในไฟล์เดียว · ติ๊กออกวันที่ไม่ต้องการ · สูงสุด ${MAX_DAYS} วัน</p>
+          <div class="days" id="xDays"></div>
+          <div class="msg" id="xMsg"></div>
+          <div class="ft"><button type="button" class="btn sm primary" id="xGo">ดาวน์โหลด</button></div>
+        </div>`;
+      document.body.append(dlg);
+      const $ = (sel) => dlg.querySelector(sel);
+      const xMsg = (t, ok) => { const m = $("#xMsg"); m.style.color = ok ? "var(--good)" : "var(--crit)"; m.textContent = t; };
+      const mode = () => dlg.querySelector('input[name="xmode"]:checked').value;
+      const syncTitle = () => { $(".hd b").textContent = mode() === "draft" ? "📄 Export Draft" : "📊 Export Excel"; };
+      function renderDays() {
+        const f = $("#xFrom").value, t = $("#xTo").value;
+        const box = $("#xDays");
+        if (!f || !t) { box.innerHTML = ""; return; }
+        if (t < f) { box.innerHTML = ""; return xMsg("วันที่ \"ถึง\" ต้องไม่ก่อน \"ตั้งแต่\"", false); }
+        const out = [];
+        for (let d = pDate(f); ymd(d) <= t && out.length < MAX_DAYS; d.setDate(d.getDate() + 1)) out.push(new Date(d));
+        const over = ymd(out[out.length - 1]) < t;
+        xMsg(over ? `เลือกได้สูงสุด ${MAX_DAYS} วัน — แสดงถึง ${out[out.length - 1].getDate()} ${MON_S[out[out.length - 1].getMonth()]}` : "", false);
+        box.innerHTML = out.map((d) => { const w = d.getDay();
+          return `<label class="${w === 0 || w === 6 ? "we" : ""}"><input type="checkbox" value="${ymd(d)}" checked> ${DOW_S[w]} ${d.getDate()} ${MON_S[d.getMonth()]} ${String(d.getFullYear() + 543).slice(-2)}</label>`; }).join("");
       }
-    });
+      function openExport(m) {
+        dlg.querySelector(`input[name="xmode"][value="${m}"]`).checked = true; syncTitle();
+        $("#xFrom").value = $("#xTo").value = date;           // ค่าเริ่มต้น = วันที่ดูอยู่
+        xMsg(""); renderDays(); dlg.showModal();
+      }
+      document.getElementById("xlsxBtn").addEventListener("click", () => openExport("full"));
+      document.getElementById("draftBtn").addEventListener("click", () => openExport("draft"));
+      dlg.addEventListener("change", (e) => {
+        if (e.target.name === "xmode") return syncTitle();
+        if (e.target.id === "xFrom") { if (!$("#xTo").value || $("#xTo").value < e.target.value) $("#xTo").value = e.target.value; renderDays(); }
+        else if (e.target.id === "xTo") renderDays();
+      });
+      dlg.addEventListener("click", async (e) => {
+        if (e.target === dlg || e.target.closest("[data-close]")) return dlg.close();
+        if (e.target.id === "xAll" || e.target.id === "xNone")
+          return dlg.querySelectorAll("#xDays input").forEach((c) => { c.checked = e.target.id === "xAll"; });
+        if (e.target.id !== "xGo") return;
+        const picked = [...dlg.querySelectorAll("#xDays input:checked")].map((c) => c.value);
+        if (!picked.length) return xMsg("ยังไม่ได้เลือกวัน", false);
+        const btn = e.target; btn.disabled = true;
+        try {
+          const now = await loadCurrentStatus();                 // สถานภาพปัจจุบันโหลดครั้งเดียว ใช้ทุกวัน
+          const days = [];
+          for (const [i, v] of picked.entries()) {
+            xMsg(`กำลังโหลดข้อมูล ${i + 1}/${picked.length} วัน…`, true);
+            days.push(lastData && ymd(lastData.day) === v ? lastData : await loadBoard(pDate(v), now));
+          }
+          xMsg("กำลังสร้างไฟล์…", true);
+          const { file, skipped } = await exportBoardXlsx({ days, stLabel, draft: mode() === "draft" });
+          xMsg(`ดาวน์โหลดแล้ว: ${file}` + (skipped.length
+            ? ` · ฟอร์มมีการ์ดได้ 6 ใบ — ภารกิจที่ไม่ได้ลง: ${skipped.map((x) => `${x.day.getDate()} ${MON_S[x.day.getMonth()]} (${x.n})`).join(", ")}` : ""), !skipped.length);
+        } catch (err) {
+          xMsg("Export Excel ไม่สำเร็จ: " + (err.message || err), false);
+        } finally { btn.disabled = false; }
+      });
+    }
 
     refresh();
   }

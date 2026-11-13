@@ -99,11 +99,12 @@ function dropDistanceRow(ws, [r0, c0]) {
   poc.alignment = { ...poc.alignment, wrapText: true, vertical: "middle" };
 }
 
-function fillCard(ws, [r0, c0], m) {
+// draft = ไม่ใส่ชื่อลูกเรือและ callsign (ผู้ใช้ขอ 13 พ.ย. 69) · ป้ายตำแหน่งยังแสดงตามจริง เพื่อให้เห็นว่าใช้ตำแหน่งอะไรบ้าง
+function fillCard(ws, [r0, c0], m, draft = false) {
   const at = (r, c) => ws.getCell(r0 + r - 1, c0 + c - 1);    // r 1–20 · c 1–7 (1 = คอลัมน์ป้าย)
   const ac = m.aircraft;
   if (ac) { at(1, 2).value = `${clean(ac.type)}/ `; at(1, 4).value = tail3(ac.tail_number); }
-  at(1, 6).value = clean(m.callsign) || null;                  // ป้าย "Callsign" · ค่าเต็ม เช่น CBY301
+  at(1, 6).value = draft ? null : clean(m.callsign) || null;   // ป้าย "Callsign" · ค่าเต็ม เช่น CBY301
   at(2, 2).value = clean(m.showtime) || "-";
   at(2, 6).value = clean(m.brief_time) || "-";
   at(3, 2).value = clean(m.step_time) || "-";
@@ -124,6 +125,7 @@ function fillCard(ws, [r0, c0], m) {
   const rng = (r1, c1, r2, c2) => `${at(r1, c1).address}:${at(r2, c2).address}`;
   crewLayout(crewRows).forEach(({ role, names }, i) => {
     const r = 9 + i;
+    if (draft && role !== "ผอ.เดินทาง") names = [];              // ผอ.เดินทาง ไม่ใช่ลูกเรือ → คงไว้
     at(r, 1).value = role;
     if (role === "ผอ.เดินทาง" || role === "AC") {            // ชื่อ + เบอร์ยาว → ใช้เต็มแถว
       [[2, 3], [4, 5], [6, 7]].forEach(([a, b]) => ws.unMergeCells(rng(r, a, r, b)));
@@ -224,14 +226,14 @@ function fillPanel(ws, aircraft, defMap, chkMap, stLabel) {
 }
 
 // แถว STBY = เฉพาะชนิด "stby" อันสุดท้าย (สร้างล่าสุด) — STBY เดโชชัย / STBY (ภารกิจ) ลงเป็นการ์ดเหมือนภารกิจปกติ
-function fillStby(ws, stbys) {
+function fillStby(ws, stbys, draft = false) {
   const m = stbys[stbys.length - 1];
   if (!m) return;
   const title = `STBY ${clean(stbyLabel(m))}`;          // ป้ายเดียวกับช่อง STBY หน้าหลัก (ชื่อภารกิจที่กรอก · 11 พ.ย. 69)
   ws.getCell("A32").value = title;
   ws.getCell("A32").alignment = { ...ws.getCell("A32").alignment, shrinkToFit: true };   // ชื่อยาว → ย่อให้พอดี A32:B32
   ws.getCell("C32").value = "Callsign";
-  ws.getCell("D32").value = clean(m.callsign) || null;
+  ws.getCell("D32").value = draft ? null : clean(m.callsign) || null;
   const rows = ROLE_ORDER.map((role) => ({ role, names: namesBy(m.mission_crew || [], role) }))
     .filter((x) => x.names.length);
   // 5 แถว (33–37) · ตำแหน่งเกิน → รวมไว้แถวสุดท้าย
@@ -242,6 +244,7 @@ function fillStby(ws, stbys) {
   }
   shown.forEach(({ role, names }, i) => {
     const r = 33 + i;
+    if (draft) names = [];
     ws.getCell(r, 1).value = role;
     ws.getCell(r, 2).value = names[0] || null;
     ws.getCell(r, 3).value = names[1] || null;
@@ -251,27 +254,14 @@ function fillStby(ws, stbys) {
 
 const personLine = (note) => [clean(note?.duty_officer), clean(note?.duty_phone)].filter(Boolean).join(" ") || null;
 
-/**
- * สร้างไฟล์ Excel กระดานของวันที่ `day` แล้วดาวน์โหลด
- * @returns {Promise<{file: string, skipped: number}>}  skipped = ภารกิจที่เกิน 6 ใบ (ไม่ได้ลงกระดาน)
- */
-export async function exportBoardXlsx({ day, missions, aircraft, defMap, chkMap, noteToday, noteNext, stLabel }) {
-  const ExcelJS = await loadExcelJS();
-  const res = await fetch(TEMPLATE_URL, { cache: "no-cache" });
-  if (!res.ok) throw new Error("โหลดแม่แบบ Excel ไม่สำเร็จ");
-  const wb = new ExcelJS.Workbook();
-  await wb.xlsx.load(await res.arrayBuffer());
-  const ws = wb.worksheets[0];
-  // ExcelJS เขียน <pageSetUpPr> ก่อน <outlinePr> (ผิด schema) → Excel ฟ้อง "XML error" · ไม่ใช้ outline อยู่แล้ว
-  if (ws.properties) delete ws.properties.outlineProperties;
+// เติมกระดานของ 1 วันลงชีต (ชีตจากแม่แบบ) · คืนจำนวนภารกิจที่เกิน 6 การ์ด
+function fillBoard(ws, { day, missions, aircraft, defMap, chkMap, noteToday, noteNext }, stLabel, draft) {
   const next = new Date(day.getFullYear(), day.getMonth(), day.getDate() + 1);
-
-  ws.name = shortTH(day);
   ws.getCell("A2").value = `วัน ${TH_DOW[day.getDay()]} ที่ ${day.getDate()} ${TH_MONTH[day.getMonth()]} พ.ศ.${day.getFullYear() + 543}`;
 
   const order = (a) => [clean(a.type), clean(a.tail_number)].join("|");    // -500 ก่อน -600 เหมือนกระดาน
   fillPanel(ws, [...aircraft].sort((a, b) => order(a).localeCompare(order(b))), defMap, chkMap, stLabel);
-  fillStby(ws, missions.filter((m) => m.kind === "stby"));
+  fillStby(ws, missions.filter((m) => m.kind === "stby"), draft);
 
   ws.getCell("A38").value = personLine(noteToday);
   ws.getCell("A39").value = `น.จัดบิน ภารกิจ วันที่ ${shortTH(next)}`;
@@ -280,14 +270,58 @@ export async function exportBoardXlsx({ day, missions, aircraft, defMap, chkMap,
   // ป้ายการ์ดในแม่แบบเขียน "COWBOY" → เปลี่ยนเป็น "Callsign" ทุกการ์ด (รวมการ์ดที่ว่าง)
   CARD_ORIGINS.forEach(([r, c]) => { ws.getCell(r, c + 4).value = "Callsign"; dropDistanceRow(ws, [r, c]); });
   const cards = orderMissions(missions.filter((m) => m.kind !== "stby"));
-  cards.slice(0, CARD_ORIGINS.length).forEach((m, i) => fillCard(ws, CARD_ORIGINS[i], m));
+  cards.slice(0, CARD_ORIGINS.length).forEach((m, i) => fillCard(ws, CARD_ORIGINS[i], m, draft));
+  return Math.max(0, cards.length - CARD_ORIGINS.length);
+}
+
+/**
+ * สร้างไฟล์ Excel กระดาน 1 วัน = 1 ชีต (หลายวันในไฟล์เดียว) แล้วดาวน์โหลด
+ * @param days   [{ day: Date, missions, aircraft, defMap, chkMap, noteToday, noteNext }, ...] เรียงตามวัน
+ * @param draft  true = ไม่มีชื่อลูกเรือ / callsign
+ * @returns {Promise<{file: string, skipped: {day: Date, n: number}[]}>}  skipped = วันที่มีภารกิจเกิน 6 การ์ด
+ */
+export async function exportBoardXlsx({ days, stLabel, draft = false }) {
+  if (!days?.length) throw new Error("ยังไม่ได้เลือกวัน");
+  const ExcelJS = await loadExcelJS();
+  const res = await fetch(TEMPLATE_URL, { cache: "no-cache" });
+  if (!res.ok) throw new Error("โหลดแม่แบบ Excel ไม่สำเร็จ");
+  const tpl = await res.arrayBuffer();
+  const openTemplate = async () => {
+    const wb = new ExcelJS.Workbook();
+    await wb.xlsx.load(tpl);
+    const ws = wb.worksheets[0];
+    // ExcelJS เขียน <pageSetUpPr> ก่อน <outlinePr> (ผิด schema) → Excel ฟ้อง "XML error" · ไม่ใช้ outline อยู่แล้ว
+    if (ws.properties) delete ws.properties.outlineProperties;
+    return { wb, ws };
+  };
+
+  // ชีตแรกเติมในสมุดแม่แบบเลย · วันถัดไปโหลดแม่แบบใหม่ เติม แล้วคัดลอกชีต (model) มาต่อท้าย — ExcelJS ไม่มีคำสั่งคัดลอกชีต
+  //  model ที่อ่านออกมาเก็บ merge ไว้ใน "merges" แต่ตอนตั้งค่าอ่านจาก "mergeCells"
+  const { wb, ws: first } = await openTemplate();
+  const skipped = [], used = new Set();
+  for (const [i, d] of days.entries()) {
+    const ws = i ? (await openTemplate()).ws : first;
+    let name = shortTH(d.day);
+    for (let k = 2; used.has(name); k++) name = `${shortTH(d.day)} (${k})`;
+    used.add(name);
+    ws.name = name;
+    const n = fillBoard(ws, d, stLabel, draft);
+    if (n) skipped.push({ day: d.day, n });
+    if (i) {
+      const m = ws.model;
+      const dst = wb.addWorksheet(name);
+      dst.model = { ...m, name, mergeCells: m.merges };
+    }
+  }
 
   wb.creator = wb.lastModifiedBy = "Flight Operation";
   const buf = await wb.xlsx.writeBuffer();
-  const file = `จัดบิน ฝูง.603 ${shortTH(day)}.xlsx`;
+  const a0 = days[0].day, a1 = days[days.length - 1].day;
+  const span = days.length > 1 ? `${shortTH(a0)} - ${shortTH(a1)}` : shortTH(a0);
+  const file = `${draft ? "DRAFT " : ""}จัดบิน ฝูง.603 ${span}.xlsx`;
   const url = URL.createObjectURL(new Blob([buf], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }));
   const a = Object.assign(document.createElement("a"), { href: url, download: file });
   document.body.appendChild(a); a.click(); a.remove();
   setTimeout(() => URL.revokeObjectURL(url), 5000);
-  return { file, skipped: Math.max(0, cards.length - CARD_ORIGINS.length) };
+  return { file, skipped };
 }
