@@ -33,6 +33,8 @@
             border-radius:4px;padding:0 5px;color:var(--ink)}
 
   .qwrap{overflow-x:auto;border:1px solid var(--line-strong);border-radius:10px;background:var(--surface)}
+  /* หัววันที่ค้างใต้แถบเมนูตอนเลื่อนจอ (เลื่อนด้วย transform จาก JS — sticky ใช้ไม่ได้เพราะกรอบ overflow-x) */
+  table.q thead th{will-change:transform}
   table.q{border-collapse:separate;border-spacing:0;font-size:12px;user-select:none}
   table.q th, table.q td{border-right:1px solid var(--q-grid);border-bottom:1px solid var(--q-grid);
                          padding:0;height:27px;text-align:center;vertical-align:middle}
@@ -553,6 +555,7 @@
           `<td class="name2" style="${qualStyle(p.position) || ""}" title="${esc(p.code)}">${esc(p.full_name)}</td></tr>`;
       });
       table.innerHTML = html + `</tbody>`;
+      pinQueueHead();
       renderQueuePanel();
       renderHolidayPanel();
       renderHolSheet();
@@ -565,6 +568,19 @@
       } else miss.hidden = true;
       renderAirfields([...maps.missingCodes]);
     }
+
+    // หัวตาราง (วันที่) ค้างใต้แถบเมนูเมื่อเลื่อนจอลง — กรอบ .qwrap เลื่อนแนวนอน จึงใช้ position:sticky แนวตั้งกับหน้าไม่ได้
+    //  เลยเลื่อนแถวหัวลงด้วย transform เท่ากับส่วนที่ตารางเลยขอบบนไปแล้ว (ไม่เกินแถวสุดท้าย)
+    function pinQueueHead() {
+      const th = table.tHead?.rows[0]?.cells; if (!th) return;
+      const top = document.querySelector(".topbar")?.getBoundingClientRect().bottom || 0;
+      const r = table.getBoundingClientRect(), h = th[0].offsetHeight;
+      const off = Math.max(0, Math.min(top - r.top, r.height - h * 2));
+      const v = off ? `translateY(${off}px)` : "";
+      if (th[0].style.transform !== v) for (const c of th) c.style.transform = v;
+    }
+    addEventListener("scroll", pinQueueHead, { passive: true });
+    addEventListener("resize", pinQueueHead);
 
     // อัปเดตช่องเดียว (ไม่ต้องวาดทั้งตาราง)
     function refreshCell() { render(); }      // แก้ช่องไหนก็อาจทำให้ลำดับคิวเปลี่ยน
