@@ -319,7 +319,7 @@
         <div class="lb">${labelHTML}</div>
         <div class="show">${show}</div>
         ${planner ? `<div class="edit">
-          <input data-officer="${key}" value="${esc(officer)}" placeholder="ชื่อ น.จัดบินภารกิจ เช่น ยศ ชื่อ">
+          <input data-officer="${key}" list="dutyCrewList" autocomplete="off" value="${esc(officer)}" placeholder="พิมพ์/เลือกชื่อจากทะเบียนนักบิน">
           <input class="ph" data-phone="${key}" value="${esc(phone)}" placeholder="เบอร์โทร">
         </div>` : ""}
       </div>`;
@@ -355,6 +355,9 @@
       wireFoot();
     }
 
+    let dutyCrewP = null;               // ทะเบียนนักบิน (ชื่อ + เบอร์) สำหรับช่อง น.จัดบิน — โหลดครั้งเดียวเมื่อกดแก้ไข
+    const dutyCrew = () => (dutyCrewP ||= supabase.from("crew_members").select("full_name,phone").eq("active", true).order("full_name")
+      .then(({ data }) => data || [], () => { dutyCrewP = null; return []; }));
     function wireFoot() {
       const foot = document.getElementById("foot");
       if (!foot || !planner) return;
@@ -368,7 +371,23 @@
         cancelBtn.style.display = on ? "" : "none";
         fitWidth();
       };
-      editBtn.addEventListener("click", () => toggle(true));
+      // ชื่อ น.จัดบิน = เลือกจากทะเบียนนักบิน (datalist · ยังพิมพ์เองได้) · ชื่อตรงกับในทะเบียน → ใส่เบอร์โทรให้อัตโนมัติ (ผู้ใช้ขอ 16 พ.ย. 69)
+      editBtn.addEventListener("click", async () => {
+        toggle(true);
+        const crew = await dutyCrew();
+        if (!foot.querySelector("#dutyCrewList")) {
+          const dl = document.createElement("datalist");
+          dl.id = "dutyCrewList";
+          dl.innerHTML = crew.map((c) => `<option value="${esc(c.full_name)}">${esc(c.phone || "")}</option>`).join("");
+          foot.append(dl);
+        }
+      });
+      const normName = (t) => String(t || "").replace(/\s+/g, "");
+      foot.addEventListener("input", async (e) => {
+        const key = e.target.dataset?.officer; if (!key) return;
+        const c = (await dutyCrew()).find((x) => normName(x.full_name) === normName(e.target.value));
+        if (c?.phone) foot.querySelector(`[data-phone="${key}"]`).value = c.phone;
+      });
       cancelBtn.addEventListener("click", () => { refresh(); });
       saveBtn.addEventListener("click", async () => {
         saveBtn.disabled = true; saveBtn.textContent = "…";
