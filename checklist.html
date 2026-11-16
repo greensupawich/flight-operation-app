@@ -6,7 +6,7 @@
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob: https://iljapjszrjuzjjbtxctu.supabase.co; media-src 'self' blob: https://iljapjszrjuzjjbtxctu.supabase.co; connect-src 'self' data: https://iljapjszrjuzjjbtxctu.supabase.co wss://iljapjszrjuzjjbtxctu.supabase.co; worker-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'">
 <meta name="referrer" content="same-origin">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Flight Operation · Checklist น.จัดบิน</title>
+<title>Flight Operation · น.จัดบิน</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bai+Jamjuree:wght@600;700&family=IBM+Plex+Sans+Thai:wght@400;500;600&family=IBM+Plex+Mono&display=swap">
@@ -59,15 +59,66 @@
   .nt-f .sp{flex:1}
   .nt-f .dirty{color:var(--warn);font-weight:600}
   @media (max-width:520px){ .cls,.nts{grid-template-columns:1fr} .bar input{width:100%} }
+  /* ---- แท็บย่อย ---- */
+  .tabs{display:flex;gap:4px;border-bottom:2px solid var(--line);margin:4px 0 14px}
+  .tabs button{border:0;background:transparent;padding:9px 14px;font:inherit;font-weight:600;color:var(--muted);cursor:pointer;
+               border-bottom:2px solid transparent;margin-bottom:-2px;border-radius:8px 8px 0 0}
+  .tabs button:hover{color:var(--ink);background:var(--surface-2)}
+  .tabs button.on{color:var(--primary);border-bottom-color:var(--primary)}
+  /* ---- 📅 เวรจัดบิน (ปฏิทิน · day_notes เดียวกับท้ายกระดานหน้าหลัก) ---- */
+  .dbar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:10px}
+  .dbar .mt{font-family:"Bai Jamjuree",sans-serif;font-weight:700;font-size:18px;min-width:170px;text-align:center}
+  .cal{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:6px}
+  .cal .wd{font-size:12px;font-weight:700;color:var(--muted);text-align:center;padding:4px 0}
+  .cal .wd.we{color:var(--crit)}
+  .dc{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:6px 7px 7px;min-height:96px;display:flex;flex-direction:column;gap:4px}
+  .dc.out{visibility:hidden}
+  .dc.we,.dc.hol{background:var(--surface-2)}
+  .dc.today{border-color:var(--primary);box-shadow:0 0 0 1px var(--primary) inset}
+  .dc .dh{display:flex;align-items:baseline;gap:6px;font-size:12px;color:var(--muted)}
+  .dc .dh b{font-family:"IBM Plex Mono",monospace;font-size:15px;color:var(--ink)}
+  .dc.we .dh b,.dc.hol .dh b{color:var(--crit)}
+  .dc .dh .hn{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11px;color:var(--crit)}
+  .dc .dh .dw{display:none}
+  .dc .dh .st{font-size:11px;white-space:nowrap}
+  .dc .dh .st.ok{color:var(--good)} .dc .dh .st.err{color:var(--crit)} .dc .dh .st.busy{color:var(--muted)}
+  .dc input{width:100%;min-width:0;font-size:13px;padding:5px 7px}
+  .dc input.ph{font-family:"IBM Plex Mono",monospace;font-size:12px}
+  .dc.filled{border-color:var(--line-strong)}
+  @media (max-width:820px){
+    .cal{grid-template-columns:1fr}
+    .cal .wd,.dc.out{display:none}
+    .dc{min-height:0;display:grid;grid-template-columns:52px minmax(0,1fr) 108px;align-items:center;gap:6px}
+    .dc .dh{flex-wrap:wrap;gap:0 4px}
+    .dc .dh .dw{display:inline}
+  }
 </style>
 </head>
 <body>
 <main>
   <div class="wrap">
     <div class="page-head">
-      <h1>Checklist น.จัดบิน</h1>
-      <div class="sub">กระดาษทดรายวัน · ปุ่ม Reset ล้างเฉพาะช่องติ๊ก หัวข้อคงเดิม · ไม่เก็บประวัติ/สถิติ · ด้านล่างมีกระดานข้อความไว้แปะข้อความยาว ๆ</div>
+      <h1>น.จัดบิน</h1>
+      <div class="sub" id="pageSub">กระดาษทดรายวัน · ปุ่ม Reset ล้างเฉพาะช่องติ๊ก หัวข้อคงเดิม · ไม่เก็บประวัติ/สถิติ · ด้านล่างมีกระดานข้อความไว้แปะข้อความยาว ๆ</div>
     </div>
+    <div class="tabs" role="tablist">
+      <button type="button" data-tab="check" class="on">☑ Checklist</button>
+      <button type="button" data-tab="duty">📅 เวรจัดบิน</button>
+    </div>
+
+    <!-- 📅 เวรจัดบิน: ใส่ชื่อ น.จัดบินแต่ละวัน (ตาราง day_notes — ข้อมูลเดียวกับท้ายกระดานหน้าหลัก) -->
+    <section id="dutyTab" hidden>
+      <div class="dbar">
+        <button class="btn sm" id="dPrev" title="เดือนก่อน">←</button>
+        <span class="mt" id="dTitle"></span>
+        <button class="btn sm" id="dNext" title="เดือนถัดไป">→</button>
+        <button class="btn sm ghost" id="dToday">เดือนนี้</button>
+        <span class="muted" style="font-size:12.5px">พิมพ์/เลือกชื่อจากทะเบียนนักบิน → เบอร์ขึ้นเอง · บันทึกเองเมื่อออกจากช่อง · แก้ที่นี่หรือท้ายกระดานหน้าหลักก็เป็นข้อมูลเดียวกัน</span>
+      </div>
+      <div class="cal" id="cal"><div class="empty" style="grid-column:1/-1">กำลังโหลด…</div></div>
+      <datalist id="dutyCrewList"></datalist>
+    </section>
+    <section id="checkTab">
     <div class="bar" id="bar"></div>
     <div class="msg" id="msg"></div>
     <div class="cls" id="cls"><div class="empty">กำลังโหลด…</div></div>
@@ -76,6 +127,7 @@
     <div class="sec-h"><h2>📝 กระดานข้อความ</h2><span class="muted" style="font-size:12.5px">ไว้แปะข้อความยาว ๆ · บันทึกเองเมื่อคลิกออกจากช่อง · ไม่ถูก Reset</span>
       <span class="sp"></span><button class="btn sm primary" id="newNote">+ เพิ่มกระดานข้อความ</button></div>
     <div class="nts" id="nts"><div class="empty">กำลังโหลด…</div></div>
+    </section>
   </div>
 </main>
 
@@ -91,7 +143,7 @@
   // หน้านี้เฉพาะผู้วางแผน / admin (เมนูถูกซ่อนสำหรับสิทธิ์อื่น · ฐานข้อมูลก็กันการอ่านไว้ — migration_40)
   if (!planner) {
     document.querySelector("main .wrap").innerHTML =
-      `<div class="page-head"><h1>Checklist น.จัดบิน</h1></div><div class="empty">หน้านี้สำหรับผู้วางแผน / admin เท่านั้น</div>`;
+      `<div class="page-head"><h1>น.จัดบิน</h1></div><div class="empty">หน้านี้สำหรับผู้วางแผน / admin เท่านั้น</div>`;
     throw new Error("planner only");
   }
   const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[c]));
@@ -343,6 +395,91 @@
         && !document.querySelector(".nt .st.dirty")) load();
   });
   load();
+
+  // =================== 📅 เวรจัดบิน (ผู้ใช้ขอ 16 พ.ย. 69) ===================
+  //  1 วัน = 1 แถวใน day_notes (duty_officer, duty_phone) — ตารางเดียวกับ "น.จัดบินภารกิจวันนี้/พรุ่งนี้" ท้ายกระดานหน้าหลัก
+  //  → แก้ที่ไหนก็เห็นตรงกัน · ชื่อเลือกจากทะเบียนนักบิน (พิมพ์เองได้) · ชื่อตรงกับทะเบียน → ใส่เบอร์ให้
+  const TH_MONTH = ["มกราคม","กุมภาพันธ์","มีนาคม","เมษายน","พฤษภาคม","มิถุนายน","กรกฎาคม","สิงหาคม","กันยายน","ตุลาคม","พฤศจิกายน","ธันวาคม"];
+  const TH_DOW = ["อา.","จ.","อ.","พ.","พฤ.","ศ.","ส."];
+  const ymd = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  const normName = (t) => String(t || "").replace(/\s+/g, "");
+  const SUB_CHECK = $("pageSub").textContent;
+  const SUB_DUTY = "ตารางเวร น.จัดบินภารกิจรายวัน · เป็นค่าเดียวกับช่อง น.จัดบิน ท้ายกระดานหน้าหลัก";
+  let dMonth = (() => { const n = new Date(); return new Date(n.getFullYear(), n.getMonth(), 1); })();
+  let dutyCrewP = null, dutyLoaded = false;
+  const dutyCrew = () => (dutyCrewP ||= supabase.from("crew_members").select("full_name,phone").eq("active", true).order("full_name")
+    .then(({ data }) => data || [], () => { dutyCrewP = null; return []; }));
+
+  function showTab(t) {
+    document.querySelectorAll(".tabs [data-tab]").forEach((b) => b.classList.toggle("on", b.dataset.tab === t));
+    $("checkTab").hidden = t !== "check"; $("dutyTab").hidden = t !== "duty";
+    $("pageSub").textContent = t === "duty" ? SUB_DUTY : SUB_CHECK;
+    try { history.replaceState(null, "", t === "duty" ? "#duty" : location.pathname + location.search); } catch {}
+    if (t === "duty" && !dutyLoaded) { dutyLoaded = true; loadDuty(); }
+  }
+  document.querySelector(".tabs").addEventListener("click", (e) => { const b = e.target.closest("[data-tab]"); if (b) showTab(b.dataset.tab); });
+
+  async function loadDuty() {
+    const y = dMonth.getFullYear(), m = dMonth.getMonth();
+    const first = ymd(new Date(y, m, 1)), last = ymd(new Date(y, m + 1, 0));
+    $("dTitle").textContent = `${TH_MONTH[m]} ${y + 543}`;
+    const [notes, hols, crew] = await Promise.all([
+      supabase.from("day_notes").select("log_date,duty_officer,duty_phone").gte("log_date", first).lte("log_date", last),
+      supabase.from("holidays").select("holiday_date,name").gte("holiday_date", first).lte("holiday_date", last),
+      dutyCrew(),
+    ]);
+    if (notes.error) { $("cal").innerHTML = `<div class="empty" style="grid-column:1/-1">โหลดไม่สำเร็จ: ${esc(notes.error.message)}</div>`; return; }
+    if (y !== dMonth.getFullYear() || m !== dMonth.getMonth()) return;            // เปลี่ยนเดือนระหว่างโหลด
+    $("dutyCrewList").innerHTML = crew.map((c) => `<option value="${esc(c.full_name)}">${esc(c.phone || "")}</option>`).join("");
+    const byDate = new Map((notes.data || []).map((r) => [r.log_date, r]));
+    const holMap = new Map((hols.data || []).map((h) => [h.holiday_date, h.name || "วันหยุด"]));
+    const today = ymd(new Date()), lead = new Date(y, m, 1).getDay(), days = new Date(y, m + 1, 0).getDate();
+    let html = TH_DOW.map((w, i) => `<div class="wd${i === 0 || i === 6 ? " we" : ""}">${w}</div>`).join("");
+    html += Array.from({ length: lead }, () => `<div class="dc out"></div>`).join("");
+    for (let d = 1; d <= days; d++) {
+      const dt = new Date(y, m, d), k = ymd(dt), w = dt.getDay(), r = byDate.get(k) || {}, hn = holMap.get(k);
+      const cls = ["dc", w === 0 || w === 6 ? "we" : "", hn ? "hol" : "", k === today ? "today" : "", r.duty_officer ? "filled" : ""].join(" ");
+      html += `<div class="${cls}" data-date="${k}">
+        <div class="dh"><b>${d}</b><span class="dw">${TH_DOW[w]}</span><span class="hn" title="${esc(hn || "")}">${esc(hn || "")}</span><span class="st"></span></div>
+        <input class="nm" list="dutyCrewList" autocomplete="off" value="${esc(r.duty_officer || "")}" placeholder="ชื่อ น.จัดบิน" aria-label="น.จัดบิน วันที่ ${d}">
+        <input class="ph" value="${esc(r.duty_phone || "")}" placeholder="เบอร์โทร" aria-label="เบอร์ น.จัดบิน วันที่ ${d}">
+      </div>`;
+    }
+    $("cal").innerHTML = html;
+  }
+  const shiftMonth = (n) => { dMonth = new Date(dMonth.getFullYear(), dMonth.getMonth() + n, 1); loadDuty(); };
+  $("dPrev").addEventListener("click", () => shiftMonth(-1));
+  $("dNext").addEventListener("click", () => shiftMonth(1));
+  $("dToday").addEventListener("click", () => { const n = new Date(); dMonth = new Date(n.getFullYear(), n.getMonth(), 1); loadDuty(); });
+
+  // พิมพ์ชื่อ → ตรงกับทะเบียน → ใส่เบอร์ (ก่อนบันทึก)
+  $("cal").addEventListener("input", async (e) => {
+    if (!e.target.classList.contains("nm")) return;
+    const c = (await dutyCrew()).find((x) => normName(x.full_name) === normName(e.target.value));
+    if (c?.phone) e.target.closest(".dc").querySelector(".ph").value = c.phone;
+  });
+  // บันทึกเมื่อออกจากช่อง (change) — upsert ตาม log_date
+  $("cal").addEventListener("change", async (e) => {
+    const cell = e.target.closest(".dc[data-date]"); if (!cell) return;
+    const nm = cell.querySelector(".nm"), ph = cell.querySelector(".ph"), st = cell.querySelector(".st");
+    if (e.target === nm) {
+      const c = (await dutyCrew()).find((x) => normName(x.full_name) === normName(nm.value));
+      if (c) { nm.value = c.full_name; if (c.phone) ph.value = c.phone; }
+      if (!nm.value.trim()) ph.value = "";                                            // ลบชื่อ = ลบเบอร์ด้วย
+    }
+    st.className = "st busy"; st.textContent = "กำลังบันทึก…";
+    const { error } = await supabase.from("day_notes").upsert({ log_date: cell.dataset.date, duty_officer: nm.value.trim() || null,
+      duty_phone: ph.value.trim() || null, updated_at: new Date().toISOString() }, { onConflict: "log_date" });
+    if (error) { st.className = "st err"; st.textContent = "บันทึกไม่สำเร็จ"; st.title = error.message; return; }
+    cell.classList.toggle("filled", !!nm.value.trim());
+    st.className = "st ok"; st.textContent = "✓ บันทึกแล้ว"; st.title = "";
+    setTimeout(() => { if (st.textContent === "✓ บันทึกแล้ว") st.textContent = ""; }, 2500);
+  });
+  // กลับมาที่แท็บ → โหลดใหม่ (เผื่อแก้จากหน้าหลัก) ถ้าไม่มีช่องที่กำลังพิมพ์
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible" && !$("dutyTab").hidden && !$("cal").contains(document.activeElement)) loadDuty();
+  });
+  if (location.hash === "#duty") showTab("duty");
 </script>
 </body>
 </html>

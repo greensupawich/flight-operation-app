@@ -14,7 +14,7 @@ const LINKS = [
   { href: "crew.html",      label: "ทะเบียนนักบิน" },
   { href: "pilot-month.html", label: "พ." },
   { href: "status.html",    label: "สถานภาพเครื่อง" },
-  { href: "checklist.html", label: "Checklist", plannerOnly: true },
+  { href: "checklist.html", label: "น.จัดบิน", plannerOnly: true },
   { href: "support.html",   label: "ขอสนับสนุน", plannerOnly: true },
   { href: "stats.html",     label: "สถิติ" },
   { href: "safety.html",    label: "นิรภัย" },
