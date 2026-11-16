@@ -6,7 +6,7 @@
 //         การ์ดภารกิจ 6 ใบ (คอลัมน์เริ่ม F / M / T × แถวเริ่ม 1 / 21) ใบละ 7 คอลัมน์ × 20 แถว
 //  • ไลบรารี ExcelJS โหลดเมื่อกดปุ่มเท่านั้น (pin เวอร์ชัน + SRI)
 // =====================================================================
-import { orderMissions } from "./mission-sheet.js";
+import { orderMissions, hidePilotRow } from "./mission-sheet.js";
 import { pocLines, missionNameLines, stbyLabel } from "./missions.js";
 
 const EXCELJS_URL = new URL("../vendor/exceljs-4.4.0.min.js", import.meta.url).href;   // เก็บในระบบเอง (vendor/README.md)
@@ -58,6 +58,7 @@ function namesBy(crew, role) {
 function crewLayout(crew) {
   const by = Object.fromEntries(ROLE_ORDER.map((r) => [r, namesBy(crew, r)]));
   let rows = ROLE_ORDER.flatMap((r) => {
+    if (!by[r].length && hidePilotRow(r, crew)) return [];       // มี นบ.ราชฯ → ตัดแถว IP/P/CP ที่ว่าง (เหมือนหน้าเว็บ)
     if (ONE_PER_ROW.includes(r)) return by[r].map((n) => ({ role: r, names: [n] }));
     return BASE_ROLES.includes(r) || (EXTRA_ROLES.includes(r) && by[r].length) ? [{ role: r, names: by[r] }] : [];
   });
@@ -70,6 +71,7 @@ function crewLayout(crew) {
     last.names = [...last.names, ...rows.slice(CREW_ROWS).flatMap((x) => x.names.map((n) => `${x.role}: ${n}`))];
     rows = keep;
   }
+  while (rows.length < CREW_ROWS) rows.push({ role: null, names: [] });   // แถวที่เหลือ → ว่าง (ไม่ให้ป้ายในแม่แบบค้าง)
   return rows;
 }
 
