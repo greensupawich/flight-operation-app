@@ -410,13 +410,15 @@
 
   // =================== 📅 เวรจัดบิน (ผู้ใช้ขอ 16 พ.ย. 69) ===================
   //  1 วัน = 1 แถวใน day_notes (duty_officer, duty_phone) — ตารางเดียวกับ "น.จัดบินภารกิจวันนี้/พรุ่งนี้" ท้ายกระดานหน้าหลัก
+  //  ช่องวันที่ D = คนที่เข้าเวรวัน D ซึ่งจัดภารกิจของวัน D+1 (จัดล่วงหน้า 1 วัน · ผู้ใช้ขอ 17 พ.ย. 69)
+  //  → ช่อง D อ่าน/เขียนแถว log_date = D+1 (log_date ของ day_notes = วันภารกิจ ตรงกับท้ายกระดานหน้าหลัก)
   //  → แก้ที่ไหนก็เห็นตรงกัน · ชื่อเลือกจากทะเบียนนักบิน (พิมพ์เองได้) · ชื่อตรงกับทะเบียน → ใส่เบอร์ให้
   const TH_MONTH = ["มกราคม","กุมภาพันธ์","มีนาคม","เมษายน","พฤษภาคม","มิถุนายน","กรกฎาคม","สิงหาคม","กันยายน","ตุลาคม","พฤศจิกายน","ธันวาคม"];
   const TH_DOW = ["อา.","จ.","อ.","พ.","พฤ.","ศ.","ส."];
   const ymd = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
   const normName = (t) => String(t || "").replace(/\s+/g, "");
   const SUB_CHECK = $("pageSub").textContent;
-  const SUB_DUTY = "ตารางเวร น.จัดบินภารกิจรายวัน · เป็นค่าเดียวกับช่อง น.จัดบิน ท้ายกระดานหน้าหลัก";
+  const SUB_DUTY = "ตารางเวร น.จัดบิน · ช่องวันที่ = วันเข้าเวร (จัดภารกิจของวันถัดไป) · เป็นค่าเดียวกับช่อง น.จัดบิน ท้ายกระดานหน้าหลัก";
   let dMonth = (() => { const n = new Date(); return new Date(n.getFullYear(), n.getMonth(), 1); })();
   let dutyCrewP = null, dutyLoaded = false;
   const dutyCrew = () => (dutyCrewP ||= supabase.from("crew_members").select("full_name,phone").eq("active", true).order("full_name")
@@ -434,9 +436,10 @@
   async function loadDuty() {
     const y = dMonth.getFullYear(), m = dMonth.getMonth();
     const first = ymd(new Date(y, m, 1)), last = ymd(new Date(y, m + 1, 0));
+    const mFirst = ymd(new Date(y, m, 2)), mLast = ymd(new Date(y, m + 1, 1));   // วันภารกิจ = วันเข้าเวร + 1
     $("dTitle").textContent = `${TH_MONTH[m]} ${y + 543}`;
     const [notes, hols, crew] = await Promise.all([
-      supabase.from("day_notes").select("log_date,duty_officer,duty_phone").gte("log_date", first).lte("log_date", last),
+      supabase.from("day_notes").select("log_date,duty_officer,duty_phone").gte("log_date", mFirst).lte("log_date", mLast),
       supabase.from("holidays").select("holiday_date,name").gte("holiday_date", first).lte("holiday_date", last),
       dutyCrew(),
     ]);
@@ -449,11 +452,13 @@
     let html = TH_DOW.map((w, i) => `<div class="wd${i === 0 || i === 6 ? " we" : ""}">${w}</div>`).join("");
     html += Array.from({ length: lead }, () => `<div class="dc out"></div>`).join("");
     for (let d = 1; d <= days; d++) {
-      const dt = new Date(y, m, d), k = ymd(dt), w = dt.getDay(), r = byDate.get(k) || {}, hn = holMap.get(k);
+      const dt = new Date(y, m, d), k = ymd(dt), w = dt.getDay(), hn = holMap.get(k);
+      const md = new Date(y, m, d + 1), mk = ymd(md), r = byDate.get(mk) || {};
+      const mLabel = md.getMonth() === m ? `${md.getDate()}` : `${md.getDate()} ${["ม.ค.","ก.พ.","มี.ค.","เม.ย.","พ.ค.","มิ.ย.","ก.ค.","ส.ค.","ก.ย.","ต.ค.","พ.ย.","ธ.ค."][md.getMonth()]}`;
       const cls = ["dc", w === 0 || w === 6 ? "we" : "", hn ? "hol" : "", k === today ? "today" : "", r.duty_officer ? "filled" : ""].join(" ");
-      html += `<div class="${cls}" data-date="${k}">
+      html += `<div class="${cls}" data-date="${k}" data-mdate="${mk}">
         <div class="dh"><b>${d}</b><span class="dw">${TH_DOW[w]}</span><span class="hn" title="${esc(hn || "")}">${esc(hn || "")}</span><span class="st"></span></div>
-        <input class="nm" list="dutyCrewList" autocomplete="off" value="${esc(r.duty_officer || "")}" data-name="${esc(r.duty_officer || "")}" data-phone="${esc(r.duty_phone || "")}" placeholder="ชื่อ น.จัดบิน" aria-label="น.จัดบิน วันที่ ${d}">
+        <input class="nm" list="dutyCrewList" autocomplete="off" value="${esc(r.duty_officer || "")}" data-name="${esc(r.duty_officer || "")}" data-phone="${esc(r.duty_phone || "")}" placeholder="จัดภารกิจวันที่ ${mLabel}" title="เข้าเวรวันที่ ${d} · จัดภารกิจวันที่ ${mLabel}" aria-label="น.จัดบิน เข้าเวรวันที่ ${d} จัดภารกิจวันที่ ${mLabel}">
       </div>`;
     }
     $("cal").innerHTML = html;
@@ -481,7 +486,7 @@
   $("dNext").addEventListener("click", () => shiftMonth(1));
   $("dToday").addEventListener("click", () => { const n = new Date(); dMonth = new Date(n.getFullYear(), n.getMonth(), 1); loadDuty(); });
 
-  // บันทึกเมื่อออกจากช่อง (change) — upsert ตาม log_date
+  // บันทึกเมื่อออกจากช่อง (change) — upsert ตาม log_date = วันภารกิจ (data-mdate = วันในช่อง + 1)
   //  ตารางเวรไม่แสดงเบอร์ (ผู้ใช้ขอ 16 พ.ย. 69) แต่ยังบันทึก duty_phone ให้หน้าหลัก:
   //  ชื่อตรงกับทะเบียน → เบอร์จากทะเบียน · ชื่อเดิม (ไม่เปลี่ยน) → เบอร์เดิม · ชื่อนอกทะเบียน/ลบชื่อ → ไม่มีเบอร์
   $("cal").addEventListener("change", async (e) => {
@@ -492,7 +497,7 @@
     const name = nm.value.trim();
     const phone = !name ? null : c?.phone || (normName(name) === normName(nm.dataset.name) ? nm.dataset.phone : "") || null;
     st.className = "st busy"; st.textContent = "กำลังบันทึก…";
-    const { error } = await supabase.from("day_notes").upsert({ log_date: cell.dataset.date, duty_officer: name || null,
+    const { error } = await supabase.from("day_notes").upsert({ log_date: cell.dataset.mdate, duty_officer: name || null,
       duty_phone: phone, updated_at: new Date().toISOString() }, { onConflict: "log_date" });
     if (error) { st.className = "st err"; st.textContent = "บันทึกไม่สำเร็จ"; st.title = error.message; return; }
     nm.dataset.name = name; nm.dataset.phone = phone || "";
