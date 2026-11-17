@@ -232,6 +232,9 @@
   const ymd=(dt)=>`${dt.getFullYear()}-${String(dt.getMonth()+1).padStart(2,"0")}-${String(dt.getDate()).padStart(2,"0")}`;
   const TH_MON=["ม.ค.","ก.พ.","มี.ค.","เม.ย.","พ.ค.","มิ.ย.","ก.ค.","ส.ค.","ก.ย.","ต.ค.","พ.ย.","ธ.ค."];
   const r1=(v)=>Math.round(v*10)/10;
+  // ใส่ , หลักพัน (ผู้ใช้ขอ 17 พ.ย. 69) · n1 = ทศนิยม 1 ตำแหน่งเสมอ · nc = ตามค่าจริง
+  const n1=(v)=>r1(Number(v)||0).toLocaleString("en-US",{minimumFractionDigits:1,maximumFractionDigits:1});
+  const nc=(v)=>r1(Number(v)||0).toLocaleString("en-US");
 
   let lastMonth=null;                               // ข้อมูลตารางแยกประเภทที่แสดงอยู่ — ใช้ตอน Export Excel
   function renderMonth(ym){
@@ -360,10 +363,10 @@
     const kpi=document.getElementById("kpi");
     kpi.querySelectorAll(".fyk").forEach(e=>e.remove());           // วาดใหม่ตอนบันทึกเป้า → ไม่ซ้ำ
     kpi.insertAdjacentHTML("beforeend",
-      `<div class="card fyk"><div class="n">${r1(actual)}${target?`<span style="font-size:14px;color:var(--muted)"> / ${r1(target)}</span>`:""}</div>
+      `<div class="card fyk"><div class="n">${nc(actual)}${target?`<span style="font-size:14px;color:var(--muted)"> / ${nc(target)}</span>`:""}</div>
         <div class="l">ชม.สะสมปีงบ ${fy}${target?` · ${Math.round(actual/target*100)}% ของเป้า`:""}</div></div>`+
-      (pace ? `<div class="card fyk"><div class="n" style="color:${actual>=pace*0.95?"#2E9E44":"#D32F2F"}">${actual-pace>=0?"+":""}${r1(actual-pace)}</div>
-        <div class="l">เทียบเส้นเป้า ณ ${last===nD-1?"สิ้นปีงบ":"วันนี้"} (${r1(pace)} ชม.)</div></div>` : ""));
+      (pace ? `<div class="card fyk"><div class="n" style="color:${actual>=pace*0.95?"#2E9E44":"#D32F2F"}">${actual-pace>=0?"+":""}${nc(actual-pace)}</div>
+        <div class="l">เทียบเส้นเป้า ณ ${last===nD-1?"สิ้นปีงบ":"วันนี้"} (${nc(pace)} ชม.)</div></div>` : ""));
 
     // วาด SVG (ใช้ทั้งบนหน้าเว็บ และตอน Export — exp=true: ใส่หัวข้อ/คำอธิบายเส้นในภาพ)
     const fySvg=(W,H,exp=false)=>{
@@ -581,12 +584,12 @@
     let tf=0, th=0;
     const rowsHTML=(ac||[]).map(x=>{ const p=per.get(x.id); tf+=p.f; th+=p.h;
       return `<tr><td class="mono">${esc(x.tail_number)}</td><td>${esc(x.type||"-")}</td>
-        <td class="num">${p.f||"·"}</td><td class="num">${p.h?r1(p.h).toFixed(1):"·"}</td>
-        <td class="num muted">${Number(x.total_hours||0).toFixed(1)}</td></tr>`; }).join("");
+        <td class="num">${p.f||"·"}</td><td class="num">${p.h?n1(p.h):"·"}</td>
+        <td class="num muted">${n1(x.total_hours)}</td></tr>`; }).join("");
     document.getElementById("ac").innerHTML = (ac&&ac.length)
       ? rowsHTML + `<tr style="font-weight:700;background:var(--surface-2)"><td colspan="2">รวมทุกเครื่อง</td>
-          <td class="num">${tf}</td><td class="num">${r1(th).toFixed(1)}</td>
-          <td class="num muted">${r1((ac||[]).reduce((s,x)=>s+Number(x.total_hours||0),0)).toFixed(1)}</td></tr>`
+          <td class="num">${tf.toLocaleString("en-US")}</td><td class="num">${n1(th)}</td>
+          <td class="num muted">${n1((ac||[]).reduce((s,x)=>s+Number(x.total_hours||0),0))}</td></tr>`
       : `<tr><td colspan="5" class="empty">ยังไม่มีข้อมูล</td></tr>`;
     document.getElementById("acNote").textContent =
       `เที่ยว = รายงานหลังบิน (ไม่นับภารกิจยกเลิก) · ชม. จากรายงานหลังบิน ตามวันที่ภารกิจ · ${fa?thMon(fa):"ต้นข้อมูล"} – ${fb?thMon(fb):"ล่าสุด"}`
