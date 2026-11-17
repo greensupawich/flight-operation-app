@@ -382,6 +382,15 @@
         return `<div class="card fyk"><div class="n">${nc(mEnd)}<span style="font-size:14px;color:var(--muted)"> ชม.</span></div>
           <div class="l">เป้าสะสม ณ สิ้น ${mLbl} (เป้าเดือนนี้ ${nc(mPart)} ชม.)${sub}</div></div>`; })() : ""));
 
+    // ตารางเป้ารายเดือน (ใช้ใน Export) · si/ei = ดัชนีวันแรก/วันสุดท้ายของเดือน
+    //  ทำได้ = เฉพาะเดือนที่เริ่มแล้ว (เดือนปัจจุบัน = ถึงวันนี้)
+    const monthly=[];
+    days.forEach((d,i)=>{ if(d.endsWith("-01")){ const [yy,mm]=d.split("-").map(Number), ei=i+daysIn(yy,mm)-1;
+      const started=last>=i, upto=Math.min(ei,last);
+      monthly.push({ ym:d.slice(0,7), label:`${TH_MON[mm-1]}${String(yy+543).slice(-2)}`, si:i, ei,
+        tMonth: target ? target*(ei-i+1)/nD : null, tCum: target ? target*(ei+1)/nD : null, t95: target ? target*0.95*(ei+1)/nD : null,
+        aMonth: started ? cum[upto]-(i?cum[i-1]:0) : null, aCum: started ? cum[upto] : null, partial: started && last<ei }); }});
+
     // วาด SVG (ใช้ทั้งบนหน้าเว็บ และตอน Export — exp=true: ใส่หัวข้อ/คำอธิบายเส้นในภาพ)
     const fySvg=(W,H,exp=false)=>{
       const padL=48,padR=56,padT=exp?40:14,padB=24;
@@ -409,9 +418,10 @@
           +`<path class="tg95" d="M${f(X(0))},${f(Y(0))} L${f(X(nD-1))},${f(Y(target*0.95))}"><title>95% = ${r1(target*0.95)} ชม.</title></path>`
           +`<text class="tgl" x="${f(X(nD-1)+4)}" y="${f(Y(target)+3)}" fill="#D32F2F">${Math.round(target)}</text>`
           +`<text class="tgl" x="${f(X(nD-1)+4)}" y="${f(Y(target*0.95)+12)}" fill="#2E9E44">${Math.round(target*0.95)}</text>`
-          // จุดเป้า ณ สิ้นเดือนที่เลือก
-          +`<circle cx="${f(X(me))}" cy="${f(Y(mEnd))}" r="4.5" fill="#fff" stroke="#D32F2F" stroke-width="2"><title>เป้าสะสม ณ สิ้น ${mLbl} ${n1(mEnd)} ชม.</title></circle>`
-          +`<text class="tgl" x="${f(X(me))}" y="${f(Y(mEnd)-9)}" text-anchor="middle" fill="#D32F2F">${nc(mEnd)}</text>`;
+          // จุดเป้า ณ สิ้นเดือน — หน้าเว็บ: เฉพาะเดือนที่เลือก · Export: ทุกเดือน (ผู้ใช้ขอ 17 พ.ย. 69)
+          +(exp ? monthly.map(r=>r.ei) : [me]).map(i=>{ const v=target*(i+1)/nD;
+            return `<circle cx="${f(X(i))}" cy="${f(Y(v))}" r="${exp?3.5:4.5}" fill="#fff" stroke="#D32F2F" stroke-width="2"><title>เป้าสะสม ณ สิ้นเดือน ${n1(v)} ชม.</title></circle>`
+              +(i===nD-1 ? "" : `<text class="tgl" x="${f(X(i))}" y="${f(Y(v)-9)}" text-anchor="middle" fill="#D32F2F">${nc(v)}</text>`); }).join("");
       }
       // เส้นจริง
       let ln="", area="", dots="";
@@ -434,7 +444,7 @@
         ${exp?`<style>${EXPORT_CSS}</style><rect width="${W}" height="${H}" fill="#fff"/>`:""}${lg}
         ${band}${grid}${xl}${tg}${area}<path class="ln" d="${ln.trim()}"/>${dots}</svg>`;
     };
-    lastFy={ fy, actual, target, svg:fySvg };
+    lastFy={ fy, actual, target, svg:fySvg, monthly };
     const chart=document.getElementById("chart");
     if(!actual && !target){ chart.innerHTML=`<div class="chart-empty">ยังไม่มีข้อมูลชั่วโมงบินในปีงบ ${fy}</div>`; return; }
     chart.innerHTML=fySvg(Math.max(640,(chart.clientWidth||900)-24),230);
@@ -542,7 +552,7 @@
   }
   async function exportFyChart(btn){
     if(!lastFy) return;
-    const { fy, actual, target, svg } = lastFy;
+    const { fy, actual, target, svg, monthly } = lastFy;
     btn.disabled=true; const t0=btn.textContent; btn.textContent="กำลังสร้าง…";
     try{
       const W=1000, H=380;
@@ -555,6 +565,32 @@
         +` · ข้อมูล ณ ${new Date().toLocaleString("th-TH")}`;
       ws.getCell("A2").font={ name:"Tahoma", size:10, color:{ argb:"FF5D6B7E" } };
       ws.addImage(wb.addImage({ base64:png, extension:"png" }),{ tl:{ col:0, row:3 }, ext:{ width:W, height:H } });
+      // ตารางเป้ารายเดือน ใต้กราฟ (ผู้ใช้ขอ 17 พ.ย. 69)
+      const R0=Math.ceil(H/20)+6, thin={ style:"thin", color:{ argb:"FFB8C2CF" } }, box={ top:thin, left:thin, bottom:thin, right:thin };
+      const NF="#,##0.0";
+      ws.getCell(R0-1,1).value="เป้ารายเดือน (ตามเส้นเป้า: เป้าทั้งปีงบเฉลี่ยเท่ากันทุกวัน)"+(target?"":" — ยังไม่ได้ตั้งเป้าปีงบ");
+      ws.getCell(R0-1,1).font={ name:"Tahoma", size:12, bold:true };
+      const hdr=["เดือน","เป้าเดือนนี้ (ชม.)","เป้าสะสม ณ สิ้นเดือน","95% สะสม ณ สิ้นเดือน","ทำได้ในเดือน (ชม.)","สะสมจริง ณ สิ้นเดือน","เทียบเป้าสะสม"];
+      [12,16,20,20,18,20,16].forEach((w,i)=>{ ws.getColumn(i+1).width=w; });
+      hdr.forEach((h,i)=>{ const c=ws.getCell(R0,i+1); c.value=h; c.font={ name:"Tahoma", size:10, bold:true, color:{ argb:"FFFFFFFF" } };
+        c.fill={ type:"pattern", pattern:"solid", fgColor:{ argb:"FF245073" } }; c.alignment={ horizontal:"center", vertical:"middle", wrapText:true }; c.border=box; });
+      ws.getRow(R0).height=30;
+      monthly.forEach((r,k)=>{
+        const diff = r.aCum!=null && r.tCum!=null && !r.partial ? r1(r.aCum - r.tCum) : null;
+        const vals=[r.label+(r.partial?" (ถึงวันนี้)":""), r.tMonth!=null?r1(r.tMonth):null, r.tCum!=null?r1(r.tCum):null, r.t95!=null?r1(r.t95):null,
+          r.aMonth!=null?r1(r.aMonth):null, r.aCum!=null?r1(r.aCum):null, diff];
+        vals.forEach((v,i)=>{ const c=ws.getCell(R0+1+k,i+1); c.value=v; c.border=box;
+          c.font={ name:"Tahoma", size:10, ...(i===6&&v!=null?{ bold:true, color:{ argb: v>=0?"FF2E9E44":"FFD32F2F" } }:{}) };
+          if(i) { c.numFmt=(i===6?"+#,##0.0;-#,##0.0;0.0":NF); c.alignment={ horizontal:"right" }; }
+          if(k%2) c.fill={ type:"pattern", pattern:"solid", fgColor:{ argb:"FFF4F6F9" } }; });
+      });
+      const RT=R0+1+monthly.length, tot=(key)=>monthly.reduce((t,r)=>t+(r[key]||0),0);
+      [["รวมปีงบ",1],[target?r1(target):null,2],[target?r1(target):null,3],[target?r1(target*0.95):null,4],[r1(tot("aMonth")),5],[r1(actual),6]]
+        .forEach(([v,i])=>{ const c=ws.getCell(RT,i); c.value=v; c.border=box; c.font={ name:"Tahoma", size:10, bold:true };
+          c.fill={ type:"pattern", pattern:"solid", fgColor:{ argb:"FFE3E8EF" } }; if(i>1){ c.numFmt=NF; c.alignment={ horizontal:"right" }; } });
+      ws.getCell(RT,7).border=box; ws.getCell(RT,7).fill={ type:"pattern", pattern:"solid", fgColor:{ argb:"FFE3E8EF" } };
+      ws.getCell(RT+1,1).value="เทียบเป้าสะสม = สะสมจริง − เป้าสะสม ณ สิ้นเดือน (เฉพาะเดือนที่จบแล้ว) · เดือนปัจจุบันนับถึงวันนี้";
+      ws.getCell(RT+1,1).font={ name:"Tahoma", size:9, color:{ argb:"FF5D6B7E" } };
       const buf=await wb.xlsx.writeBuffer();
       const url=URL.createObjectURL(new Blob([buf],{type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"}));
       const a=document.createElement("a"); a.href=url; a.download=`กราฟชั่วโมงบิน ปีงบ ${fy}.xlsx`;
