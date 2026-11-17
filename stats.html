@@ -328,6 +328,11 @@
     // ----- แถบเป้า: ผู้วางแผนขึ้นไปกรอกได้ -----
     const fyt=document.getElementById("fyt");
     const pace = target && last>=0 ? target*(last+1)/nD : 0;      // ตามเส้นแดง ณ วันล่าสุด
+    // เป้าของเดือนที่เลือก (ผู้ใช้ขอ 17 พ.ย. 69) = ค่าบนเส้นแดง ณ สิ้นเดือน (สะสมตั้งแต่ 1 ต.ค.)
+    //  ms/me = ดัชนีวันแรก/วันสุดท้ายของเดือน · เป้าเดือนนี้ = เป้าสิ้นเดือน − เป้าสิ้นเดือนก่อน
+    const ms=idx.get(`${ym}-01`), me=ms+daysIn(y,m)-1;
+    const mEnd = target ? target*(me+1)/nD : 0, mPart = target ? target*daysIn(y,m)/nD : 0;
+    const mLbl=`${TH_MON[m-1]}${String(y+543).slice(-2)}`;
     fyt.innerHTML=`<b>เป้า ชม.บินรวมทั้งปีงบ ${fy}:</b>`+
       (planner && !tgErr
         ? `<input type="number" id="tgIn" min="1" step="0.1" value="${target||""}" placeholder="ชม."><button class="btn sm" id="tgSave">บันทึก</button>`
@@ -366,7 +371,16 @@
       `<div class="card fyk"><div class="n">${nc(actual)}${target?`<span style="font-size:14px;color:var(--muted)"> / ${nc(target)}</span>`:""}</div>
         <div class="l">ชม.สะสมปีงบ ${fy}${target?` · ${Math.round(actual/target*100)}% ของเป้า`:""}</div></div>`+
       (pace ? `<div class="card fyk"><div class="n" style="color:${actual>=pace*0.95?"#2E9E44":"#D32F2F"}">${actual-pace>=0?"+":""}${nc(actual-pace)}</div>
-        <div class="l">เทียบเส้นเป้า ณ ${last===nD-1?"สิ้นปีงบ":"วันนี้"} (${nc(pace)} ชม.)</div></div>` : ""));
+        <div class="l">เทียบเส้นเป้า ณ ${last===nD-1?"สิ้นปีงบ":"วันนี้"} (${nc(pace)} ชม.)</div></div>` : "")+
+      (mEnd ? (()=>{
+        // เดือนที่ผ่านไปแล้ว → ทำได้จริง ณ สิ้นเดือนเทียบเป้า · เดือนปัจจุบัน → ต้องบินอีกกี่ ชม. · เดือนอนาคต → เป้าอย่างเดียว
+        let sub="";
+        if(last>=me){ const d=cum[me]-mEnd;
+          sub=` · ทำได้ ${nc(cum[me])} <b style="color:${cum[me]>=mEnd*0.95?"#2E9E44":"#D32F2F"}">(${d>=0?"+":""}${nc(d)})</b>`; }
+        else if(last>=ms){ const need=mEnd-actual;
+          sub=need>0 ? ` · ต้องบินอีก <b>${nc(need)}</b> ชม.` : ` · <b style="color:#2E9E44">ถึงเป้าแล้ว</b>`; }
+        return `<div class="card fyk"><div class="n">${nc(mEnd)}<span style="font-size:14px;color:var(--muted)"> ชม.</span></div>
+          <div class="l">เป้าสะสม ณ สิ้น ${mLbl} (เป้าเดือนนี้ ${nc(mPart)} ชม.)${sub}</div></div>`; })() : ""));
 
     // วาด SVG (ใช้ทั้งบนหน้าเว็บ และตอน Export — exp=true: ใส่หัวข้อ/คำอธิบายเส้นในภาพ)
     const fySvg=(W,H,exp=false)=>{
@@ -394,7 +408,10 @@
         tg=`<path class="tg" d="M${f(X(0))},${f(Y(0))} L${f(X(nD-1))},${f(Y(target))}"><title>เป้า ${r1(target)} ชม.</title></path>`
           +`<path class="tg95" d="M${f(X(0))},${f(Y(0))} L${f(X(nD-1))},${f(Y(target*0.95))}"><title>95% = ${r1(target*0.95)} ชม.</title></path>`
           +`<text class="tgl" x="${f(X(nD-1)+4)}" y="${f(Y(target)+3)}" fill="#D32F2F">${Math.round(target)}</text>`
-          +`<text class="tgl" x="${f(X(nD-1)+4)}" y="${f(Y(target*0.95)+12)}" fill="#2E9E44">${Math.round(target*0.95)}</text>`;
+          +`<text class="tgl" x="${f(X(nD-1)+4)}" y="${f(Y(target*0.95)+12)}" fill="#2E9E44">${Math.round(target*0.95)}</text>`
+          // จุดเป้า ณ สิ้นเดือนที่เลือก
+          +`<circle cx="${f(X(me))}" cy="${f(Y(mEnd))}" r="4.5" fill="#fff" stroke="#D32F2F" stroke-width="2"><title>เป้าสะสม ณ สิ้น ${mLbl} ${n1(mEnd)} ชม.</title></circle>`
+          +`<text class="tgl" x="${f(X(me))}" y="${f(Y(mEnd)-9)}" text-anchor="middle" fill="#D32F2F">${nc(mEnd)}</text>`;
       }
       // เส้นจริง
       let ln="", area="", dots="";
