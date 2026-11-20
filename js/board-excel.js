@@ -342,9 +342,12 @@ const SHEET_ROWS = 42, SHEET_COLS = 26;
 // TH SarabunPSK ไม่มีบนเว็บ → ใช้ Sarabun (Google Fonts · ออกแบบจากตัวเดียวกัน แต่ตัวใหญ่กว่า) ย่อขนาดให้เท่า PSK
 const SARABUN_SCALE = 0.68;   // วัดจากความกว้างข้อความ TH SarabunPSK ÷ Sarabun ขนาดเดียวกัน ≈ 0.67
 const XL_THEME = ["FFFFFF", "000000", "E7E6E6", "44546A", "4472C4", "ED7D31", "A5A5A5", "FFC000", "5B9BD5", "70AD47"];
-const BORDER_CSS = { thin: "1px solid", hair: "1px solid", medium: "2px solid", thick: "3px solid", double: "3px double",
-  dashed: "1px dashed", dotted: "1px dotted", mediumDashed: "2px dashed", dashDot: "1px dashed", mediumDashDot: "2px dashed",
-  dashDotDot: "1px dotted", mediumDashDotDot: "2px dotted", slantDashDot: "2px dashed" };
+const BORDER_CSS = { thin: [1, "solid"], hair: [1, "solid"], medium: [2, "solid"], thick: [3, "solid"], double: [3, "double"],
+  dashed: [1, "dashed"], dotted: [1, "dotted"], mediumDashed: [2, "dashed"], dashDot: [1, "dashed"], mediumDashDot: [2, "dashed"],
+  dashDotDot: [1, "dotted"], mediumDashDotDot: [2, "dotted"], slantDashDot: [2, "dashed"] };
+// ความหนาเส้น × --bw: ตอนย่อแผ่นบนจอ (transform scale k) ตั้ง --bw = 1/k → เส้นยังหนา ≥1px เหมือน Excel ที่ซูมเล็ก
+//  (ถ้าไม่ชดเชย เส้น 1px ย่อเหลือครึ่งพิกเซล → จางจนมองไม่เห็น โดยเฉพาะเส้นเทา)
+const PNG_BW = 2;          // รูป PNG (ขนาดเต็ม ~3300px) — เส้นหนาขึ้น 2 เท่า จะได้ไม่จางเมื่อดูย่อในแชท
 let tplPromise;
 const loadTemplate = () => (tplPromise ||= fetch(TEMPLATE_URL, { cache: "no-cache" })
   .then((r) => { if (!r.ok) throw new Error("โหลดแม่แบบ Excel ไม่สำเร็จ"); return r.arrayBuffer(); })
@@ -406,7 +409,8 @@ function sheetHtml(ws) {
     span.set(`${a.row},${a.col}`, [r2 - a.row + 1, c2 - a.col + 1]);
     for (let r = a.row; r <= r2; r++) for (let c = a.col; c <= c2; c++) if (r !== a.row || c !== a.col) covered.add(`${r},${c}`);
   }
-  const bd = (b) => (b && b.style ? `${BORDER_CSS[b.style] || "1px solid"} ${xlColor(b.color) || "#000"}` : null);
+  const bd = (b) => { if (!b || !b.style) return null; const [w, k] = BORDER_CSS[b.style] || [1, "solid"];
+    return `calc(${w}px * var(--bw, 1)) ${k} ${xlColor(b.color) || "#000"}`; };
   let html = `<table class="xls" style="width:${colPx.reduce((s, w) => s + w, 0)}px"><colgroup>${colPx.map((w) => `<col style="width:${w}px">`).join("")}</colgroup><tbody>`;
   for (let r = 1; r <= SHEET_ROWS; r++) {
     html += `<tr style="height:${rowPx[r - 1]}px">`;
@@ -483,6 +487,14 @@ export const BOARD_HTML_CSS = `
 // =====================================================================
 export async function boardToPngBlob(table, scale = 1) {
   await document.fonts?.ready;
+  // วัดตำแหน่งด้วยเส้นความหนาของรูป (ไม่ใช่ค่าชดเชยบนจอ) แล้วคืนค่าเดิมหลังวาดเสร็จ (ทำต่อเนื่องในจังหวะเดียว ไม่ค้างบนจอ)
+  const bwOld = table.style.getPropertyValue("--bw");
+  table.style.setProperty("--bw", String(PNG_BW));
+  let png;
+  try { png = drawPng(table, scale); } finally { table.style.setProperty("--bw", bwOld || "1"); }
+  return png;
+}
+function drawPng(table, scale) {
   const T = table.getBoundingClientRect();
   const k = T.width / table.offsetWidth || 1;                   // ตารางบนจอถูกย่อด้วย transform
   const W = table.offsetWidth, H = table.offsetHeight;

@@ -696,6 +696,7 @@
         const aw = st.clientWidth - 24, ah = st.clientHeight - 24;
         const k = Math.min(1, fitAll ? Math.min(aw / dvSize.width, ah / dvSize.height) : aw / dvSize.width);
         t.style.transform = `scale(${k})`;
+        t.style.setProperty("--bw", String(Math.max(1, 1 / k)));   // ชดเชยความหนาเส้นตอนย่อ (js/board-excel.js)
         box.style.width = `${Math.floor(dvSize.width * k)}px`; box.style.height = `${Math.floor(dvSize.height * k)}px`;
         dv.querySelector("#dvFit").textContent = fitAll ? "↔ เต็มความกว้าง" : "⤢ พอดีจอ";
       };
