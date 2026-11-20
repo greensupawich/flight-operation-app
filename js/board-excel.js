@@ -332,3 +332,145 @@ export async function exportBoardXlsx({ days, stLabel, draft = false }) {
   setTimeout(() => URL.revokeObjectURL(url), 5000);
   return { file, skipped };
 }
+
+// =====================================================================
+//  Show Draft (ผู้ใช้ขอ 20 พ.ย. 69) — แสดงใบจัดบินเป็นภาพบนหน้าจอ (ไว้แคปส่งรูป) โดยใช้แม่แบบ Excel ชุดเดียวกับ Export
+//  เติมข้อมูลด้วย fillBoard(draft) แล้วแปลงชีต (พื้นที่พิมพ์ A1:Z42) เป็นตาราง HTML:
+//  ความกว้างคอลัมน์ / ความสูงแถว / การรวมเซลล์ / ฟอนต์ / สีพื้น / เส้นขอบ / การจัดวาง ตามแม่แบบ
+// =====================================================================
+const SHEET_ROWS = 42, SHEET_COLS = 26;
+// TH SarabunPSK ไม่มีบนเว็บ → ใช้ Sarabun (Google Fonts · ออกแบบจากตัวเดียวกัน แต่ตัวใหญ่กว่า) ย่อขนาดให้เท่า PSK
+const SARABUN_SCALE = 0.68;   // วัดจากความกว้างข้อความ TH SarabunPSK ÷ Sarabun ขนาดเดียวกัน ≈ 0.67
+const XL_THEME = ["FFFFFF", "000000", "E7E6E6", "44546A", "4472C4", "ED7D31", "A5A5A5", "FFC000", "5B9BD5", "70AD47"];
+const BORDER_CSS = { thin: "1px solid", hair: "1px solid", medium: "2px solid", thick: "3px solid", double: "3px double",
+  dashed: "1px dashed", dotted: "1px dotted", mediumDashed: "2px dashed", dashDot: "1px dashed", mediumDashDot: "2px dashed",
+  dashDotDot: "1px dotted", mediumDashDotDot: "2px dotted", slantDashDot: "2px dashed" };
+let tplPromise;
+const loadTemplate = () => (tplPromise ||= fetch(TEMPLATE_URL, { cache: "no-cache" })
+  .then((r) => { if (!r.ok) throw new Error("โหลดแม่แบบ Excel ไม่สำเร็จ"); return r.arrayBuffer(); })
+  .catch((e) => { tplPromise = null; throw e; }));
+const escH = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+
+function xlColor(c) {
+  if (!c) return null;
+  if (c.argb) return "#" + c.argb.slice(-6);
+  if (c.theme == null || !XL_THEME[c.theme]) return null;
+  let [r, g, b] = [0, 2, 4].map((i) => parseInt(XL_THEME[c.theme].slice(i, i + 2), 16));
+  const t = c.tint || 0;                                         // tint > 0 = จางลง · < 0 = เข้มขึ้น
+  [r, g, b] = [r, g, b].map((v) => Math.round(t > 0 ? v + (255 - v) * t : v * (1 + t)));
+  return `rgb(${r},${g},${b})`;
+}
+function fontCss(f) {
+  if (!f) return "";
+  const out = [];
+  const name = f.name || "Calibri";
+  const psk = /sarabun/i.test(name);
+  if (f.size) out.push(`font-size:${((f.size * 4) / 3 * (psk ? SARABUN_SCALE : 1)).toFixed(1)}px`);
+  // ใช้ ' ใน font-family — ค่า style อยู่ใน attribute style="…"
+  out.push(`font-family:${psk ? `'Sarabun','TH SarabunPSK',sans-serif` : `'${name.replace(/['"<>&]/g, "")}',Calibri,Arial,sans-serif`}`);
+  if (f.bold) out.push("font-weight:700");
+  if (f.italic) out.push("font-style:italic");
+  if (f.underline) out.push("text-decoration:underline");
+  const col = xlColor(f.color); if (col) out.push(`color:${col}`);
+  return out.join(";");
+}
+function valueHtml(v) {
+  if (v == null) return "";
+  if (typeof v === "object") {
+    if (v.richText) return v.richText.map((r) => `<span style="${fontCss(r.font)}">${escH(r.text)}</span>`).join("");
+    if ("result" in v) return valueHtml(v.result);
+    if (v instanceof Date) return escH(v.toLocaleDateString("th-TH"));
+    if (v.text) return escH(v.text);
+    return "";
+  }
+  return escH(v);
+}
+
+// ชีต → <table> · คืน { html, width, height } (px ตามขนาดจริงของชีต)
+function sheetHtml(ws) {
+  const colPx = [], rowPx = [];
+  for (let c = 1; c <= SHEET_COLS; c++) {
+    const col = ws.getColumn(c);
+    colPx.push(col.hidden ? 0 : Math.round((col.width ?? 8.43) * 7 + 5));   // ความกว้างตัวอักษร Excel → px (Calibri 11)
+  }
+  for (let r = 1; r <= SHEET_ROWS; r++) {
+    const row = ws.getRow(r);
+    rowPx.push(row.hidden ? 0 : Math.round(((row.height ?? 15) * 4) / 3));
+  }
+  // ช่องรวม: มุมซ้ายบน → ขนาด · เซลล์อื่นในช่วง → ข้าม
+  const span = new Map(), covered = new Set();
+  for (const ref of ws.model.merges || []) {
+    const [a, b] = ref.split(":").map((x) => ws.getCell(x));
+    if (a.row > SHEET_ROWS || a.col > SHEET_COLS) continue;
+    const r2 = Math.min(b.row, SHEET_ROWS), c2 = Math.min(b.col, SHEET_COLS);
+    span.set(`${a.row},${a.col}`, [r2 - a.row + 1, c2 - a.col + 1]);
+    for (let r = a.row; r <= r2; r++) for (let c = a.col; c <= c2; c++) if (r !== a.row || c !== a.col) covered.add(`${r},${c}`);
+  }
+  const bd = (b) => (b && b.style ? `${BORDER_CSS[b.style] || "1px solid"} ${xlColor(b.color) || "#000"}` : null);
+  let html = `<table class="xls" style="width:${colPx.reduce((s, w) => s + w, 0)}px"><colgroup>${colPx.map((w) => `<col style="width:${w}px">`).join("")}</colgroup><tbody>`;
+  for (let r = 1; r <= SHEET_ROWS; r++) {
+    html += `<tr style="height:${rowPx[r - 1]}px">`;
+    for (let c = 1; c <= SHEET_COLS; c++) {
+      const key = `${r},${c}`;
+      if (covered.has(key)) continue;
+      const cell = ws.getCell(r, c), st = cell.style || {}, [rs, cs] = span.get(key) || [1, 1];
+      // เส้นขอบช่องรวม: บน/ซ้าย จากมุมซ้ายบน · ขวา จากเซลล์ขวาสุด · ล่าง จากเซลล์ล่างสุด
+      const B = st.border || {};
+      const right = rs > 1 || cs > 1 ? ws.getCell(r, c + cs - 1).style?.border?.right || B.right : B.right;
+      const bottom = rs > 1 || cs > 1 ? ws.getCell(r + rs - 1, c).style?.border?.bottom || B.bottom : B.bottom;
+      const css = [];
+      [["top", B.top], ["left", B.left], ["right", right], ["bottom", bottom]].forEach(([k, b]) => { const v = bd(b); if (v) css.push(`border-${k}:${v}`); });
+      const fill = st.fill?.type === "pattern" && st.fill.pattern !== "none" ? xlColor(st.fill.fgColor) : null;
+      if (fill) css.push(`background:${fill}`);
+      const al = st.alignment || {};
+      const isNum = typeof cell.value === "number";
+      const h = al.horizontal === "centerContinuous" ? "center" : al.horizontal && al.horizontal !== "general" ? al.horizontal : isNum ? "right" : "left";
+      css.push(`text-align:${h === "distributed" || h === "justify" ? "justify" : h === "fill" ? "left" : h}`);
+      css.push(`vertical-align:${al.vertical === "middle" ? "middle" : al.vertical === "top" ? "top" : "bottom"}`);
+      css.push(al.wrapText ? "white-space:pre-wrap" : "white-space:pre");
+      if (al.indent) css.push(`padding-left:${al.indent * 9 + 2}px`);
+      const inner = valueHtml(cell.value);
+      // ล้นช่อง: Excel ให้ข้อความยาวล้นไปช่องข้างที่ว่าง · ช่องข้างมีข้อมูล → ตัด
+      const filled = (cc) => cc >= 1 && cc <= SHEET_COLS && !covered.has(`${r},${cc}`) && ws.getCell(r, cc).value != null && ws.getCell(r, cc).value !== "";
+      if (!al.wrapText && inner && (filled(c + cs) || ((h === "center" || h === "right") && filled(c - 1)))) css.push("overflow:hidden");
+      // ข้อความไม่ตัดบรรทัด + ช่องข้างว่าง → ล้นไปช่องข้างเหมือน Excel · shrinkToFit → ย่อด้วย JS หลังแสดง
+      const shrink = al.shrinkToFit && !al.wrapText;
+      html += `<td${rs > 1 ? ` rowspan="${rs}"` : ""}${cs > 1 ? ` colspan="${cs}"` : ""} style="${fontCss(st.font)};${css.join(";")}">`
+        + (inner ? `<div class="v${shrink ? " shrink" : ""}${!al.wrapText && h === "center" ? " c" : ""}">${inner}</div>` : "") + `</td>`;
+    }
+    html += "</tr>";
+  }
+  html += "</tbody></table>";
+  return { html, width: colPx.reduce((s, w) => s + w, 0), height: rowPx.reduce((s, h) => s + h, 0) };
+}
+
+/**
+ * ใบจัดบิน 1 วัน (แบบ Draft — ไม่มีชื่อลูกเรือ / callsign) เป็น HTML สำหรับแสดงบนจอ
+ * @param data  ข้อมูลวันเดียวกับ exportBoardXlsx ({ day, missions, aircraft, defMap, chkMap, noteToday, noteNext })
+ * @returns {Promise<{html: string, width: number, height: number, skipped: number}>}
+ */
+export async function renderBoardHtml(data, stLabel, draft = true) {
+  const ExcelJS = await loadExcelJS();
+  const wb = new ExcelJS.Workbook();
+  await wb.xlsx.load(await loadTemplate());
+  const ws = wb.worksheets[0];
+  const skipped = fillBoard(ws, data, stLabel, draft);
+  return { ...sheetHtml(ws), skipped };
+}
+
+// ย่อข้อความในเซลล์ shrinkToFit ให้พอดีช่อง (เรียกหลังใส่ HTML ลงหน้าแล้ว)
+export function fitShrinkCells(root) {
+  root.querySelectorAll(".xls .v.shrink").forEach((v) => {
+    const td = v.parentElement, avail = td.clientWidth - 4;
+    if (v.scrollWidth > avail && avail > 0) v.style.fontSize = `${(parseFloat(getComputedStyle(td).fontSize) * avail / v.scrollWidth).toFixed(1)}px`;
+  });
+}
+
+// CSS ของตาราง (ใส่ครั้งเดียวในหน้า) — ตัวแปลงใช้ inline style ต่อเซลล์ ที่เหลือคือค่าพื้นฐานแบบ Excel
+export const BOARD_HTML_CSS = `
+.xls{border-collapse:collapse;table-layout:fixed;background:#fff;color:#000;font-family:Calibri,Arial,sans-serif;font-size:14.7px;line-height:1.15}
+.xls td{padding:0 2px;overflow:visible;box-sizing:border-box}
+.xls .v{display:block}
+.xls .v.c{width:max-content;min-width:100%;position:relative;left:50%;transform:translateX(-50%)}
+.xls td[style*="overflow:hidden"] .v.c{width:auto;left:0;transform:none}
+.xls .v.shrink{white-space:nowrap}`;

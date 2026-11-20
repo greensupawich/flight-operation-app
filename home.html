@@ -96,6 +96,16 @@
   .xdlg .mode{display:flex;gap:14px;font-size:13px;margin:4px 0 8px}
   .xdlg label{margin:0;font-weight:500}
   .xdlg input[type=checkbox], .xdlg input[type=radio]{width:auto;margin:0;flex:none}
+  /* 👁 Show Draft: ใบจัดบินเต็มจอ (ไว้แคปหน้าจอ) */
+  dialog.dview{width:100vw;height:100vh;max-width:none;max-height:none;margin:0;padding:0;border:0;border-radius:0;background:#e9edf2}
+  dialog.dview::backdrop{background:rgba(0,0,0,.5)}
+  .dview .bar{position:sticky;top:0;left:0;z-index:2;display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:8px 12px;background:var(--surface);border-bottom:1px solid var(--line)}
+  .dview .bar b{font-size:14px}
+  .dview .bar .sp{flex:1}
+  .dview .bar .msg{font-size:12px;color:var(--muted)}
+  .dview .stage{padding:12px;overflow:auto;height:calc(100vh - 54px);box-sizing:border-box}
+  .dview .fit{margin:0 auto;box-shadow:0 1px 6px rgba(0,0,0,.18);background:#fff;overflow:hidden}
+  .dview .fit > .xls{transform-origin:0 0}
   .xdlg .ft{display:flex;gap:8px;justify-content:flex-end;align-items:center;padding-top:8px;border-top:1px solid var(--line)}
 
   /* ---- บล็อก STBY ---- */
@@ -184,7 +194,7 @@
         <button class="btn sm" id="nextDay" title="วันถัดไป">→</button>
         <button class="btn sm ghost" id="todayBtn">วันนี้</button>
         <button class="btn sm ghost" id="xlsxBtn" title="ดาวน์โหลดเป็นไฟล์ Excel ตามฟอร์มกระดานจัดบินเดิม · เลือกได้หลายวัน (1 วัน = 1 ชีต)">📊 Export Excel</button>
-        <button class="btn sm ghost" id="draftBtn" title="Excel ฟอร์มเดียวกัน แต่ไม่มีชื่อลูกเรือและ callsign · เลือกได้หลายวัน">📄 Export Draft</button>
+        <button class="btn sm ghost" id="draftBtn" title="แสดงใบจัดบินแบบ Draft (ไม่มีชื่อลูกเรือ / callsign) ฟอร์มเดียวกับ Excel — ไว้แคปหน้าจอส่งรูป">👁 Show Draft</button>
         <a class="btn sm ghost" id="dayLink" href="day.html">หน้าภารกิจ</a>
         <button class="btn sm ghost" id="repBtn" title="ข้อความรายงานภารกิจของวันที่ดูอยู่ สำหรับคัดลอกไปรายงานต่อ">📝 รายงานประจำวัน</button>
         <button class="btn sm ghost" id="sheetBtn" title="ตารางภารกิจประจำวัน (ฟอร์มรวมทุกฝูง) สำหรับคัดลอกไปวางใน Excel / Google Sheets">📋 ตารางภารกิจประจำวัน</button>
@@ -210,7 +220,7 @@
   import { sheetHTML, orderMissions, hasCustomOrder, wireReorder, resetOrder, wireSheetDelete } from "./js/mission-sheet.js";
   import { loadAircraft, loadDefects, loadChecks, boardAsOf } from "./js/status.js";
   import { supabase } from "./js/supabase.js";
-  import { exportBoardXlsx } from "./js/board-excel.js";
+  import { exportBoardXlsx, renderBoardHtml, fitShrinkCells, BOARD_HTML_CSS } from "./js/board-excel.js";
   import { wireSheetEdit } from "./js/sheet-edit.js";
   import { openDailySheet } from "./js/daily-sheet.js";
   import { openDailyReport } from "./js/daily-report.js";
@@ -627,7 +637,6 @@
         xMsg(""); renderDays(); dlg.showModal();
       }
       document.getElementById("xlsxBtn").addEventListener("click", () => openExport("full"));
-      document.getElementById("draftBtn").addEventListener("click", () => openExport("draft"));
       dlg.addEventListener("change", (e) => {
         if (e.target.name === "xmode") return syncTitle();
         if (e.target.id === "xFrom") { if (!$("#xTo").value || $("#xTo").value < e.target.value) $("#xTo").value = e.target.value; renderDays(); }
@@ -656,6 +665,68 @@
           xMsg("Export Excel ไม่สำเร็จ: " + (err.message || err), false);
         } finally { btn.disabled = false; }
       });
+    }
+
+    // ---- 👁 Show Draft (ผู้ใช้ขอ 20 พ.ย. 69): ใบจัดบินแบบ Draft บนจอ ไว้แคปส่งรูป ----
+    //  ใช้แม่แบบ Excel + การเติมข้อมูลชุดเดียวกับ Export (js/board-excel.js renderBoardHtml) → หน้าตาเหมือนไฟล์ Excel
+    //  ไม่มีชื่อลูกเรือ / callsign · ←/→ เปลี่ยนวัน · "พอดีจอ" = เห็นทั้งแผ่นในจอเดียว / "เต็มความกว้าง" = ตัวใหญ่ เลื่อนลงดู
+    {
+      if (!document.getElementById("xlsCss")) document.head.insertAdjacentHTML("beforeend",
+        `<style id="xlsCss">${BOARD_HTML_CSS}</style>`);
+      const fontLink = () => { if (!document.getElementById("sarabunFont")) document.head.insertAdjacentHTML("beforeend",
+        `<link id="sarabunFont" rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;700&display=swap">`); };
+      const dv = document.createElement("dialog");
+      dv.className = "dview";
+      dv.innerHTML = `<div class="bar">
+          <button type="button" class="btn sm" data-d="-1" title="วันก่อนหน้า">←</button>
+          <b id="dvTitle"></b>
+          <button type="button" class="btn sm" data-d="1" title="วันถัดไป">→</button>
+          <span class="msg" id="dvMsg"></span><span class="sp"></span>
+          <button type="button" class="btn sm ghost" id="dvFit">↔ เต็มความกว้าง</button>
+          <button type="button" class="btn sm" data-close>ปิด</button></div>
+        <div class="stage"><div class="fit" id="dvFitBox"></div></div>`;
+      document.body.append(dv);
+      let dvDay = null, dvSize = null, fitAll = true, seq = 0;
+      const dvLayout = () => {
+        const box = dv.querySelector("#dvFitBox"), t = box.querySelector(".xls"), st = dv.querySelector(".stage");
+        if (!t || !dvSize) return;
+        const aw = st.clientWidth - 24, ah = st.clientHeight - 24;
+        const k = Math.min(1, fitAll ? Math.min(aw / dvSize.width, ah / dvSize.height) : aw / dvSize.width);
+        t.style.transform = `scale(${k})`;
+        box.style.width = `${Math.floor(dvSize.width * k)}px`; box.style.height = `${Math.floor(dvSize.height * k)}px`;
+        dv.querySelector("#dvFit").textContent = fitAll ? "↔ เต็มความกว้าง" : "⤢ พอดีจอ";
+      };
+      async function dvShow(d) {
+        const my = ++seq; dvDay = d;
+        const v = ymd(d);
+        dv.querySelector("#dvTitle").textContent = `📄 Draft · ${TH_DOW[d.getDay()]} ${d.getDate()} ${TH_MONTH[d.getMonth()]} ${d.getFullYear() + 543}`;
+        const msg = dv.querySelector("#dvMsg"); msg.style.color = ""; msg.textContent = "กำลังโหลด…";
+        try {
+          const data = lastData && ymd(lastData.day) === v ? lastData : await loadBoard(d, await loadCurrentStatus());
+          const out = await renderBoardHtml(data, stLabel, true);
+          await document.fonts?.load?.('16px "Sarabun"').catch(() => {});
+          if (my !== seq) return;
+          dvSize = out;
+          const box = dv.querySelector("#dvFitBox");
+          box.innerHTML = out.html;
+          fitShrinkCells(box);
+          dvLayout();
+          msg.textContent = out.skipped ? `⚠ ฟอร์มมีการ์ดได้ 6 ใบ — มีภารกิจที่ไม่ได้แสดง ${out.skipped} ภารกิจ` : "";
+          if (out.skipped) msg.style.color = "var(--crit)";
+        } catch (err) {
+          if (my === seq) { msg.style.color = "var(--crit)"; msg.textContent = "แสดงไม่สำเร็จ: " + (err.message || err); }
+        }
+      }
+      document.getElementById("draftBtn").addEventListener("click", () => {
+        fontLink(); dv.showModal(); dvShow(new Date(view));
+      });
+      dv.addEventListener("click", (e) => {
+        if (e.target.closest("[data-close]")) return dv.close();
+        if (e.target.id === "dvFit") { fitAll = !fitAll; return dvLayout(); }
+        const b = e.target.closest("[data-d]");
+        if (b) dvShow(new Date(dvDay.getFullYear(), dvDay.getMonth(), dvDay.getDate() + Number(b.dataset.d)));
+      });
+      addEventListener("resize", () => { if (dv.open) dvLayout(); });
     }
 
     refresh();
