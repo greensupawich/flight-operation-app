@@ -474,3 +474,76 @@ export const BOARD_HTML_CSS = `
 .xls .v.c{width:max-content;min-width:100%;position:relative;left:50%;transform:translateX(-50%)}
 .xls td[style*="overflow:hidden"] .v.c{width:auto;left:0;transform:none}
 .xls .v.shrink{white-space:nowrap}`;
+
+// =====================================================================
+//  ใบจัดบิน (ตาราง .xls บนจอ) → รูป PNG (ผู้ใช้ขอ 20 พ.ย. 69 · ปุ่ม Copy รูป / บันทึกรูป ใน Show Draft)
+//  วาดลง canvas เองจากตำแหน่งที่เบราว์เซอร์จัดไว้แล้ว (ไม่ต้องใช้ไลบรารีภายนอก):
+//   พื้นเซลล์ → ข้อความ (ตำแหน่งบรรทัดจริงจาก Range ทีละตัวอักษร) → เส้นขอบ
+//  ขนาดรูป = ขนาดจริงของชีต × scale (ไม่ขึ้นกับการย่อบนจอ)
+// =====================================================================
+export async function boardToPngBlob(table, scale = 1) {
+  await document.fonts?.ready;
+  const T = table.getBoundingClientRect();
+  const k = T.width / table.offsetWidth || 1;                   // ตารางบนจอถูกย่อด้วย transform
+  const W = table.offsetWidth, H = table.offsetHeight;
+  const cv = document.createElement("canvas");
+  cv.width = Math.ceil(W * scale); cv.height = Math.ceil(H * scale);
+  const g = cv.getContext("2d");
+  g.scale(scale, scale);
+  g.fillStyle = "#fff"; g.fillRect(0, 0, W, H);
+  const box = (el) => { const r = el.getBoundingClientRect(); return { x: (r.left - T.left) / k, y: (r.top - T.top) / k, w: r.width / k, h: r.height / k }; };
+  const tds = [...table.querySelectorAll("td")].map((td) => ({ td, b: box(td), cs: getComputedStyle(td) }));
+  // 1) พื้น
+  for (const { b, cs } of tds) {
+    const bg = cs.backgroundColor;
+    if (bg && bg !== "transparent" && !/rgba\(.*,\s*0\)$/.test(bg)) { g.fillStyle = bg; g.fillRect(b.x, b.y, b.w, b.h); }
+  }
+  // 2) ข้อความ: แยกบรรทัดตามตำแหน่งที่เบราว์เซอร์วางจริง (รองรับตัดบรรทัด / ล้นช่อง / ย่อ)
+  const seg = typeof Intl !== "undefined" && Intl.Segmenter ? new Intl.Segmenter("th", { granularity: "grapheme" }) : null;
+  const range = document.createRange();
+  for (const { td, b, cs } of tds) {
+    const clip = cs.overflow === "hidden" || cs.overflowX === "hidden";
+    const walker = document.createTreeWalker(td, NodeFilter.SHOW_TEXT);
+    for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+      const text = node.data; if (!text.trim()) continue;
+      const ps = getComputedStyle(node.parentElement);
+      g.font = `${ps.fontStyle} ${ps.fontWeight} ${ps.fontSize} ${ps.fontFamily}`;
+      g.fillStyle = ps.color;
+      const asc = g.measureText("ก").fontBoundingBoxAscent ?? parseFloat(ps.fontSize) * 0.8;
+      const lines = [];                                          // { x, y, h, s }
+      let i = 0;
+      for (const { segment } of seg ? seg.segment(text) : Array.from(text, (s) => ({ segment: s }))) {
+        range.setStart(node, i); range.setEnd(node, i + segment.length); i += segment.length;
+        if (segment === "\n") continue;
+        const r = range.getClientRects()[0]; if (!r) continue;
+        const x = (r.left - T.left) / k, y = (r.top - T.top) / k, h = r.height / k;
+        const last = lines[lines.length - 1];
+        if (last && Math.abs(last.y - y) < h / 2) last.s += segment; else lines.push({ x, y, h, s: segment });
+      }
+      if (!lines.length) continue;
+      g.save();
+      if (clip) { g.beginPath(); g.rect(b.x, b.y, b.w, b.h); g.clip(); }
+      for (const l of lines) g.fillText(l.s.replace(/\s+$/, ""), l.x, l.y + asc);
+      g.restore();
+    }
+  }
+  // 3) เส้นขอบ (ตามที่กำหนดในแต่ละเซลล์ · วาดทับเส้นแบ่งช่อง)
+  const edge = (style, width, color, x1, y1, x2, y2) => {
+    const w = parseFloat(width);
+    if (!w || style === "none" || style === "hidden") return;
+    g.strokeStyle = color; g.lineWidth = style === "double" ? Math.max(1, w / 3) : w;
+    g.setLineDash(style === "dashed" ? [w * 3, w * 2] : style === "dotted" ? [w, w] : []);
+    const lines = style === "double" ? [-w / 3, w / 3] : [0];
+    for (const o of lines) {
+      const v = x1 === x2;
+      g.beginPath(); g.moveTo(x1 + (v ? o : 0), y1 + (v ? 0 : o)); g.lineTo(x2 + (v ? o : 0), y2 + (v ? 0 : o)); g.stroke();
+    }
+  };
+  for (const { b, cs } of tds) {
+    edge(cs.borderTopStyle, cs.borderTopWidth, cs.borderTopColor, b.x, b.y, b.x + b.w, b.y);
+    edge(cs.borderBottomStyle, cs.borderBottomWidth, cs.borderBottomColor, b.x, b.y + b.h, b.x + b.w, b.y + b.h);
+    edge(cs.borderLeftStyle, cs.borderLeftWidth, cs.borderLeftColor, b.x, b.y, b.x, b.y + b.h);
+    edge(cs.borderRightStyle, cs.borderRightWidth, cs.borderRightColor, b.x + b.w, b.y, b.x + b.w, b.y + b.h);
+  }
+  return new Promise((res, rej) => cv.toBlob((bl) => (bl ? res(bl) : rej(new Error("สร้างรูปไม่สำเร็จ"))), "image/png"));
+}

@@ -98,12 +98,13 @@
   .xdlg input[type=checkbox], .xdlg input[type=radio]{width:auto;margin:0;flex:none}
   /* 👁 Show Draft: ใบจัดบินเต็มจอ (ไว้แคปหน้าจอ) */
   dialog.dview{width:100vw;height:100vh;max-width:none;max-height:none;margin:0;padding:0;border:0;border-radius:0;background:#e9edf2}
+  dialog.dview[open]{display:flex;flex-direction:column}
   dialog.dview::backdrop{background:rgba(0,0,0,.5)}
-  .dview .bar{position:sticky;top:0;left:0;z-index:2;display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:8px 12px;background:var(--surface);border-bottom:1px solid var(--line)}
+  .dview .bar{flex:none;display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:8px 12px;background:var(--surface);border-bottom:1px solid var(--line)}
   .dview .bar b{font-size:14px}
   .dview .bar .sp{flex:1}
   .dview .bar .msg{font-size:12px;color:var(--muted)}
-  .dview .stage{padding:12px;overflow:auto;height:calc(100vh - 54px);box-sizing:border-box}
+  .dview .stage{padding:12px;overflow:auto;flex:1;min-height:0;box-sizing:border-box}
   .dview .fit{margin:0 auto;box-shadow:0 1px 6px rgba(0,0,0,.18);background:#fff;overflow:hidden}
   .dview .fit > .xls{transform-origin:0 0}
   .xdlg .ft{display:flex;gap:8px;justify-content:flex-end;align-items:center;padding-top:8px;border-top:1px solid var(--line)}
@@ -220,7 +221,7 @@
   import { sheetHTML, orderMissions, hasCustomOrder, wireReorder, resetOrder, wireSheetDelete } from "./js/mission-sheet.js";
   import { loadAircraft, loadDefects, loadChecks, boardAsOf } from "./js/status.js";
   import { supabase } from "./js/supabase.js";
-  import { exportBoardXlsx, renderBoardHtml, fitShrinkCells, BOARD_HTML_CSS } from "./js/board-excel.js";
+  import { exportBoardXlsx, renderBoardHtml, fitShrinkCells, BOARD_HTML_CSS, boardToPngBlob } from "./js/board-excel.js";
   import { wireSheetEdit } from "./js/sheet-edit.js";
   import { openDailySheet } from "./js/daily-sheet.js";
   import { openDailyReport } from "./js/daily-report.js";
@@ -682,6 +683,8 @@
           <b id="dvTitle"></b>
           <button type="button" class="btn sm" data-d="1" title="วันถัดไป">→</button>
           <span class="msg" id="dvMsg"></span><span class="sp"></span>
+          <button type="button" class="btn sm primary" id="dvCopy" title="คัดลอกใบจัดบินเป็นรูป แล้ววาง (Cmd/Ctrl+V) ในแชทได้เลย">📋 Copy รูป</button>
+          <button type="button" class="btn sm ghost" id="dvSave" title="ดาวน์โหลดเป็นไฟล์รูป PNG">💾 บันทึกรูป</button>
           <button type="button" class="btn sm ghost" id="dvFit">↔ เต็มความกว้าง</button>
           <button type="button" class="btn sm" data-close>ปิด</button></div>
         <div class="stage"><div class="fit" id="dvFitBox"></div></div>`;
@@ -701,6 +704,7 @@
         const v = ymd(d);
         dv.querySelector("#dvTitle").textContent = `📄 Draft · ${TH_DOW[d.getDay()]} ${d.getDate()} ${TH_MONTH[d.getMonth()]} ${d.getFullYear() + 543}`;
         const msg = dv.querySelector("#dvMsg"); msg.style.color = ""; msg.textContent = "กำลังโหลด…";
+        dv.querySelectorAll("#dvCopy,#dvSave").forEach((x) => { x.disabled = true; });   // รอวันใหม่แสดงก่อน (ชื่อไฟล์ตรงวัน)
         try {
           const data = lastData && ymd(lastData.day) === v ? lastData : await loadBoard(d, await loadCurrentStatus());
           const out = await renderBoardHtml(data, stLabel, true);
@@ -711,6 +715,7 @@
           box.innerHTML = out.html;
           fitShrinkCells(box);
           dvLayout();
+          dv.querySelectorAll("#dvCopy,#dvSave").forEach((x) => { x.disabled = false; });
           msg.textContent = out.skipped ? `⚠ ฟอร์มมีการ์ดได้ 6 ใบ — มีภารกิจที่ไม่ได้แสดง ${out.skipped} ภารกิจ` : "";
           if (out.skipped) msg.style.color = "var(--crit)";
         } catch (err) {
@@ -720,8 +725,41 @@
       document.getElementById("draftBtn").addEventListener("click", () => {
         fontLink(); dv.showModal(); dvShow(new Date(view));
       });
+      // ---- รูป PNG (ผู้ใช้ขอ 20 พ.ย. 69): Copy → คลิปบอร์ด (วางในแชทได้) · ไม่รองรับ/ไม่อนุญาต → ดาวน์โหลดแทน ----
+      const MON_S2 = ["ม.ค.","ก.พ.","มี.ค.","เม.ย.","พ.ค.","มิ.ย.","ก.ค.","ส.ค.","ก.ย.","ต.ค.","พ.ย.","ธ.ค."];
+      const pngName = () => `DRAFT จัดบิน ฝูง.603 ${dvDay.getDate()} ${MON_S2[dvDay.getMonth()]}${String(dvDay.getFullYear() + 543).slice(-2)}.png`;
+      const dvTable = () => dv.querySelector("#dvFitBox .xls");
+      const dvNote = (t, ok) => { const m = dv.querySelector("#dvMsg"); m.style.color = ok ? "var(--good)" : "var(--crit)"; m.textContent = t; };
+      const saveBlob = (blob) => {
+        const url = URL.createObjectURL(blob);
+        const a = Object.assign(document.createElement("a"), { href: url, download: pngName() });
+        document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(url), 5000);
+      };
+      async function dvImage(copy) {
+        const t = dvTable(); if (!t) return;
+        const btns = dv.querySelectorAll("#dvCopy,#dvSave"); btns.forEach((b) => { b.disabled = true; });
+        dvNote("กำลังสร้างรูป…", true);
+        const blobP = boardToPngBlob(t);
+        try {
+          if (copy && navigator.clipboard?.write && window.ClipboardItem) {
+            try {
+              // ส่ง Promise ให้ ClipboardItem ทันทีในจังหวะกดปุ่ม (Safari ต้องการแบบนี้)
+              await navigator.clipboard.write([new ClipboardItem({ "image/png": blobP })]);
+              return dvNote("✓ คัดลอกรูปแล้ว — วาง (Cmd/Ctrl+V) ในแชทได้เลย", true);
+            } catch (err) { console.warn("clipboard:", err); }
+            saveBlob(await blobP);
+            return dvNote("เบราว์เซอร์ไม่อนุญาตให้คัดลอกรูป — ดาวน์โหลดเป็นไฟล์แทนแล้ว", false);
+          }
+          saveBlob(await blobP);
+          dvNote(`✓ บันทึกรูปแล้ว: ${pngName()}`, true);
+        } catch (err) {
+          dvNote("สร้างรูปไม่สำเร็จ: " + (err.message || err), false);
+        } finally { btns.forEach((b) => { b.disabled = false; }); }
+      }
       dv.addEventListener("click", (e) => {
         if (e.target.closest("[data-close]")) return dv.close();
+        if (e.target.id === "dvCopy") return dvImage(true);
+        if (e.target.id === "dvSave") return dvImage(false);
         if (e.target.id === "dvFit") { fitAll = !fitAll; return dvLayout(); }
         const b = e.target.closest("[data-d]");
         if (b) dvShow(new Date(dvDay.getFullYear(), dvDay.getMonth(), dvDay.getDate() + Number(b.dataset.d)));
