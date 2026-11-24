@@ -37,9 +37,9 @@
   /* ลากสลับลำดับชื่อภารกิจ (ผู้ใช้ขอ 24 พ.ย. 69) — ใช้ pointer events ได้ทั้งเมาส์และนิ้ว */
   .drag-h{flex:none;border:0;background:none;color:var(--muted);font-size:17px;line-height:1;padding:6px 3px;cursor:grab;touch-action:none;border-radius:6px;letter-spacing:-3px}
   .drag-h:hover,.drag-h:focus-visible{color:var(--ink);background:var(--surface-2)}
-  :is(#nameRows,#pocRows) .crew-dyn-row{transition:transform .15s ease}
-  :is(#nameRows,#pocRows) .crew-dyn-row.dragging{transition:none;position:relative;z-index:3;background:var(--surface);border-radius:10px;box-shadow:0 6px 18px rgba(0,0,0,.18)}
-  :is(#nameRows,#pocRows) .crew-dyn-row.dragging .drag-h{cursor:grabbing}
+  :is(#nameRows,#pocRows,#crewBox) .crew-dyn-row{transition:transform .15s ease}
+  :is(#nameRows,#pocRows,#crewBox) .crew-dyn-row.dragging{transition:none;position:relative;z-index:3;background:var(--surface);border-radius:10px;box-shadow:0 6px 18px rgba(0,0,0,.18)}
+  :is(#nameRows,#pocRows,#crewBox) .crew-dyn-row.dragging .drag-h{cursor:grabbing}
   .btn-mini{flex-shrink:0;padding:7px 11px;font-size:14px;line-height:1;border-radius:8px;
             border:1px solid var(--line-strong);background:var(--surface);color:var(--crit);
             cursor:pointer;font-family:inherit;font-weight:700}
@@ -231,6 +231,7 @@
       const el = document.getElementById("pilotRows");
       el.innerHTML = pilots.map((p, i) => `
         <div class="crew-dyn-row" data-row="${i}">
+          ${dragHandle(i, pilots.length, "นักบิน")}
           <select data-i="${i}">${PILOT_ROLES.map(r =>
             `<option value="${r}" ${p.role === r ? "selected" : ""}>${r}</option>`).join("")}</select>
           <div class="cb">
@@ -251,6 +252,7 @@
         () => { pilots.push({ role: "IP", name: "", crew_member_id: null }); renderPilots(); });
 
       el.querySelectorAll(".crew-dyn-row").forEach(row => wireCombo(row, +row.dataset.row));
+      wireReorder(el, pilots, renderPilots);      // ลากสลับลำดับนักบิน (ผู้ใช้ขอ 24 พ.ย. 69) · ลำดับ = sort_order ตอนบันทึก
     }
 
     // ใช้ combobox ที่แยกเป็นโมดูล (js/combobox.js) — ผูก crew_member_id ทันทีที่เลือก
@@ -285,6 +287,7 @@
       const el = document.getElementById(`rows_${role}`);
       el.innerHTML = others[role].map((name, i) => `
         <div class="crew-dyn-row">
+          ${dragHandle(i, others[role].length, " " + role)}
           <input data-i="${i}" value="${esc(name)}" placeholder="ชื่อ ${role}">
           <button type="button" class="btn-mini" data-del="${i}">−</button>
         </div>`).join("") +
@@ -296,6 +299,7 @@
         b.addEventListener("click", () => { others[role].splice(+b.dataset.del, 1); renderOther(role); }));
       el.querySelector("[data-add]").addEventListener("click",
         () => { others[role].push(""); renderOther(role); });
+      wireReorder(el, others[role], () => renderOther(role));
     }
 
     const renderCrew = () => { renderPilots(); OTHER_ROLES.forEach(renderOther); };
