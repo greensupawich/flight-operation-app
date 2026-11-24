@@ -52,7 +52,7 @@
   table.sr tr.r-yel td{background:var(--sr-yel)}   table.sr tr.r-yel td:first-child{box-shadow:inset 4px 0 0 var(--sr-yel-b)}
   table.sr tr.r-grn td{background:var(--sr-grn)}   table.sr tr.r-grn td:first-child{box-shadow:inset 4px 0 0 var(--sr-grn-b)}
   table.sr tr.saving td{opacity:.7}
-  table.sr tr.past td.ms input{text-decoration:line-through}
+  /* ภารกิจที่เลยวันแล้ว: ไม่ขีดทับชื่อ (ผู้ใช้ขอเอาออก 24 พ.ย. 69) — class "past" ยังติดไว้ เผื่อใช้ทีหลัง */
   table.sr td.empty{padding:30px;text-align:center;color:var(--faint)}
   table.sr td.rm button .tx{margin-inline-start:3px}
   @media (max-width:1280px){ table.sr td.rm button .tx{display:none} table.sr td.rm button{padding:3px 6px} }
@@ -151,7 +151,7 @@
   };
 
   // เรียงตามวันที่ เก่า → ใหม่ ต่อเนื่องกันทั้งรายการ · ไม่มีวันที่ไว้ท้ายสุด (ผู้ใช้ขอ 9 พ.ย. 69)
-  //  ภารกิจที่เลยวันไปแล้วอยู่ตามลำดับวันที่เดิม แต่ขีดทับชื่อภารกิจ (isPast / tr.past)
+  //  ภารกิจที่เลยวันไปแล้วอยู่ตามลำดับวันที่เดิม (isPast / tr.past · ไม่ขีดทับชื่อแล้ว 24 พ.ย. 69)
   const isPast = (r) => !!r.req_date && r.req_date < todayStr;
   const byDate = (a, b) => {
     if (!a.req_date !== !b.req_date) return a.req_date ? -1 : 1;
