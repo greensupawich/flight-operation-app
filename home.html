@@ -222,7 +222,7 @@
   import { loadAircraft, loadDefects, loadChecks, boardAsOf } from "./js/status.js";
   import { supabase } from "./js/supabase.js";
   import { exportBoardXlsx, renderBoardHtml, fitShrinkCells, BOARD_HTML_CSS, boardToPngBlob } from "./js/board-excel.js";
-  import { wireSheetEdit } from "./js/sheet-edit.js";
+  import { wireSheetEdit, wireCrewDrag } from "./js/sheet-edit.js";
   import { openDailySheet } from "./js/daily-sheet.js";
   import { openDailyReport } from "./js/daily-report.js";
 
@@ -443,6 +443,7 @@
       const roster = await loadCrewRoster();
       const opts = { getMission: (id) => lastData?.missions.find((m) => m.id === id), roster, onSaved: () => refresh() };
       wireSheetEdit(document.getElementById("sheets"), opts);
+      wireCrewDrag(document.getElementById("sheets"), opts);        // ลากชื่อลูกเรือสลับลำดับในตำแหน่งเดียวกัน (24 พ.ย. 69)
       wireSheetEdit(document.getElementById("acp"), opts);          // ช่อง STBY ใต้แผงสถานภาพเครื่อง
     }
     // ข้อมูลกระดานของวันที่ day (หน้าจอ + Export Excel หลายวัน) · now = สถานภาพเครื่องปัจจุบัน (โหลดครั้งเดียวได้)

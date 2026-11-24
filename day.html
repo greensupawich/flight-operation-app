@@ -92,7 +92,8 @@
   import { loadRoster, loadUnavailableOn, clearUnavailable, setUnavailableRange, dateRange, MAX_OFF_DAYS,
            findOffBlock, clearUnavailableDays } from "./js/availability.js";
   import { renderTopbar } from "./js/ui.js";
-  import { loadMissionsByDate, esc } from "./js/missions.js";
+  import { loadMissionsByDate, esc, loadCrewRoster } from "./js/missions.js";
+  import { wireSheetEdit, wireCrewDrag } from "./js/sheet-edit.js";
   import { sheetHTML, orderMissions, hasCustomOrder, wireReorder, resetOrder, wireSheetDelete } from "./js/mission-sheet.js";
 
   const profile = await requireAuth();
@@ -221,11 +222,22 @@
     document.getElementById("title").textContent =
       `วัน${TH_DOW[dObj.getDay()]}ที่ ${dd} ${TH_MONTH[mm-1]} ${yy+543}`;
 
+    // ผู้วางแผน: คลิกช่องบนการ์ดเพื่อแก้ทีละช่อง + ลากชื่อลูกเรือสลับลำดับ — เหมือนหน้าหลัก (ผู้ใช้ขอ 24 พ.ย. 69 · js/sheet-edit.js)
+    let lastList = [];
+    if (planner) {
+      const editRoster = await loadCrewRoster();
+      const opts = { getMission: (id) => lastList.find((m) => m.id === id), roster: editRoster, onSaved: () => refresh() };
+      wireSheetEdit(document.getElementById("sheets"), opts);
+      wireCrewDrag(document.getElementById("sheets"), opts);
+    }
+
+    let loadedOnce = false;
     async function refresh() {
       const box = document.getElementById("sheets");
-      box.innerHTML = `<div class="empty">กำลังโหลด…</div>`;
+      if (!loadedOnce) box.innerHTML = `<div class="empty">กำลังโหลด…</div>`;   // หลังแก้ช่อง → วาดทับเลย ไม่กระพริบ
       // ลำดับที่ผู้วางแผนจัดเอง หรือเรียงตาม T/O (T/O ไม่ใช่เวลา เช่น STBY อยู่ท้าย)
       const list = orderMissions(await loadMissionsByDate(date));
+      lastList = list; loadedOnce = true;
       const custom = hasCustomOrder(list);
       const sub = document.getElementById("sub");
       sub.textContent = list.length
@@ -241,7 +253,7 @@
         });
         sub.appendChild(b);
       }
-      box.innerHTML = list.length ? list.map(m => sheetHTML(m, { planner })).join("")
+      box.innerHTML = list.length ? list.map(m => sheetHTML(m, { planner, edit: planner })).join("")
         : `<div class="empty">ยังไม่มีภารกิจในวันนี้${planner ? ' · กด "+ เพิ่มภารกิจ" เพื่อสร้าง' : ""}</div>`;
       wireSheetDelete(box, refresh);
       if (planner) wireReorder(box, (err) => { if (err) alert("บันทึกลำดับไม่สำเร็จ: " + err.message); refresh(); });

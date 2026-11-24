@@ -294,3 +294,118 @@ export function wireSheetEdit(container, { getMission, roster = [], onSaved }) {
     drawName();
   }
 }
+
+
+// =====================================================================
+//  ลากสลับลำดับลูกเรือบนการ์ด (ผู้ใช้ขอ 24 พ.ย. 69) — ลากชื่อไปวางบนชื่ออื่น/ช่องว่าง "ในตำแหน่งเดียวกัน" ของการ์ดเดียวกัน
+//   • เมาส์: กดค้างแล้วลากเกิน 6px = เริ่มลาก (คลิกเฉย ๆ ยังเปิดกล่องแก้เหมือนเดิม)
+//   • นิ้ว: แตะค้าง ~0.35 วิ แล้วลาก (ปัดเลย = เลื่อนหน้าจอตามปกติ)
+//   • บันทึก: sort_order ของคนในตำแหน่งนั้น (ใช้ค่าเดิมของกลุ่มมาเรียงใหม่ · ค่าซ้ำ → ต่อจากค่าน้อยสุด)
+//  ต้องใช้ data-crew + data-role จาก sheetHTML(edit:true)
+// =====================================================================
+export function wireCrewDrag(container, { getMission, onSaved }) {
+  let st = null;                // { el, m, role, x0, y0, timer, ghost, active, pointerId }
+  let swallowClick = false;
+  const chipsOf = (card, role) => [...card.querySelectorAll(`.ed-c[data-role="${CSS.escape(role)}"]`)];
+  const cardOf = (el) => el.closest(".sheet, [data-mid]");
+  const missionOf = (card) => getMission(card?.dataset.id || card?.dataset.mid);
+
+  // คลิกที่ตามหลังการลาก → ไม่เปิดกล่องแก้ (ฟังแบบ capture ก่อน wireSheetEdit)
+  container.addEventListener("click", (e) => {
+    if (swallowClick) { e.stopPropagation(); e.preventDefault(); swallowClick = false; }
+  }, true);
+  // นิ้ว: หลังแตะค้างแล้ว กันจอเลื่อนระหว่างลาก
+  container.addEventListener("touchmove", (e) => { if (st?.active) e.preventDefault(); }, { passive: false });
+
+  const begin = () => {
+    st.active = true;
+    clearTimeout(st.timer);
+    const r = st.el.getBoundingClientRect();
+    const g = st.el.cloneNode(true);
+    g.className = "crew-ghost";
+    Object.assign(g.style, { width: `${Math.max(r.width, 60)}px`, left: `${r.left}px`, top: `${r.top}px` });
+    document.body.appendChild(g);
+    st.ghost = g; st.dx = st.x0 - r.left; st.dy = st.y0 - r.top;
+    st.el.classList.add("crew-dragging");
+    chipsOf(cardOf(st.el), st.role).forEach((c) => { if (c !== st.el) c.classList.add("crew-drop"); });
+    container.classList.add("reordering");               // กัน wireSheetEdit เปิดกล่องแก้ระหว่างลาก
+    document.body.classList.add("crew-drag-on");         // ไม่ให้ลากแล้วเลือกข้อความ
+    getSelection()?.removeAllRanges();
+  };
+  const targetAt = (x, y) => {
+    const el = document.elementFromPoint(x, y)?.closest?.(".ed-c.crew-drop");
+    return el && cardOf(el) === cardOf(st.el) ? el : null;
+  };
+  const cleanup = () => {
+    if (!st) return;
+    clearTimeout(st.timer);
+    st.ghost?.remove();
+    const card = cardOf(st.el);
+    st.el.classList.remove("crew-dragging");
+    card?.querySelectorAll(".crew-drop,.crew-over").forEach((c) => c.classList.remove("crew-drop", "crew-over"));
+    container.classList.remove("reordering");
+    document.body.classList.remove("crew-drag-on");
+    removeEventListener("pointermove", onMove); removeEventListener("pointerup", onUp); removeEventListener("pointercancel", onCancel);
+    st = null;
+  };
+  function onMove(e) {
+    if (!st || e.pointerId !== st.pointerId) return;
+    const far = Math.hypot(e.clientX - st.x0, e.clientY - st.y0) > 6;
+    if (!st.active) {
+      if (!far) return;
+      if (st.touch) return cleanup();                     // นิ้วขยับก่อนครบเวลา = เลื่อนจอ
+      begin();
+    }
+    e.preventDefault();
+    st.ghost.style.left = `${e.clientX - st.dx}px`; st.ghost.style.top = `${e.clientY - st.dy}px`;
+    const t = targetAt(e.clientX, e.clientY);
+    cardOf(st.el).querySelectorAll(".crew-over").forEach((c) => { if (c !== t) c.classList.remove("crew-over"); });
+    t?.classList.add("crew-over");
+    if (e.clientY < 60) scrollBy(0, -12); else if (e.clientY > innerHeight - 60) scrollBy(0, 12);
+  }
+  async function onUp(e) {
+    if (!st || e.pointerId !== st.pointerId) return;
+    if (!st.active) return cleanup();                     // คลิกธรรมดา → ให้ wireSheetEdit เปิดกล่องแก้
+    swallowClick = true; setTimeout(() => { swallowClick = false; }, 400);
+    const t = targetAt(e.clientX, e.clientY), { el, m, role } = st;
+    const chips = chipsOf(cardOf(el), role).filter((c) => c.dataset.crew);
+    cleanup();
+    if (!t || t === el) return;
+    const ids = chips.map((c) => c.dataset.crew);
+    const from = ids.indexOf(el.dataset.crew);
+    let to = t.dataset.crew ? ids.indexOf(t.dataset.crew) : ids.length - 1;   // ช่องว่าง → ไปท้ายสุด
+    if (from < 0 || to < 0 || from === to) return;
+    ids.splice(to, 0, ids.splice(from, 1)[0]);
+    const err = await saveCrewOrder(m, ids);
+    if (err) alert("บันทึกลำดับลูกเรือไม่สำเร็จ: " + err.message);
+    onSaved?.();
+  }
+  function onCancel(e) { if (st && e.pointerId === st.pointerId) cleanup(); }
+
+  container.addEventListener("pointerdown", (e) => {
+    if (e.button !== 0 || st) return;
+    const el = e.target.closest?.(".ed-c[data-crew][data-role]");
+    if (!el || !container.contains(el)) return;
+    const m = missionOf(cardOf(el));
+    if (!m || chipsOf(cardOf(el), el.dataset.role).filter((c) => c.dataset.crew).length < 2) return;   // คนเดียว → ไม่มีอะไรให้สลับ
+    st = { el, m, role: el.dataset.role, x0: e.clientX, y0: e.clientY, active: false, pointerId: e.pointerId, touch: e.pointerType === "touch" };
+    if (st.touch) st.timer = setTimeout(() => { if (st && !st.active) { begin(); navigator.vibrate?.(15); } }, 350);
+    addEventListener("pointermove", onMove, { passive: false }); addEventListener("pointerup", onUp); addEventListener("pointercancel", onCancel);
+  });
+}
+
+// ลำดับใหม่ของคนในตำแหน่งเดียวกัน → sort_order (ใช้ชุดค่าเดิมของกลุ่ม · ซ้ำกัน → min, min+1, …)
+async function saveCrewOrder(m, ids) {
+  const rows = ids.map((id) => (m.mission_crew || []).find((c) => c.id === id)).filter(Boolean);
+  if (rows.length !== ids.length) return { message: STALE };
+  let vals = rows.map((c) => c.sort_order || 0).sort((a, b) => a - b);
+  if (new Set(vals).size !== vals.length) vals = vals.map((_, k) => vals[0] + k);
+  for (const [k, c] of rows.entries()) {
+    if ((c.sort_order || 0) === vals[k]) continue;
+    const { data, error } = await supabase.from("mission_crew").update({ sort_order: vals[k] })
+      .eq("id", c.id).eq("crew_name", c.crew_name).select("id");
+    if (error) return error;
+    if (!data?.length) return { message: STALE };
+  }
+  return null;
+}

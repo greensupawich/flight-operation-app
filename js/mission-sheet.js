@@ -17,7 +17,8 @@ function crewRow(role, crew, edit = false) {
                    .sort((a,b)=>(a.sort_order||0)-(b.sort_order||0));
   if (!list.length && !DEFAULT_CREW_SLOTS.includes(role)) return "";
   if (!list.length && hidePilotRow(role, crew)) return "";
-  const nm = (c) => edit ? `<span class="ed-c" data-crew="${c.id}">${esc(c.crew_name.trim())}</span>` : esc(c.crew_name.trim());
+  // data-role → ลากสลับลำดับในตำแหน่งเดียวกันได้ (js/sheet-edit.js wireCrewDrag · ผู้ใช้ขอ 24 พ.ย. 69)
+  const nm = (c) => edit ? `<span class="ed-c" data-crew="${c.id}" data-role="${esc(role)}">${esc(c.crew_name.trim())}</span>` : esc(c.crew_name.trim());
   // นบ.ราชฯ → 1 คน = 1 แถว (เหมือนกระดานจริง)
   if (role === "นบ.ราชฯ 1" || role === "นบ.ราชฯ 2")
     return list.map(c => `<tr><td class="lb">${role}</td><td colspan="5" class="v">${nm(c)}</td></tr>`).join("");
@@ -25,8 +26,8 @@ function crewRow(role, crew, edit = false) {
   if (role === "AC") return `<tr><td class="lb">${role}</td><td colspan="5" class="v">${list.map(nm).join(" · ")}</td></tr>`;
   const slots = Math.max(3, list.length);          // อย่างน้อย 3 ช่องให้ตรงกับกระดาน
   const cells = Array.from({length: slots}, (_, i) => list[i]
-    ? (edit ? `<span class="ed-c" data-crew="${list[i].id}">${esc(list[i].crew_name.trim())}</span>` : `<span>${esc(list[i].crew_name.trim())}</span>`)
-    : (edit ? `<span class="ed-c" data-crew-add="${role}"></span>` : `<span></span>`)).join("");
+    ? (edit ? `<span class="ed-c" data-crew="${list[i].id}" data-role="${esc(role)}">${esc(list[i].crew_name.trim())}</span>` : `<span>${esc(list[i].crew_name.trim())}</span>`)
+    : (edit ? `<span class="ed-c" data-crew-add="${role}" data-role="${esc(role)}"></span>` : `<span></span>`)).join("");
   return `<tr><td class="lb">${role}</td><td colspan="5" class="v">
             <div class="crewgrid">${cells}</div></td></tr>`;
 }
