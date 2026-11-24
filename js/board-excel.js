@@ -7,7 +7,7 @@
 //  • ไลบรารี ExcelJS โหลดเมื่อกดปุ่มเท่านั้น (pin เวอร์ชัน + SRI)
 // =====================================================================
 import { orderMissions, hidePilotRow } from "./mission-sheet.js";
-import { pocLines, missionNameLines, stbyLabel } from "./missions.js";
+import { pocLines, missionNameLines, stbyLabel, fmtPhone, fmtPhonesIn } from "./missions.js";
 
 const EXCELJS_URL = new URL("../vendor/exceljs-4.4.0.min.js", import.meta.url).href;   // เก็บในระบบเอง (vendor/README.md)
 const EXCELJS_SRI = "sha384-Pqp51FUN2/qzfxZxBCtF0stpc9ONI6MYZpVqmo8m20SoaQCzf+arZvACkLkirlPz";
@@ -50,7 +50,7 @@ const tail3 = (t) => clean(t).slice(-3);
 function namesBy(crew, role) {
   return crew.filter((c) => clean(c.position).toUpperCase() === role)
     .sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0))
-    .map((c) => clean(c.crew_name)).filter(Boolean);
+    .map((c) => fmtPhonesIn(clean(c.crew_name))).filter(Boolean);   // ชื่อที่พิมพ์เบอร์ต่อท้าย (เช่น AC) → 0X XXXX XXXX
 }
 
 // ป้ายตำแหน่ง 8 แถว: มาตรฐาน IP…AH · ตำแหน่งพิเศษ (ผอ.เดินทาง / AC / นบ.ราชฯ / ตห.) ที่มีคน → แทรกตามลำดับ ROLE_ORDER
@@ -119,10 +119,10 @@ function fillCard(ws, [r0, c0], m, draft = false) {
   const name = missionNameLines(m).join("\n");
   at(5, 2).value = (m.status === "cancelled" ? "(ยกเลิก) " : "") + name;
   at(7, 2).value = clean(m.route) || null;
-  at(8, 2).value = clean(m.head_delegation) || null;
+  at(8, 2).value = fmtPhonesIn(clean(m.head_delegation)) || null;
   // ผอ.เดินทาง (missions.travel_director) → แถวบนสุดของรายชื่อในการ์ด เหมือนกระดานจริง
   const crewRows = clean(m.travel_director)
-    ? [{ position: "ผอ.เดินทาง", crew_name: clean(m.travel_director), sort_order: -1 }, ...(m.mission_crew || [])]
+    ? [{ position: "ผอ.เดินทาง", crew_name: fmtPhonesIn(clean(m.travel_director)), sort_order: -1 }, ...(m.mission_crew || [])]
     : (m.mission_crew || []);
   const rng = (r1, c1, r2, c2) => `${at(r1, c1).address}:${at(r2, c2).address}`;
   crewLayout(crewRows).forEach(({ role, names }, i) => {
@@ -149,7 +149,7 @@ function fillCard(ws, [r0, c0], m, draft = false) {
     for (let c = 1; c <= 7; c++) at(18, c).style = JSON.parse(JSON.stringify(at(17, c).style || {}));   // แถว 18 ใช้ style เดียวกับแถว POC
     ws.mergeCells(rng(17, 2, 17, 7)); ws.mergeCells(rng(18, 2, 18, 7));
     at(18, 1).value = "น.เอกสาร";
-    at(18, 2).value = doc;
+    at(18, 2).value = fmtPhonesIn(doc);
     const row = ws.getRow(r0 + 16), need = poc.length * 33 + 4;
     if (poc.length > 1 && (row.height || 35) < need) row.height = need;
   } else if (poc.length > 2) pc.font = { ...pc.font, size: Math.max(14, Math.floor((pc.font?.size || 26) * 2.5 / poc.length)) };
@@ -158,7 +158,7 @@ function fillCard(ws, [r0, c0], m, draft = false) {
   [[19, rem.slice(0, 1)], [20, rem.slice(1)]].forEach(([r, lines]) => {
     if (!lines.length) return;
     const cell = at(r, 2);
-    cell.value = lines.join("\n");
+    cell.value = fmtPhonesIn(lines.join("\n"));
     cell.alignment = { ...cell.alignment, wrapText: true, vertical: "middle" };
     const vis = lines.reduce((n, t) => n + Math.max(1, Math.ceil(thWidth(t) / REMARK_CHARS)), 0);
     const row = ws.getRow(r0 + r - 1), need = vis * 33 + 4;
@@ -254,7 +254,7 @@ function fillStby(ws, stbys, draft = false) {
   });
 }
 
-const personLine = (note) => [clean(note?.duty_officer), clean(note?.duty_phone)].filter(Boolean).join(" ") || null;
+const personLine = (note) => [clean(note?.duty_officer), fmtPhone(clean(note?.duty_phone))].filter(Boolean).join(" ") || null;
 
 // เติมกระดานของ 1 วันลงชีต (ชีตจากแม่แบบ) · คืนจำนวนภารกิจที่เกิน 6 การ์ด
 function fillBoard(ws, { day, missions, aircraft, defMap, chkMap, noteToday, noteNext }, stLabel, draft) {

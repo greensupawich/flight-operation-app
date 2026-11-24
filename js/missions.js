@@ -279,6 +279,21 @@ export const missionNameLines = (m) => {
   return l.length > 1 ? l.map((x, i) => `(${i + 1}) ${x}`) : l;
 };
 
+// ---------- เบอร์โทร: รูปแบบเดียวทั้งระบบ "0X XXXX XXXX" (เว้นวรรค ไม่ใช้ขีด · ผู้ใช้ขอ 24 พ.ย. 69) ----------
+//  มือถือ 10 หลัก → 2-4-4 · บ้าน/สำนักงาน 9 หลัก (02…) → 2-3-4 · +66 → 0 · รูปแบบอื่น → แค่เปลี่ยน "-" เป็นเว้นวรรค
+export function fmtPhone(s) {
+  const t = String(s ?? "").trim();
+  if (!t) return t;
+  let d = t.replace(/[\s\-.()]/g, "");
+  if (/^\+66\d{8,9}$/.test(d)) d = "0" + d.slice(3);
+  if (/^0\d{9}$/.test(d)) return `${d.slice(0, 2)} ${d.slice(2, 6)} ${d.slice(6)}`;
+  if (/^0\d{8}$/.test(d)) return `${d.slice(0, 2)} ${d.slice(2, 5)} ${d.slice(5)}`;
+  return t.replace(/\s*-\s*/g, " ").replace(/\s+/g, " ");
+}
+// เบอร์ที่อยู่ในข้อความ (เช่น "ยศ ชื่อ 0X-XXXX-XXXX", POC หลายคน) → จัดรูปแบบเดียวกัน · ตัวเลขอื่น (เวลา 0730 / callsign) ไม่โดน
+export const fmtPhonesIn = (text) =>
+  text == null ? text : String(text).replace(/(?<!\d)(?:\+66|0)\d(?:[\s\-.]?\d){7,8}(?!\d)/g, fmtPhone);
+
 // ---------- POC คณะ (หลายคณะ / หลายภารกิจ) ----------
 //  เก็บในคอลัมน์เดิม ไม่ต้อง migration:
 //   • 1 คน  → poc_name = ชื่อ, poc_phone = เบอร์
@@ -286,20 +301,20 @@ export const missionNameLines = (m) => {
 const PHONE_TAIL = /\s*((?:\+66|0)\d(?:[\s-]?\d){7,9})\s*$/;
 const splitPhone = (t) => {
   const s = String(t || "").trim(), m = s.match(PHONE_TAIL);
-  return m ? { name: s.slice(0, m.index).trim(), phone: m[1] } : { name: s, phone: "" };
+  return m ? { name: s.slice(0, m.index).trim(), phone: fmtPhone(m[1]) } : { name: s, phone: "" };
 };
 export function parsePoc(m) {
   const name = String(m?.poc_name || "").trim(), phone = String(m?.poc_phone || "").trim();
   if (!name.includes("/")) {
     if (!name && !phone) return [];
-    return [phone ? { name, phone } : splitPhone(name)];
+    return [phone ? { name, phone: fmtPhone(phone) } : splitPhone(name)];
   }
   const list = name.split(/\s*\/\s*/).map((x) => x.replace(/^\(\d+\)\s*/, "")).filter(Boolean).map(splitPhone);
-  if (phone) list.push({ name: "", phone });
+  if (phone) list.push({ name: "", phone: fmtPhone(phone) });
   return list;
 }
 export function pocFields(list) {
-  const l = (list || []).map((p) => ({ name: String(p.name || "").trim(), phone: String(p.phone || "").trim() }))
+  const l = (list || []).map((p) => ({ name: String(p.name || "").trim(), phone: fmtPhone(p.phone) }))   // บันทึกเป็นรูปแบบ 0X XXXX XXXX
                        .filter((p) => p.name || p.phone);
   if (l.length <= 1) return { poc_name: l[0]?.name || "", poc_phone: l[0]?.phone || "" };
   return { poc_name: l.map((p, i) => `(${i + 1}) ${[p.name, p.phone].filter(Boolean).join(" ")}`).join(" / "), poc_phone: "" };

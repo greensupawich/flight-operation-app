@@ -82,7 +82,7 @@
         <div><label>ชื่อ (พร้อมยศ · ใช้ในจัดบิน)</label><input id="n_name" placeholder="เช่น ยศ ชื่อ"></div>
         <div><label>นามสกุล</label><input id="n_last" placeholder="ไม่แสดงในจัดบิน"></div>
         <div><label>Callsign</label><input id="n_cs" placeholder="เช่น CBY111"></div>
-        <div><label>เบอร์โทร</label><input id="n_phone" inputmode="tel" placeholder="เช่น 0x-xxxx-xxxx"></div>
+        <div><label>เบอร์โทร</label><input id="n_phone" inputmode="tel" placeholder="เช่น 0X XXXX XXXX"></div>
         <div><label>คุณวุฒิ</label><select id="n_pos">
           <option value="">—</option><option>IP</option><option>P</option><option>CP</option></select></div>
         <button class="btn primary" id="addBtn">เพิ่ม</button>
@@ -116,7 +116,7 @@
   import { requireAuth, canPlan } from "./js/auth.js";
   import { renderTopbar } from "./js/ui.js";
   import { loadCrew, addCrew, updateCrew, deleteCrew, loadMonthlyStats, loadLastFlown } from "./js/crew.js";
-  import { QUALS, qualStyle } from "./js/missions.js";
+  import { QUALS, qualStyle, fmtPhone } from "./js/missions.js";
 
   const profile = await requireAuth();
   if (profile) {
@@ -184,7 +184,7 @@
           <td><input data-f="full_name" value="${esc(c.full_name)}" style="${qualStyle(c.position)};font-weight:600" ${planner ? "" : "disabled"}></td>
           <td><input data-f="last_name" value="${esc(c.last_name)}" placeholder="—" ${cEdit}></td>
           <td><input data-f="callsign" value="${esc(c.callsign)}" class="code" placeholder="—" ${cEdit}></td>
-          <td><input data-f="phone" value="${esc(c.phone)}" class="code" inputmode="tel" placeholder="—" ${cEdit}></td>
+          <td><input data-f="phone" value="${esc(fmtPhone(c.phone))}" class="code" inputmode="tel" placeholder="—" ${cEdit}></td>
           <td><select data-f="position" data-qual style="${qualStyle(c.position)};font-weight:700" ${planner ? "" : "disabled"}>
                 ${["", ...QUALS, ...(c.position && !QUALS.includes(c.position) ? [c.position] : [])]
                   .map(r=>`<option value="${r}" ${r===(c.position||"")?"selected":""}>${r||"—"}</option>`).join("")}
@@ -231,7 +231,7 @@
           const opt = (f) => get(f).trim() || null;
           const err = await updateCrew(tr.dataset.id, {
             code, full_name,
-            ...(contactOk ? { last_name: opt("last_name"), phone: opt("phone"), callsign: opt("callsign") } : {}),   // migration_52
+            ...(contactOk ? { last_name: opt("last_name"), phone: fmtPhone(opt("phone")) || null, callsign: opt("callsign") } : {}),   // migration_52
             position: get("position").trim() || null,
             active: get("active") === "true",
             can_fly_500: chk("can_fly_500"), can_fly_600: chk("can_fly_600"),
@@ -260,7 +260,7 @@
       msg.className = "msg";
       if (!code || !full_name) { msg.className = "msg err"; msg.textContent = "กรุณากรอกรหัสและชื่อ"; return; }
       const val = (id) => contactOk ? document.getElementById(id).value : "";
-      const err = await addCrew({ code, full_name, position, last_name: val("n_last"), callsign: val("n_cs"), phone: val("n_phone") });
+      const err = await addCrew({ code, full_name, position, last_name: val("n_last"), callsign: val("n_cs"), phone: fmtPhone(val("n_phone")) });
       if (err) {
         msg.className = "msg err";
         msg.textContent = err.message.includes("duplicate")

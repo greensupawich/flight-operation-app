@@ -217,7 +217,7 @@
 <script type="module">
   import { getCurrentProfile, canPlan } from "./js/auth.js";
   import { renderTopbar } from "./js/ui.js";
-  import { loadMissionsByDate, reportOf, loadCrewRoster, DEFAULT_CREW_SLOTS, stbyLabel } from "./js/missions.js";
+  import { loadMissionsByDate, reportOf, loadCrewRoster, DEFAULT_CREW_SLOTS, stbyLabel, fmtPhone, fmtPhonesIn } from "./js/missions.js";
   import { sheetHTML, orderMissions, hasCustomOrder, wireReorder, resetOrder, wireSheetDelete } from "./js/mission-sheet.js";
   import { loadAircraft, loadDefects, loadChecks, boardAsOf, boardAhead } from "./js/status.js";
   import { supabase } from "./js/supabase.js";
@@ -307,9 +307,9 @@
         const lines = rolesOrder.map(r => {
           const list = crew.filter(c => (c.position||"").toUpperCase() === r && (c.crew_name||"").trim())
                            .sort((a,b)=>(a.sort_order||0)-(b.sort_order||0));
-          if (!planner) return list.length ? `<div class="rl">${r}</div><div>${list.map(c => esc(c.crew_name.trim())).join("  ·  ")}</div>` : "";
+          if (!planner) return list.length ? `<div class="rl">${r}</div><div>${list.map(c => esc(fmtPhonesIn(c.crew_name.trim()))).join("  ·  ")}</div>` : "";
           if (!list.length && !DEFAULT_CREW_SLOTS.includes(r)) return "";
-          return `<div class="rl">${r}</div><div>${list.map(c => `<span class="ed-c" data-crew="${c.id}">${esc(c.crew_name.trim())}</span>`).join("  ·  ")}
+          return `<div class="rl">${r}</div><div>${list.map(c => `<span class="ed-c" data-crew="${c.id}">${esc(fmtPhonesIn(c.crew_name.trim()))}</span>`).join("  ·  ")}
                     <span class="ed-c ed-plus" data-crew-add="${r}" title="เพิ่ม ${r}">+</span></div>`;
         }).join("") + (planner ? `<div class="ed-newline"><span class="ed-c" data-crew-new>+ เพิ่มลูกเรือ</span></div>` : "");
         const label = esc(stbyLabel(m));                              // ป้าย = ชื่อภารกิจที่กรอก
@@ -322,7 +322,7 @@
 
     // ท้ายกระดาน: น.จัดบินภารกิจ วันนี้ + พรุ่งนี้ — แก้ได้เฉพาะผู้วางแผน
     function footLine(note, labelHTML, key) {
-      const officer = note?.duty_officer || "", phone = note?.duty_phone || "";
+      const officer = note?.duty_officer || "", phone = fmtPhone(note?.duty_phone || "");   // รูปแบบ 0X XXXX XXXX (24 พ.ย. 69)
       const show = officer
         ? `${esc(officer)}${phone ? `<span class="ph">${esc(phone)}</span>` : ""}`
         : `<span class="none">${planner ? "— กดแก้ไขเพื่อกรอกชื่อ —" : "— ยังไม่ระบุ —"}</span>`;
@@ -389,7 +389,7 @@
         if (!foot.querySelector("#dutyCrewList")) {
           const dl = document.createElement("datalist");
           dl.id = "dutyCrewList";
-          dl.innerHTML = crew.map((c) => `<option value="${esc(c.full_name)}">${esc(c.phone || "")}</option>`).join("");
+          dl.innerHTML = crew.map((c) => `<option value="${esc(c.full_name)}">${esc(fmtPhone(c.phone || ""))}</option>`).join("");
           foot.append(dl);
         }
       });
@@ -397,14 +397,14 @@
       foot.addEventListener("input", async (e) => {
         const key = e.target.dataset?.officer; if (!key) return;
         const c = (await dutyCrew()).find((x) => normName(x.full_name) === normName(e.target.value));
-        if (c?.phone) foot.querySelector(`[data-phone="${key}"]`).value = c.phone;
+        if (c?.phone) foot.querySelector(`[data-phone="${key}"]`).value = fmtPhone(c.phone);
       });
       cancelBtn.addEventListener("click", () => { refresh(); });
       saveBtn.addEventListener("click", async () => {
         saveBtn.disabled = true; saveBtn.textContent = "…";
         const val = (sel) => foot.querySelector(sel).value.trim();
-        const e1 = await saveDayNote(date, val('[data-officer="today"]'), val('[data-phone="today"]'));
-        const e2 = await saveDayNote(nextDate, val('[data-officer="next"]'), val('[data-phone="next"]'));
+        const e1 = await saveDayNote(date, val('[data-officer="today"]'), fmtPhone(val('[data-phone="today"]')));
+        const e2 = await saveDayNote(nextDate, val('[data-officer="next"]'), fmtPhone(val('[data-phone="next"]')));
         const err = e1 || e2;
         if (err) { alert("บันทึกไม่สำเร็จ: " + err.message); saveBtn.disabled = false; saveBtn.textContent = "บันทึก"; }
         else refresh();

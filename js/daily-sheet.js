@@ -6,7 +6,7 @@
 //   • สนับสนุน ไม่มีในระบบ → เดาจากเส้นทาง = บน. ที่แวะระหว่างทาง (ไม่นับต้นทาง/ปลายทาง) · ไม่มี → "-" · แก้ในตารางก่อนคัดลอกได้
 //   • หมายเหตุ: จัดรับรอง "1 ขา / 2 ขา" → "จัดรับรอง" · ข้อความอื่น (เช่น ใช้จาก บ.จริง) → ตามที่กรอก · ยกเลิก → "ยกเลิกภารกิจ"
 // =====================================================================
-import { PILOT_ROLES, parseMissionNames, esc } from "./missions.js";
+import { PILOT_ROLES, parseMissionNames, esc, fmtPhonesIn } from "./missions.js";
 import { orderMissions } from "./mission-sheet.js";
 
 export const SQUADRON = "603";
@@ -21,7 +21,7 @@ function crewLine(m) {
   return (m.mission_crew || [])
     .filter((c) => order(c.position) >= 0 && (c.crew_name || "").trim())
     .sort((a, b) => order(a.position) - order(b.position) || (a.sort_order || 0) - (b.sort_order || 0))
-    .map((c) => c.crew_name.trim())
+    .map((c) => fmtPhonesIn(c.crew_name.trim()))      // เบอร์ในชื่อ → 0X XXXX XXXX
     .filter((n) => !seen.has(n) && seen.add(n))
     .join(", ");
 }

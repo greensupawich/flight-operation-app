@@ -2,13 +2,15 @@
 //  mission-sheet.js — วาดการ์ดภารกิจแบบกระดานจัดบิน (ใช้ร่วม: หน้าหลัก + หน้าภารกิจรายวัน)
 //  คู่กับ css/sheet.css
 // =====================================================================
-import { KINDS, DEFAULT_KIND, kindStyle, PILOT_ROLES, OTHER_ROLES, acLabel, esc, reportOf, scheduleDeleteMission, undoDeleteMission, UNDO_MS, pocLines, missionNameLines, DEFAULT_CREW_SLOTS } from "./missions.js";
+import { KINDS, DEFAULT_KIND, kindStyle, PILOT_ROLES, OTHER_ROLES, acLabel, esc as escRaw, fmtPhonesIn, reportOf, scheduleDeleteMission, undoDeleteMission, UNDO_MS, pocLines, missionNameLines, DEFAULT_CREW_SLOTS } from "./missions.js";
 import { supabase } from "./supabase.js";
 
 // ---------- แถวลูกเรือ ----------
 // ตำแหน่งที่ไม่มีคน → ไม่แสดงแถว ยกเว้นแถวตั้งต้น (DEFAULT_CREW_SLOTS) ที่แสดงช่องว่างไว้เสมอ
 //  edit = หน้าหลักโหมดแก้ทีละช่อง → ชื่อแต่ละคนมี data-crew (id แถว mission_crew) · ช่องว่างมี data-crew-add (ตำแหน่ง)
 // มี นบ.ราชฯ → ไม่แสดงแถว IP / P / CP ที่ว่าง (ผู้ใช้ขอ 16 พ.ย. 69) · ถ้ามีชื่อในแถวนั้นยังแสดงตามปกติ
+// esc ของการ์ด = จัดรูปแบบเบอร์โทรในข้อความด้วย (0X XXXX XXXX · ผู้ใช้ขอ 24 พ.ย. 69) — ใช้กับทุกข้อความบนการ์ด
+const esc = (s) => escRaw(fmtPhonesIn(s));
 export const ROYAL_ROLES = ["นบ.ราชฯ 1", "นบ.ราชฯ 2"];
 export const hidePilotRow = (role, crew) => ["IP", "P", "CP"].includes(role)
   && crew.some((c) => ROYAL_ROLES.includes(c.position) && (c.crew_name || "").trim());

@@ -147,6 +147,7 @@
   import { requireAuth, canPlan } from "./js/auth.js";
   import { renderTopbar } from "./js/ui.js";
   import { supabase } from "./js/supabase.js";
+  import { fmtPhone } from "./js/missions.js";
 
   const profile = await requireAuth();
   if (!profile) throw new Error("no auth");
@@ -495,7 +496,7 @@
     const c = (await dutyCrew()).find((x) => normName(x.full_name) === normName(nm.value));
     if (c) nm.value = c.full_name;
     const name = nm.value.trim();
-    const phone = !name ? null : c?.phone || (normName(name) === normName(nm.dataset.name) ? nm.dataset.phone : "") || null;
+    const phone = !name ? null : fmtPhone(c?.phone || (normName(name) === normName(nm.dataset.name) ? nm.dataset.phone : "")) || null;   // รูปแบบ 0X XXXX XXXX
     st.className = "st busy"; st.textContent = "กำลังบันทึก…";
     const { error } = await supabase.from("day_notes").upsert({ log_date: cell.dataset.mdate, duty_officer: name || null,
       duty_phone: phone, updated_at: new Date().toISOString() }, { onConflict: "log_date" });
