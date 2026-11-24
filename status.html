@@ -91,7 +91,7 @@
 <script type="module">
   import { requireAuth, canPlan } from "./js/auth.js";
   import { renderTopbar } from "./js/ui.js";
-  import { loadAircraft, setAircraftStatus, setAircraftStatusOn, loadRecentDiscrepancies, boardAsOf,
+  import { loadAircraft, setAircraftStatus, setAircraftStatusOn, loadRecentDiscrepancies, boardAsOf, boardAhead, clearAircraftPlan,
            loadDefects, saveDefects, loadChecks, saveChecks,
            AC_STATUS, AC_STATUS_LABEL, AC_STATUS_COLORS, AC_STATUS_UI, AC_STATUS_UI_LABEL, statusParts, statusFields } from "./js/status.js";
 
@@ -104,9 +104,14 @@
     const thDate = (s) => { if (!s) return "-"; const [y,m,d]=String(s).slice(0,10).split("-").map(Number); return `${d} ${TH_MON[m-1]} ${y+543}`; };
     const todayStr = () => { const n=new Date(); return `${n.getFullYear()}-${String(n.getMonth()+1).padStart(2,"0")}-${String(n.getDate()).padStart(2,"0")}`; };
 
-    let viewDate = todayStr(), curIsPast = false, histLegacy = false;
+    // ล่วงหน้าได้ถึง 60 วัน (ผู้ใช้ขอ 24 พ.ย. 69 — จัดบินศุกร์ถึงจันทร์ แก้สถานภาพวันอาทิตย์/จันทร์ไว้ก่อน)
+    const AHEAD_DAYS = 60;
+    const addDaysStr = (s, n) => { const [y,m,d] = s.split("-").map(Number); const t = new Date(y, m-1, d+n);
+      return `${t.getFullYear()}-${String(t.getMonth()+1).padStart(2,"0")}-${String(t.getDate()).padStart(2,"0")}`; };
+    const maxDate = () => addDaysStr(todayStr(), AHEAD_DAYS);
+    let viewDate = todayStr(), curIsPast = false, curIsFuture = false, histLegacy = false, planned = new Map();
     { const q = new URLSearchParams(location.search).get("date");          // status.html?date=YYYY-MM-DD
-      if (/^\d{4}-\d{2}-\d{2}$/.test(q || "") && q <= todayStr()) viewDate = q; }
+      if (/^\d{4}-\d{2}-\d{2}$/.test(q || "") && q <= maxDate()) viewDate = q; }
     if (planner) document.getElementById("importBtn").hidden = false;
     let discMap = new Map(), defMap = new Map(), chkMap = new Map();
 
@@ -135,7 +140,8 @@
         </div>
         <div class="ac-body">
           ${sp.note ? `<div class="note"><b>หมายเหตุ:</b> ${esc(sp.note)}</div>` : ""}
-          ${a.status_updated_at ? `<div class="updated">อัปเดตสถานภาพ: ${thDate(a.status_updated_at)}</div>` : ""}
+          ${planned.has(a.id) ? `<div class="note" style="background:var(--primary-soft);color:var(--primary)">📅 ตั้งล่วงหน้า ณ ${thDate(planned.get(a.id))}</div>`
+            : a.status_updated_at ? `<div class="updated">อัปเดตสถานภาพ: ${thDate(a.status_updated_at)}</div>` : ""}
 
           <h4>รายการข้อขัดข้อง</h4>
           ${defs.length ? `<ol class="defs">${defs.map(d => `<li>${esc(d)}</li>`).join("")}</ol>`
@@ -149,11 +155,13 @@
           ${flightsHTML(discMap.get(a.id))}
         </div>
         ${planner ? `
-        <div class="ac-foot"><button class="btn sm" data-edit>${curIsPast ? (histLegacy ? "แก้ไขสถานภาพ (ย้อนหลัง)" : "แก้ไขสถานภาพ / ข้อขัดข้อง / รายการเช็ค (ย้อนหลัง)") : "แก้ไขสถานภาพ / ข้อขัดข้อง / รายการเช็ค"}</button></div>
+        <div class="ac-foot"><button class="btn sm" data-edit>${curIsPast ? (histLegacy ? "แก้ไขสถานภาพ (ย้อนหลัง)" : "แก้ไขสถานภาพ / ข้อขัดข้อง / รายการเช็ค (ย้อนหลัง)")
+            : curIsFuture ? `แก้ไขล่วงหน้า ณ ${thDate(viewDate)}` : "แก้ไขสถานภาพ / ข้อขัดข้อง / รายการเช็ค"}</button></div>
         <div class="ac-edit">
           ${curIsPast ? `<div class="note" style="background:var(--accent-soft);color:var(--warn)">กำลังแก้ย้อนหลัง ณ ${thDate(viewDate)} — ${histLegacy
               ? "บันทึกเฉพาะสถานภาพของวันนั้น (ข้อขัดข้อง/รายการเช็คเป็นข้อมูลปัจจุบัน แก้ได้ที่วันนี้)"
               : "บันทึกเป็นข้อมูลของวันนั้นเท่านั้น ไม่กระทบข้อมูลปัจจุบัน"}</div>` : ""}
+          ${curIsFuture ? `<div class="note" style="background:var(--primary-soft);color:var(--primary)">ตั้งล่วงหน้า ณ ${thDate(viewDate)} — ใช้ตั้งแต่วันนั้นเป็นต้นไป (กระดานจัดบินวันที่ ${thDate(addDaysStr(viewDate, 1))} ขึ้นไป) จนกว่าจะแก้ใหม่ · ไม่กระทบสถานภาพปัจจุบัน</div>` : ""}
           <div class="ed-lbl">สถานภาพ</div>
           <div class="ed-row">
             <select data-f-status style="flex:1">${AC_STATUS_UI.map(s=>`<option value="${s}" ${s===sp.st?"selected":""}>${AC_STATUS_UI_LABEL[s]}</option>`).join("")}</select>
@@ -169,6 +177,7 @@
           <div class="ed-actions">
             <button class="btn sm primary" data-save>บันทึก</button>
             <button class="btn sm ghost" data-cancel>ยกเลิก</button>
+            ${curIsFuture && planned.get(a.id) === viewDate ? `<button class="btn sm ghost" data-unplan style="margin-inline-start:auto;color:var(--crit)" title="ลบค่าที่ตั้งไว้ของวันนี้ → กลับไปยึดตามสถานภาพล่าสุดก่อนหน้า">ล้างค่าล่วงหน้า</button>` : ""}
           </div>
         </div>` : ""}
       </div>`;
@@ -198,8 +207,8 @@
         const defs = [...el.querySelectorAll("[data-def]")].map(i => i.value.trim()).filter(Boolean);
         const chks = [...el.querySelectorAll("[data-checks] .ed-row")].map(r => ({
           name: r.querySelector("[data-cname]").value, due_text: r.querySelector("[data-cdue]").value })).filter(c => c.name.trim());
-        if (curIsPast) {      // แก้ย้อนหลัง → เขียนประวัติของวันนั้น (ไม่แตะข้อมูลปัจจุบัน)
-          err = histLegacy ? await setAircraftStatusOn(id, viewDate, status, note)
+        if (curIsPast || curIsFuture) {      // แก้ย้อนหลัง / ล่วงหน้า → เขียนประวัติของวันนั้น (ไม่แตะข้อมูลปัจจุบัน)
+          err = curIsPast && histLegacy ? await setAircraftStatusOn(id, viewDate, status, note)
                            : await setAircraftStatusOn(id, viewDate, status, note, defs, chks);
         } else {
           err = await setAircraftStatus(id, status, note) || await saveDefects(id, defs) || await saveChecks(id, chks);
@@ -207,10 +216,15 @@
         if (err) { alert("บันทึกไม่สำเร็จ: " + err.message); b.disabled = false; b.textContent = "บันทึก"; }
         else refresh();
       });
+      el.querySelector("[data-unplan]")?.addEventListener("click", async () => {
+        if (!confirm(`ล้างค่าที่ตั้งล่วงหน้า ณ ${thDate(viewDate)} ของเครื่องนี้? (จะกลับไปยึดตามสถานภาพล่าสุดก่อนหน้า)`)) return;
+        const err = await clearAircraftPlan(id, viewDate);
+        if (err) alert("ล้างไม่สำเร็จ: " + err.message); else refresh();
+      });
     }
 
     async function refresh() {
-      curIsPast = viewDate < todayStr();
+      curIsPast = viewDate < todayStr(); curIsFuture = viewDate > todayStr(); planned = new Map();
       let [list, disc, defs, chks] = await Promise.all([loadAircraft(), loadRecentDiscrepancies(), loadDefects(), loadChecks()]);
       defMap = defs; chkMap = chks;
       let histMissing = 0;
@@ -218,13 +232,18 @@
         const h = await boardAsOf(viewDate, list, defs, chks);
         list = h.aircraft; defMap = h.defMap; chkMap = h.chkMap; histLegacy = h.legacy; histMissing = h.missing;
         disc.forEach((flights,id) => disc.set(id, flights.filter(f => String(f.date) <= viewDate).slice(0,1)));
+      } else {              // วันนี้ / ล่วงหน้า → ค่าที่ตั้งล่วงหน้าไว้ (ถ้ามี) ไม่งั้นข้อมูลปัจจุบัน
+        const h = await boardAhead(viewDate, todayStr(), list, defs, chks);
+        list = h.aircraft; defMap = h.defMap; chkMap = h.chkMap; planned = h.planned;
       }
       discMap = disc;
       const cnt = { FMC:0, PMC:0, NMC:0 };
       list.forEach(a => cnt[a.status] = (cnt[a.status]||0)+1);
       const nmcsN = list.filter(a => statusParts(a.status, a.status_note).st === "NMCS").length;
       const bar = document.getElementById("histbar");
-      if (!curIsPast) bar.hidden = true;
+      if (curIsFuture) { bar.hidden = false; bar.textContent = `กำลังดู/แก้สถานภาพล่วงหน้า ณ ${thDate(viewDate)} (ใช้กับกระดานจัดบินวันที่ ${thDate(addDaysStr(viewDate, 1))}) · ${planner ? "แก้ไขได้" : "อ่านอย่างเดียว"}`
+        + ` · ตั้งล่วงหน้าไว้ ${planned.size} เครื่อง — เครื่องที่ไม่ได้ตั้ง ยึดตามสถานภาพล่าสุด`; }
+      else if (!curIsPast) bar.hidden = true;
       else { bar.hidden = false; bar.textContent = `กำลังดู/แก้สถานภาพย้อนหลัง ณ ${thDate(viewDate)} · ${planner ? "แก้ไขได้" : "อ่านอย่างเดียว"}`
         + (histMissing ? ` · ${histMissing >= list.length ? "ไม่มีประวัติของวันนี้" : `${histMissing} เครื่องไม่มีประวัติ`} — แสดงข้อมูลปัจจุบัน` : "")
         + (histLegacy ? " · ข้อขัดข้อง/เช็คเป็นข้อมูลปัจจุบัน" : ""); }
@@ -236,7 +255,7 @@
     }
 
     const dp = document.getElementById("datePick");
-    dp.value = viewDate; dp.max = todayStr();
+    dp.value = viewDate; dp.max = maxDate();
     dp.addEventListener("change", () => { viewDate = dp.value || todayStr(); document.getElementById("histbar").hidden = true; refresh(); });
     document.getElementById("todayBtn").addEventListener("click", () => { viewDate = todayStr(); dp.value = viewDate; document.getElementById("histbar").hidden = true; refresh(); });
     refresh();

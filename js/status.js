@@ -171,3 +171,37 @@ export async function saveChecks(aircraftId, list) {
   const { error } = await supabase.rpc("replace_aircraft_checks", { p_aircraft: aircraftId, p_items: items });
   return error;
 }
+
+// =====================================================================
+//  สถานภาพ "วันนี้ / ล่วงหน้า" (ผู้ใช้ขอ 24 พ.ย. 69 — จัดบินวันศุกร์ถึงวันจันทร์ แก้สถานภาพวันอาทิตย์/จันทร์ล่วงหน้าได้)
+//   กติกา ณ วัน X (X ≥ วันนี้): แถวประวัติล่าสุดที่ log_date ≤ X — ถ้าแถวนั้นเป็นของวันนี้หรืออนาคต → ใช้แถวนั้น
+//   ไม่งั้น (แถวล่าสุดเก่ากว่าวันนี้ / ไม่มี) → ข้อมูลปัจจุบัน ("ยึดตามอันล่าสุด")
+//   • แก้สถานภาพปัจจุบัน → trigger เขียนแถวของวันนี้ทับ (migration_54) จึงตรงกับปัจจุบันเสมอ
+//   • แก้ล่วงหน้า (setAircraftStatusOn วันอนาคต) → ใช้ตั้งแต่วันนั้นไปจนกว่าจะมีแถวที่ใหม่กว่า
+//  today = YYYY-MM-DD (เวลาเครื่องผู้ใช้ = เวลาไทย) · คืนรูปแบบเดียวกับ boardAsOf + planned = Map(aircraftId -> วันที่ตั้งล่วงหน้า)
+// =====================================================================
+export async function boardAhead(dateStr, today, aircraft, defMap, chkMap) {
+  const board = await loadBoardOn(dateStr);
+  const dm = new Map(defMap), cm = new Map(chkMap), planned = new Map();
+  if (!board) return { aircraft, defMap: dm, chkMap: cm, planned, missing: 0, legacy: true };
+  const list = aircraft.map((a) => {
+    const h = board.get(a.id);
+    if (!h) return a;
+    let out = a;
+    if (h.log_date && h.log_date >= today) {
+      out = { ...a, status: h.status, status_note: h.note, hist_date: h.log_date };
+      if (h.log_date > today) { out.status_updated_at = null; planned.set(a.id, h.log_date); }
+    }
+    if (h.defects && h.defects_date >= today) dm.set(a.id, h.defects.map(cleanDefect).filter(Boolean));
+    if (h.checks && h.checks_date >= today) cm.set(a.id, h.checks.map((c) => ({ name: c.name, due_text: c.due_text || "" })));
+    if (h.defects_date > today || h.checks_date > today) planned.set(a.id, [h.log_date, h.defects_date, h.checks_date].filter((d) => d > today).sort().pop());
+    return out;
+  });
+  return { aircraft: list, defMap: dm, chkMap: cm, planned, missing: 0, legacy: false };
+}
+
+// ล้างค่าที่ตั้งล่วงหน้าของวันนั้น (กลับไปยึดตามสถานภาพล่าสุดก่อนหน้า) — ลบเฉพาะแถวอนาคต ไม่แตะประวัติ/ปัจจุบัน
+export async function clearAircraftPlan(id, dateStr) {
+  const { error } = await supabase.from("aircraft_status_history").delete().eq("aircraft_id", id).eq("log_date", dateStr);
+  return error;
+}
