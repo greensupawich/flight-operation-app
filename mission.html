@@ -34,6 +34,12 @@
   .crew-dyn-row{display:flex;gap:6px;align-items:center}
   .crew-dyn-row input{flex:1}
   .crew-dyn-row select{width:88px;flex-shrink:0}
+  /* ลากสลับลำดับชื่อภารกิจ (ผู้ใช้ขอ 24 พ.ย. 69) — ใช้ pointer events ได้ทั้งเมาส์และนิ้ว */
+  .drag-h{flex:none;border:0;background:none;color:var(--muted);font-size:17px;line-height:1;padding:6px 3px;cursor:grab;touch-action:none;border-radius:6px;letter-spacing:-3px}
+  .drag-h:hover,.drag-h:focus-visible{color:var(--ink);background:var(--surface-2)}
+  #nameRows .crew-dyn-row{transition:transform .15s ease}
+  #nameRows .crew-dyn-row.dragging{transition:none;position:relative;z-index:3;background:var(--surface);border-radius:10px;box-shadow:0 6px 18px rgba(0,0,0,.18)}
+  #nameRows .crew-dyn-row.dragging .drag-h{cursor:grabbing}
   .btn-mini{flex-shrink:0;padding:7px 11px;font-size:14px;line-height:1;border-radius:8px;
             border:1px solid var(--line-strong);background:var(--surface);color:var(--crit);
             cursor:pointer;font-family:inherit;font-weight:700}
@@ -300,6 +306,7 @@
       const el = document.getElementById("nameRows");
       el.innerHTML = names.map((t, i) => `
         <div class="crew-dyn-row">
+          ${names.length > 1 ? `<button type="button" class="drag-h" data-drag="${i}" title="ลากขึ้น/ลงเพื่อสลับลำดับ (หรือกดลูกศร ↑↓)" aria-label="ย้ายภารกิจที่ ${i + 1} — กดลูกศรขึ้น/ลงเพื่อสลับลำดับ">⋮⋮</button>` : ""}
           ${names.length > 1 ? `<span style="font-family:'IBM Plex Mono',monospace;color:var(--muted);font-size:12px;min-width:22px">(${i + 1})</span>` : ""}
           <input data-mn="${i}" value="${esc(t)}" placeholder="เช่น ส่ง จก.ยก.ทอ. และคณะ">
           ${names.length > 1 ? `<button type="button" class="btn-mini" data-del="${i}">\u2212</button>` : ""}
@@ -307,6 +314,44 @@
         `<button type="button" class="btn sm ghost btn-add" data-add>+ เพิ่มภารกิจ</button>`;
       el.querySelectorAll("[data-mn]").forEach(x => x.addEventListener("input", e => { names[+e.target.dataset.mn] = e.target.value; }));
       el.querySelectorAll("[data-del]").forEach(b => b.addEventListener("click", () => { names.splice(+b.dataset.del, 1); renderNames(); }));
+      // ---- สลับลำดับ: ลากที่ ⋮⋮ (เมาส์/นิ้ว) หรือโฟกัสแล้วกด ↑↓ ----
+      const moveName = (from, to) => { const [x] = names.splice(from, 1); names.splice(to, 0, x); renderNames(); };
+      el.querySelectorAll("[data-drag]").forEach(h => {
+        h.addEventListener("keydown", e => {
+          const i = +h.dataset.drag, j = e.key === "ArrowUp" ? i - 1 : e.key === "ArrowDown" ? i + 1 : -1;
+          if (j < 0 || j >= names.length) return;
+          e.preventDefault(); moveName(i, j); el.querySelector(`[data-drag="${j}"]`).focus();
+        });
+        h.addEventListener("pointerdown", e => {
+          if (e.button !== 0) return;
+          e.preventDefault();
+          const from = +h.dataset.drag, row = h.closest(".crew-dyn-row");
+          const rows = [...el.querySelectorAll(".crew-dyn-row")];
+          const mids = rows.map(r => { const b = r.getBoundingClientRect(); return b.top + b.height / 2; });
+          const step = rows.length > 1 ? mids[1] - mids[0] : row.offsetHeight;
+          const y0 = e.clientY;
+          let to = from;
+          h.setPointerCapture(e.pointerId);
+          row.classList.add("dragging");
+          const move = (ev) => {
+            const dy = Math.max(mids[0] - mids[from] - step / 2, Math.min(mids[rows.length - 1] - mids[from] + step / 2, ev.clientY - y0));
+            row.style.transform = `translateY(${dy}px)`;
+            const c = mids[from] + dy;
+            to = mids.reduce((n, m, k) => (k !== from && m < c ? n + 1 : n), 0);   // จำนวนแถวอื่นที่อยู่เหนือจุดกึ่งกลาง
+            rows.forEach((r, k) => {
+              if (k === from) return;
+              const shift = from < to && k > from && k <= to ? -step : from > to && k < from && k >= to ? step : 0;
+              r.style.transform = shift ? `translateY(${shift}px)` : "";
+            });
+          };
+          const end = () => {
+            h.removeEventListener("pointermove", move); h.removeEventListener("pointerup", end); h.removeEventListener("pointercancel", end);
+            if (to !== from) moveName(from, to);
+            else { row.classList.remove("dragging"); rows.forEach(r => { r.style.transform = ""; }); }
+          };
+          h.addEventListener("pointermove", move); h.addEventListener("pointerup", end); h.addEventListener("pointercancel", end);
+        });
+      });
       el.querySelector("[data-add]").addEventListener("click", () => {
         names.push(""); renderNames();
         el.querySelector(`[data-mn="${names.length - 1}"]`).focus();
