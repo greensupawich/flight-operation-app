@@ -62,6 +62,11 @@
   table.q td.ovr::after{content:"";position:absolute;top:0;right:0;border-style:solid;border-width:0 8px 8px 0;
                         border-color:transparent var(--q-ovr) transparent transparent}
   table.q td.link{cursor:pointer}
+  /* ช่องพิมพ์เองที่ไม่ตรงภารกิจ (ผู้ใช้ขอ 24 พ.ย. 69): คนนั้นไม่ได้อยู่ในภารกิจใดของวันนั้นแล้ว เช่น เปลี่ยนตัวในภารกิจหลังพิมพ์ */
+  table.q td.stale{box-shadow:inset 0 0 0 3px #F97316}
+  table.q td.stale.today-col{box-shadow:inset 0 0 0 2px var(--accent),inset 0 0 0 5px #F97316}
+  .stale-note{margin:6px 0 8px;padding:8px 12px;border-radius:8px;border:1px solid #F97316;background:color-mix(in srgb,#F97316 10%,var(--surface));font-size:13px}
+  .stale-note button{margin-left:4px}
 
   .chips{display:flex;flex-direction:column;height:100%;min-height:26px}
   .chip{flex:1;display:flex;align-items:center;justify-content:center;padding:0 3px;min-height:26px;
@@ -196,6 +201,7 @@
 
     <div class="legend" id="legend"></div>
     <p class="hint" id="hint"></p>
+    <div class="stale-note" id="staleNote" hidden></div>
     <div class="missing" id="missing" hidden></div>
 
     <div class="qpanel" id="qpanel" hidden></div>
@@ -327,7 +333,8 @@
        <span><i class="sw" style="background:#fff;color:var(--q-500)">CNX</i>ATR72-500</span>
        <span><i class="sw" style="background:var(--q-hol)">&nbsp;</i>วันหยุด</span>
        <span><i class="sw" style="background:var(--q-off)">&nbsp;</i>ไม่ว่าง</span>` +
-      (planner ? `<span><i class="sw" style="position:relative;background:#fff">&nbsp;<b style="position:absolute;top:0;right:0;border-style:solid;border-width:0 7px 7px 0;border-color:transparent var(--q-ovr) transparent transparent"></b></i>แก้เองทับข้อมูลภารกิจ</span>` : "");
+      (planner ? `<span><i class="sw" style="position:relative;background:#fff">&nbsp;<b style="position:absolute;top:0;right:0;border-style:solid;border-width:0 7px 7px 0;border-color:transparent var(--q-ovr) transparent transparent"></b></i>แก้เองทับข้อมูลภารกิจ</span>
+       <span><i class="sw" style="background:#fff;box-shadow:inset 0 0 0 3px #F97316">&nbsp;</i>พิมพ์เอง แต่ไม่ได้อยู่ในภารกิจวันนั้น</span>` : "");
 
     function setHint() {
       const h = document.getElementById("hint");
@@ -414,8 +421,9 @@
       const offMap = new Map(src.unavailable.map(u => [`${u.crew_member_id}|${u.off_date}`, u.note || ""]));
       const holidayMap = new Map(src.holidays.map(h => [h.holiday_date, h.name || "วันหยุด"]));
       const missionCell = new Map(), seen = new Set();
-      const missingCodes = new Set();
+      const missingCodes = new Set(), missionDays = new Set();
       [...(src.hist?.missions || []), ...src.missions].forEach(ms => {
+        missionDays.add(ms.mission_date);
         (ms.mission_crew || []).forEach(mc => {
           if (!mc.crew_member_id || !PILOT_POSITIONS.includes(String(mc.position || "").trim().toUpperCase())) return;
           const k = `${mc.crew_member_id}|${ms.id}`;
@@ -428,7 +436,7 @@
           const p = secondPoint(ms.route); if (p && !codeMap.has(p)) missingCodes.add(p);
         }
       });
-      return { codeMap, entryMap, offMap, holidayMap, missionCell, missingCodes };
+      return { codeMap, entryMap, offMap, holidayMap, missionCell, missingCodes, missionDays };
     }
 
     // ช่องที่พิมพ์เอง > ข้อมูลจากภารกิจ
@@ -436,7 +444,8 @@
       const k = `${crewId}|${d}`;
       const e = mp.entryMap.get(k);
       const ms = mp.missionCell.get(k) || [];
-      if (e) return { manual: true, override: ms.length > 0, missions: ms,
+      // stale = พิมพ์เอง แต่วันนั้นมีภารกิจในระบบ และคนนี้ไม่ได้อยู่ในภารกิจใดเลย (ข้อมูลย้อนหลังก่อนมีภารกิจในระบบ → ไม่เตือน)
+      if (e) return { manual: true, override: ms.length > 0, missions: ms, stale: !ms.length && !!mp.missionDays?.has(d),
         items: [{ text: e.code || "", kind: e.kind, ac: e.ac_type || "600",
                   st: String(e.code || "").trim().toUpperCase() === "ST" || isStby(e.kind) && !e.code }] };
       return { manual: false, override: false, missions: ms,
@@ -463,7 +472,7 @@
       const c = cellItems(crewId, d);
       return ["day", maps.offMap.has(k) ? "off" : "",
               (w === 0 || w === 6 || maps.holidayMap.has(d)) ? "hol" : "",
-              d === todayStr ? "today-col" : "", c.override ? "ovr" : "",
+              d === todayStr ? "today-col" : "", c.override ? "ovr" : "", c.stale ? "stale" : "",
               !planner && c.missions.length ? "link" : "",
               sel && sel.crew === crewId && sel.date === d ? "sel" : ""].filter(Boolean).join(" ");
     }
@@ -472,6 +481,7 @@
       const k = `${crewId}|${d}`, c = cellItems(crewId, d), parts = [];
       if (maps.offMap.has(k)) parts.push("ไม่ว่าง" + (maps.offMap.get(k) ? ": " + maps.offMap.get(k) : ""));
       if (c.manual) parts.push(`แก้เอง: ${c.items[0].text || "(สีอย่างเดียว)"} · ${KINDS[c.items[0].kind] || ""} · ATR72-${c.items[0].ac}`);
+      if (c.stale) parts.push("⚠ ไม่ได้อยู่ในภารกิจใดของวันนี้ (อาจเปลี่ยนตัวในภารกิจหลังพิมพ์) — ยังนับเป็นเที่ยวบินในคิว · ถ้าไม่ได้บินจริงให้ลบช่องนี้");
       c.missions.forEach(m => parts.push(`ภารกิจ: ${KINDS[m.kind] || ""} · ${m.callsign || ""} · ${m.route || ""}${m.status === "cancelled" ? " · ยกเลิก (ไม่นับคิว)" : ""}`));
       return parts.join("\n");
     }
@@ -556,6 +566,7 @@
       });
       table.innerHTML = html + `</tbody>`;
       pinQueueHead();
+      renderStaleNote();
       renderQueuePanel();
       renderHolidayPanel();
       renderHolSheet();
@@ -906,6 +917,25 @@
         <div class="qcols">${col("IPP", "IP / P")}${col("CP", "CP")}</div>`;
       box.querySelectorAll("[data-hol]").forEach(b => b.addEventListener("click", () => shiftHoliday(Number(b.dataset.hol))));
     }
+
+    // ---------- แถบเตือน: ช่องพิมพ์เองที่คนนั้นไม่ได้อยู่ในภารกิจวันนั้น (ผู้ใช้ขอ 24 พ.ย. 69) ----------
+    //  เกิดเมื่อพิมพ์ช่องในคิวไว้ แล้วเปลี่ยนตัวในภารกิจภายหลัง → ช่องเดิมค้าง และยังนับเป็นเที่ยวบิน (คิวเพี้ยน)
+    function renderStaleNote() {
+      const box = document.getElementById("staleNote");
+      const list = [];
+      if (planner) data.crew.forEach(p => dates.forEach(d => { if (cellItems(p.id, d).stale) list.push({ p, d }); }));
+      box.hidden = !list.length;
+      if (!list.length) { box.innerHTML = ""; return; }
+      box.innerHTML = `⚠ <b>ช่องที่พิมพ์เอง แต่คนนั้นไม่ได้อยู่ในภารกิจของวันนั้น ${list.length} ช่อง</b> (อาจเปลี่ยนตัวในภารกิจหลังพิมพ์ · ยังนับเป็นเที่ยวบินในคิว) — กดเพื่อไปที่ช่อง ถ้าไม่ได้บินจริงกด <kbd>Delete</kbd> ลบ:`
+        + list.map(({ p, d }) => { const e = maps.entryMap.get(`${p.id}|${d}`);
+            return ` <button type="button" class="btn sm ghost" data-stale="${p.id}|${d}">${esc(p.full_name)} ${esc(thaiShort(d))}${e?.code ? ` (${esc(e.code)})` : ""}</button>`; }).join("");
+    }
+    document.getElementById("staleNote").addEventListener("click", (e) => {
+      const b = e.target.closest("[data-stale]"); if (!b) return;
+      const [crew, date] = b.dataset.stale.split("|");
+      setSel({ crew, date });
+      b.blur();                                   // ปุ่มไม่ค้างโฟกัส → กด Delete ลบช่องที่เลือกได้ทันที
+    });
 
     // ---------- เลือกช่อง ----------
     function tdOf(s) {
