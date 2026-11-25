@@ -13,12 +13,28 @@ export async function loadRoster() {
   return (data || []).map((c) => ({ ...c, aliases: aliases?.get(c.id) || [] }));
 }
 
-// ใครไม่ว่างวันนี้บ้าง
+// ใครไม่ว่างวันนี้บ้าง — ที่ลงไว้ (crew_unavailable) + น.จัดบินที่เข้าเวรวันนี้ (ผู้ใช้ขอ 25 พ.ย. 69)
+//  เวรจัดบิน: day_notes.log_date = วันภารกิจ = วันเข้าเวร + 1 → เข้าเวรวันนี้ = แถวของพรุ่งนี้ · จับคู่ชื่อกับทะเบียนแบบตัดช่องว่าง
+//  แถวจากเวร: duty = true (ไม่มีใน crew_unavailable — ลบไม่ได้จากตรงนี้ แก้ที่ตารางเวร) · manual = มีที่ลงไว้เองด้วย
+export const DUTY_OFF_NOTE = "น.จัดบิน";
 export async function loadUnavailableOn(date) {
-  const { data } = await supabase.from("crew_unavailable")
-    .select("crew_member_id,note,crew_members(code,full_name,position)")
-    .eq("off_date", date);
-  return (data || []).sort((a, b) => String(a.crew_members?.code).localeCompare(String(b.crew_members?.code)));
+  const [y, m, d] = date.split("-").map(Number), t = new Date(y, m - 1, d + 1);
+  const next = `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, "0")}-${String(t.getDate()).padStart(2, "0")}`;
+  const [{ data }, { data: note }, { data: crew }] = await Promise.all([
+    supabase.from("crew_unavailable").select("crew_member_id,note,crew_members(code,full_name,position)").eq("off_date", date),
+    supabase.from("day_notes").select("duty_officer").eq("log_date", next).maybeSingle(),
+    supabase.from("crew_members").select("id,code,full_name,position").eq("active", true),
+  ]);
+  const list = (data || []).map((o) => ({ ...o, manual: true }));
+  const norm = (s) => String(s || "").replace(/\s+/g, "");
+  const c = note?.duty_officer && (crew || []).find((x) => norm(x.full_name) === norm(note.duty_officer));
+  if (c) {
+    const o = list.find((x) => x.crew_member_id === c.id);
+    if (o) { o.duty = true; o.note = [o.note, DUTY_OFF_NOTE].filter(Boolean).join(" · "); }
+    else list.push({ crew_member_id: c.id, note: DUTY_OFF_NOTE, duty: true, manual: false,
+                     crew_members: { code: c.code, full_name: c.full_name, position: c.position } });
+  }
+  return list.sort((a, b) => String(a.crew_members?.code).localeCompare(String(b.crew_members?.code)));
 }
 
 export async function setUnavailable(crewId, date, note) {

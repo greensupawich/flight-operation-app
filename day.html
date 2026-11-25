@@ -192,7 +192,8 @@
         ? offs.map(o => `<div class="off-item" data-crew="${o.crew_member_id}">
              <b>${esc(o.crew_members?.full_name || "-")}</b>
              <span>${esc(o.note || "")}</span>
-             ${canAvail ? `<button class="btn sm off-del" data-del title="ลบ">ลบ</button>` : ""}
+             ${o.duty && !o.manual ? `<span class="muted" style="font-size:11.5px;flex:none" title="มาจากตารางเวรจัดบิน (หน้า น.จัดบิน) — แก้/ลบที่ตารางเวร">จากตารางเวร</span>`
+               : canAvail ? `<button class="btn sm off-del" data-del title="ลบ${o.duty ? " (เฉพาะที่ลงไว้เอง · น.จัดบินแก้ที่ตารางเวร)" : ""}">ลบ</button>` : ""}
            </div>`).join("")
         : `<div class="muted" style="font-size:13px">ไม่มี</div>`;
       list.querySelectorAll("[data-del]").forEach(b => b.addEventListener("click", async (e) => {
