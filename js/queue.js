@@ -14,6 +14,36 @@ export const monthRange = (y, m /* 0-11 */) => ({
   days:  new Date(y, m + 1, 0).getDate(),
 });
 
+// ---------- น.จัดบิน = ไม่ว่างในวันเข้าเวร (ผู้ใช้ขอ 25 พ.ย. 69) ----------
+//  ตารางเวรจัดบิน (checklist.html) เก็บใน day_notes: log_date = วันภารกิจ = วันเข้าเวร + 1 (จัดล่วงหน้า 1 วัน)
+//  → คนที่เข้าเวรวัน D ไม่ว่างวัน D หมายเหตุ "น.จัดบิน" · จับคู่ชื่อกับทะเบียนแบบตัดช่องว่าง · ไม่เขียนลง crew_unavailable
+//  (แก้ชื่อในตารางเวร → หน้าคิวบินเปลี่ยนตามทันที · ลบออกจากเวร → หายเอง)
+const DUTY_NOTE = "น.จัดบิน";
+const shiftDate = (s, n) => { const [y, m, d] = s.split("-").map(Number); const t = new Date(y, m - 1, d + n);
+  return `${t.getFullYear()}-${pad(t.getMonth() + 1)}-${pad(t.getDate())}`; };
+const normName = (t) => String(t || "").replace(/\s+/g, "");
+async function dutyOffBetween(first, last, crew) {
+  const { data, error } = await supabase.from("day_notes").select("log_date,duty_officer")
+    .gte("log_date", shiftDate(first, 1)).lte("log_date", shiftDate(last, 1));
+  if (error) { console.warn("day_notes:", error.message); return []; }
+  const byName = new Map((crew || []).map((c) => [normName(c.full_name), c.id]));
+  return (data || []).flatMap((r) => {
+    const id = byName.get(normName(r.duty_officer));
+    return id ? [{ crew_member_id: id, off_date: shiftDate(r.log_date, -1), note: DUTY_NOTE, duty: true }] : [];
+  });
+}
+// รวมไม่ว่าง (ที่บันทึกเอง + น.จัดบิน) — คน/วันเดียวกัน → หมายเหตุต่อกัน
+function mergeOff(list) {
+  const by = new Map();
+  for (const u of list) {
+    const k = `${u.crew_member_id}|${u.off_date}`, o = by.get(k);
+    if (!o) { by.set(k, { ...u }); continue; }
+    o.note = [o.note, u.note].filter(Boolean).join(" · ");
+    o.duty = o.duty || u.duty;
+  }
+  return [...by.values()];
+}
+
 // ชื่อจุดในเส้นทาง → คีย์สำหรับค้นรหัส (ตัดวงเล็บเวลาและช่องว่างทั้งหมด)
 export const airfieldKey = (name) => String(name || "").replace(/\([^)]*\)/g, "").replace(/\s+/g, "");
 
@@ -51,10 +81,12 @@ export async function loadHistory(first, last) {
 
 // คิววันหยุด: ใครไม่ว่างในวันนั้น (วันอาจอยู่นอกเดือนที่เปิดดู)
 export async function loadUnavailableOn(date) {
-  const { data, error } = await supabase.from("crew_unavailable")
-    .select("crew_member_id,off_date,note").eq("off_date", date);
+  const [{ data, error }, crew] = await Promise.all([
+    supabase.from("crew_unavailable").select("crew_member_id,off_date,note").eq("off_date", date),
+    supabase.from("crew_members").select("id,full_name").eq("active", true).then((r) => r.data || []),
+  ]);
   if (error) console.error(error);
-  return data || [];
+  return mergeOff([...(data || []), ...await dutyOffBetween(date, date, crew)]);
 }
 
 export async function loadHolidaysBetween(first, last) {
@@ -79,7 +111,7 @@ export async function loadQueueMonth(y, m) {
     crew,
     missions: missions.data || [],
     holidays: holidays.data || [],
-    unavailable: unavailable.data || [],
+    unavailable: mergeOff([...(unavailable.data || []), ...await dutyOffBetween(first, last, crew)]),   // + น.จัดบิน
     airfields: airfields.data || [],
   };
 }
