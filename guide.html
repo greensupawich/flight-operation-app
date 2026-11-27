@@ -1,0 +1,761 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<!-- CSP: อนุญาตเฉพาะโดเมนที่ใช้จริง · เพิ่มโดเมนใหม่ (CDN/API) ต้องแก้ทุกหน้า -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob: https://iljapjszrjuzjjbtxctu.supabase.co; media-src 'self' blob: https://iljapjszrjuzjjbtxctu.supabase.co; connect-src 'self' data: https://iljapjszrjuzjjbtxctu.supabase.co wss://iljapjszrjuzjjbtxctu.supabase.co; worker-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'">
+<meta name="referrer" content="same-origin">
+<meta name="robots" content="noindex, nofollow">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Flight Operation · COWBOY GUIDE</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bai+Jamjuree:wght@600;700&family=IBM+Plex+Sans+Thai:wght@400;500;600&family=IBM+Plex+Mono&display=swap">
+<link rel="stylesheet" href="css/style.css">
+<style>
+  /* =====================================================================
+     COWBOY GUIDE — e-book เอกสารชั้น ลับมาก (migration_66)
+     เนื้อหาอยู่ใน Storage bucket "cowboy-guide" (private) เท่านั้น · หน้านี้ไม่มีเนื้อหาเอกสารในตัว
+     ===================================================================== */
+  :root{ --g-desk:#d9d3c6; --g-bg:#e7e3da; --g-mark:rgba(255,212,0,.45); --g-mark-on:rgba(255,140,0,.55);
+         --g-shadow:0 18px 40px rgba(40,30,10,.28), 0 2px 6px rgba(40,30,10,.18); }
+  @media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){ --g-desk:#1d2127; --g-bg:#121519; --g-shadow:0 18px 40px rgba(0,0,0,.55), 0 2px 6px rgba(0,0,0,.4); } }
+  :root[data-theme="dark"]{ --g-desk:#1d2127; --g-bg:#121519; --g-shadow:0 18px 40px rgba(0,0,0,.55), 0 2px 6px rgba(0,0,0,.4); }
+
+  body{height:100dvh;display:flex;flex-direction:column;overflow:hidden}
+  .greader{flex:1;min-height:0;display:flex;flex-direction:column;background:radial-gradient(ellipse at 50% 40%, var(--g-desk), var(--g-bg) 75%)}
+  button{font:inherit;color:inherit}
+  .ico{width:20px;height:20px;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;flex:none}
+
+  .gtop{flex:none;display:flex;align-items:center;gap:6px;padding:6px 12px;background:color-mix(in srgb,var(--surface) 90%,transparent);border-bottom:1px solid var(--line);z-index:20}
+  .gbrand{display:flex;flex-direction:column;line-height:1.15;margin:0 8px 0 4px;min-width:0}
+  .gbrand b{font-family:"Bai Jamjuree",sans-serif;font-size:15px;letter-spacing:.06em;white-space:nowrap}
+  .gbrand span{font-size:11.5px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .secret{white-space:nowrap;flex:none;font-size:11px;font-weight:700;color:var(--crit);border:1.5px solid var(--crit);border-radius:4px;padding:1px 6px;letter-spacing:.05em}
+  .gsp{flex:1}
+  .tb{display:inline-flex;align-items:center;justify-content:center;gap:6px;height:34px;min-width:34px;padding:0 8px;border-radius:8px;font-size:13px;background:none;border:0;cursor:pointer}
+  .tb:hover{background:var(--primary-soft)}
+  .tb[aria-pressed="true"]{background:var(--primary-soft);color:var(--primary)}
+  .tb:disabled{opacity:.3;cursor:default;background:none}
+  .tb .lbl{display:none}
+  @media (min-width:900px){ .tb .lbl{display:inline} }
+
+  .stage{flex:1;min-height:0;position:relative;display:flex;align-items:center;justify-content:center;perspective:2600px;touch-action:pan-y}
+  .book{position:relative;display:flex}
+  .book.spread::after{content:"";position:absolute;left:50%;top:0;bottom:0;width:40px;transform:translateX(-50%);pointer-events:none;z-index:3;
+    background:linear-gradient(90deg,transparent,rgba(0,0,0,.10) 42%,rgba(0,0,0,.22) 50%,rgba(0,0,0,.10) 58%,transparent)}
+  .slot{position:relative;width:var(--pw);height:var(--ph)}
+  .slot.empty{visibility:hidden}
+  .page{position:absolute;inset:0;background:#fff;box-shadow:var(--g-shadow);overflow:hidden;cursor:zoom-in}
+  .page img,.flip .face img{width:100%;height:100%;display:block;user-select:none;-webkit-user-drag:none;-webkit-touch-callout:none}
+  .hl{position:absolute;inset:0;pointer-events:none}
+  .hl i{position:absolute;background:var(--g-mark);mix-blend-mode:multiply;border-radius:2px}
+  .hl i.on{background:var(--g-mark-on);outline:2px solid rgba(255,120,0,.9)}
+  .wm{position:absolute;inset:0;pointer-events:none;background-repeat:repeat;z-index:2}
+  .page .pno{position:absolute;bottom:6px;font-size:11px;color:#8b8b8b;font-family:"IBM Plex Mono",monospace;z-index:3}
+  .slot.l .page .pno{left:10px} .slot.r .page .pno,.slot.s .page .pno{right:10px}
+  .slot.l .page::after,.slot.r .page::after{content:"";position:absolute;top:0;bottom:0;width:18%;pointer-events:none}
+  .slot.l .page::after{right:0;background:linear-gradient(90deg,transparent,rgba(0,0,0,.08))}
+  .slot.r .page::after{left:0;background:linear-gradient(270deg,transparent,rgba(0,0,0,.08))}
+  .flip{position:absolute;top:0;width:var(--pw);height:var(--ph);transform-style:preserve-3d;z-index:5;pointer-events:none}
+  .flip .face{position:absolute;inset:0;backface-visibility:hidden;-webkit-backface-visibility:hidden;background:#fff;overflow:hidden}
+  .flip .back{transform:rotateY(180deg)}
+  .flip .shade{position:absolute;inset:0;pointer-events:none;opacity:0;background:linear-gradient(90deg,rgba(0,0,0,.5),rgba(0,0,0,.1))}
+  .flip.fwd{transform-origin:0 50%} .flip.bwd{transform-origin:100% 50%}
+  .gnav{position:absolute;top:50%;transform:translateY(-50%);width:44px;height:84px;border-radius:10px;display:flex;align-items:center;justify-content:center;
+    color:var(--muted);z-index:6;background:none;border:0;cursor:pointer}
+  .gnav:hover{background:color-mix(in srgb,var(--surface) 70%,transparent);color:var(--ink)}
+  .gnav:disabled{opacity:.25;cursor:default;background:none}
+  .gnav.prev{left:6px} .gnav.next{right:6px}
+  .gnav .ico{width:28px;height:28px}
+  .gmsg{max-width:440px;text-align:center;background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:24px;box-shadow:var(--shadow);line-height:1.7}
+  .gmsg b{display:block;font-size:17px;margin-bottom:6px}
+
+  .gbottom{flex:none;display:flex;align-items:center;gap:12px;padding:6px 16px;padding-bottom:max(6px,env(safe-area-inset-bottom));
+    background:color-mix(in srgb,var(--surface) 90%,transparent);border-top:1px solid var(--line);z-index:20}
+  .gbottom input[type=range]{flex:1;accent-color:var(--primary);min-width:60px}
+  .pg{display:flex;align-items:center;gap:6px;font-size:13px;color:var(--muted);white-space:nowrap}
+  .pg input{width:52px;height:30px;text-align:center;font:inherit;padding:0}
+  .gsec{font-size:12.5px;color:var(--muted);max-width:34%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  @media (max-width:600px){ .gsec,.gbrand span,.gnav{display:none} .gtop{gap:2px;padding-inline:6px} }
+
+  .drawer{position:fixed;top:0;bottom:0;left:0;width:min(360px,92vw);background:var(--surface);border-right:1px solid var(--line);
+    box-shadow:8px 0 30px rgba(0,0,0,.18);transform:translateX(-102%);transition:transform .28s ease;z-index:140;display:flex;flex-direction:column}
+  .drawer.open{transform:none}
+  .scrim{position:fixed;inset:0;background:rgba(0,0,0,.28);opacity:0;pointer-events:none;transition:opacity .28s;z-index:130}
+  .scrim.open{opacity:1;pointer-events:auto}
+  .dh{display:flex;align-items:center;gap:4px;padding:10px 10px 0;padding-top:max(10px,env(safe-area-inset-top))}
+  .tabs{display:flex;gap:4px;flex:1;flex-wrap:wrap}
+  .tabs button{padding:7px 12px;border-radius:8px;font-size:14px;color:var(--muted);background:none;border:0;cursor:pointer}
+  .tabs button[aria-selected="true"]{background:var(--primary-soft);color:var(--primary);font-weight:600}
+  .dbody{flex:1;overflow:auto;padding:10px 12px 20px}
+  .toc a{display:flex;gap:10px;align-items:baseline;padding:8px 10px;border-radius:8px;color:inherit;text-decoration:none;font-size:14px;line-height:1.35}
+  .toc a:hover{background:var(--primary-soft)}
+  .toc a.cur{background:var(--primary-soft);color:var(--primary);font-weight:600}
+  .toc a span{margin-left:auto;font-size:12px;color:var(--muted);font-family:"IBM Plex Mono",monospace}
+  .thumbs{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:8px}
+  .thumbs button{display:flex;flex-direction:column;align-items:center;gap:4px;padding:4px;border-radius:6px;font-size:11px;color:var(--muted);background:none;border:0;cursor:pointer}
+  .thumbs img{width:100%;aspect-ratio:3/4;object-fit:cover;background:#fff;box-shadow:0 1px 4px rgba(0,0,0,.2);border-radius:2px}
+  .thumbs button.cur{background:var(--primary-soft);color:var(--primary);font-weight:600}
+  .hdg{font-size:12px;font-weight:600;color:var(--faint);letter-spacing:.04em;margin:16px 4px 4px}
+  .sbox{display:flex;gap:6px;align-items:center;border:1px solid var(--line);border-radius:10px;padding:0 10px;background:var(--surface-2)}
+  .sbox input{flex:1;height:40px;border:0;background:none;font:inherit;font-size:15px;color:var(--ink);outline:none;padding:0}
+  .shint{font-size:12px;color:var(--muted);margin:8px 2px}
+  .hit{display:block;width:100%;text-align:left;padding:8px 10px;border-radius:8px;font-size:13.5px;line-height:1.45;background:none;border:0;cursor:pointer}
+  .hit:hover,.hit.on{background:var(--primary-soft)}
+  .hit small{display:block;font-size:11.5px;color:var(--muted);margin-bottom:2px}
+  .hit mark{background:var(--g-mark);color:inherit;border-radius:2px}
+
+  .zoom{position:fixed;inset:0;background:rgba(15,17,20,.95);z-index:150;display:none;touch-action:none}
+  .zoom.open{display:block}
+  .zcanvas{position:absolute;inset:0;overflow:hidden;cursor:grab}
+  .zcanvas.drag{cursor:grabbing}
+  .zpage{position:absolute;left:0;top:0;transform-origin:0 0;background:#fff;box-shadow:0 10px 40px rgba(0,0,0,.6)}
+  .zpage img{display:block;width:100%;height:100%;user-select:none;-webkit-user-drag:none;-webkit-touch-callout:none}
+  .zbar{position:absolute;left:50%;bottom:max(16px,env(safe-area-inset-bottom));transform:translateX(-50%);display:flex;gap:4px;align-items:center;
+    background:rgba(30,33,38,.92);color:#eee;border-radius:12px;padding:6px;box-shadow:0 4px 20px rgba(0,0,0,.4);z-index:3}
+  .zbar .tb:hover{background:rgba(255,255,255,.12)}
+  .zbar .zl{font-size:12.5px;min-width:86px;text-align:center;font-family:"IBM Plex Mono",monospace}
+  .zclose{position:absolute;top:max(12px,env(safe-area-inset-top));right:12px;color:#eee;background:rgba(30,33,38,.92);z-index:3}
+  .zclose:hover{background:rgba(255,255,255,.18)}
+
+  /* ---------- จัดการ (admin) ---------- */
+  dialog.gadm{width:min(760px,96vw);max-height:90dvh;padding:0;border:1px solid var(--line);border-radius:var(--radius);background:var(--surface);color:var(--ink)}
+  dialog.gadm[open]{display:flex;flex-direction:column}
+  dialog.gadm::backdrop{background:rgba(0,0,0,.4)}
+  .gadm .dh{padding:12px 12px 0}
+  .gadm .dbody{padding:12px 16px 18px}
+  .gadm table{width:100%;border-collapse:collapse;font-size:13.5px}
+  .gadm th{text-align:start;font-size:11.5px;color:var(--faint);font-weight:600;padding:6px 8px;border-bottom:1px solid var(--line)}
+  .gadm td{padding:7px 8px;border-bottom:1px solid var(--line);vertical-align:middle}
+  .gadm .note{font-size:12.5px;color:var(--muted);line-height:1.6;margin:0 0 10px}
+  .gadm .ok{color:var(--good)} .gadm .err{color:var(--crit)}
+  .gadm .prog{height:6px;background:var(--surface-2);border-radius:3px;overflow:hidden;margin:10px 0}
+  .gadm .prog i{display:block;height:100%;width:0;background:var(--primary);transition:width .15s}
+  .toast{position:fixed;left:50%;top:120px;transform:translateX(-50%);background:var(--ink);color:var(--surface);padding:8px 14px;border-radius:8px;font-size:13px;
+    opacity:0;transition:opacity .2s;pointer-events:none;z-index:200}
+  .toast.show{opacity:1}
+  @media (prefers-reduced-motion: reduce){ .drawer,.scrim{transition:none} }
+  /* เอกสารลับ: ไม่ให้สั่งพิมพ์จากหน้านี้ */
+  @media print{ body *{display:none!important} body::after{content:"เอกสารชั้นลับ — ไม่อนุญาตให้พิมพ์จากหน้านี้";display:block;padding:40px;font-size:20px} }
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-menu" viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h10"/></symbol>
+  <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></symbol>
+  <symbol id="i-left" viewBox="0 0 24 24"><path d="m15 5-7 7 7 7"/></symbol>
+  <symbol id="i-right" viewBox="0 0 24 24"><path d="m9 5 7 7-7 7"/></symbol>
+  <symbol id="i-book" viewBox="0 0 24 24"><path d="M3 5.5C5.5 4.5 9 4.5 12 6.5c3-2 6.5-2 9-1v13c-2.5-1-6-1-9 1-3-2-6.5-2-9-1z"/><path d="M12 6.5v13"/></symbol>
+  <symbol id="i-zin" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5M8 11h6M11 8v6"/></symbol>
+  <symbol id="i-zout" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5M8 11h6"/></symbol>
+  <symbol id="i-fit" viewBox="0 0 24 24"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></symbol>
+  <symbol id="i-full" viewBox="0 0 24 24"><path d="M4 9V4h5M15 4h5v5M20 15v5h-5M9 20H4v-5"/></symbol>
+  <symbol id="i-x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></symbol>
+  <symbol id="i-gear" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></symbol>
+</svg>
+
+<div class="greader">
+  <div class="gtop">
+    <button class="tb" id="bMenu" title="สารบัญ (T)" disabled><svg class="ico"><use href="#i-menu"/></svg><span class="lbl">สารบัญ</span></button>
+    <div class="gbrand"><b>COWBOY GUIDE</b><span id="rev"></span></div>
+    <span class="secret" title="ชั้นความลับตามต้นฉบับ">ลับมาก</span>
+    <span class="gsp"></span>
+    <button class="tb" id="bSearch" title="ค้นหา (/)" disabled><svg class="ico"><use href="#i-search"/></svg><span class="lbl">ค้นหา</span></button>
+    <button class="tb" id="bMode" title="หน้าคู่ / หน้าเดียว (D)" aria-pressed="false" disabled><svg class="ico"><use href="#i-book"/></svg><span class="lbl" id="modeLbl">หน้าคู่</span></button>
+    <button class="tb" id="bFull" title="เต็มจอ (F)"><svg class="ico"><use href="#i-full"/></svg></button>
+    <button class="tb" id="bAdm" title="จัดการ: สิทธิ์ผู้อ่าน / อัปโหลด / ประวัติการเปิดอ่าน" hidden><svg class="ico"><use href="#i-gear"/></svg><span class="lbl">จัดการ</span></button>
+  </div>
+  <main class="stage" id="stage">
+    <button class="gnav prev" id="bPrev" title="หน้าก่อน (←)" hidden><svg class="ico"><use href="#i-left"/></svg></button>
+    <div class="book" id="book"><div class="gmsg" id="gmsg">กำลังโหลด…</div></div>
+    <button class="gnav next" id="bNext" title="หน้าถัดไป (→)" hidden><svg class="ico"><use href="#i-right"/></svg></button>
+  </main>
+  <footer class="gbottom">
+    <div class="gsec" id="secName"></div>
+    <input type="range" id="slider" min="1" value="1" aria-label="เลื่อนไปหน้า" disabled>
+    <div class="pg">หน้า <input id="pgIn" inputmode="numeric" aria-label="ไปหน้า" disabled> / <span id="pgTot">-</span></div>
+  </footer>
+</div>
+
+<div class="scrim" id="scrim"></div>
+<aside class="drawer" id="drawer" aria-label="สารบัญและค้นหา">
+  <div class="dh">
+    <div class="tabs" role="tablist">
+      <button role="tab" id="tabToc" aria-selected="true">สารบัญ</button>
+      <button role="tab" id="tabSearch" aria-selected="false">ค้นหา</button>
+    </div>
+    <button class="tb" id="bClose" title="ปิด (Esc)"><svg class="ico"><use href="#i-x"/></svg></button>
+  </div>
+  <div class="dbody" id="paneToc"><nav class="toc" id="toc"></nav><div class="hdg">ทุกหน้า</div><div class="thumbs" id="thumbs"></div></div>
+  <div class="dbody" id="paneSearch" hidden>
+    <div class="sbox"><svg class="ico"><use href="#i-search"/></svg><input id="q" type="search" placeholder="เช่น VTBD, น้ำหนัก, 60313" autocomplete="off"></div>
+    <div class="shint" id="shint"></div>
+    <div id="hits"></div>
+  </div>
+</aside>
+
+<div class="zoom" id="zoom" aria-modal="true" role="dialog" aria-label="ซูมหน้า">
+  <div class="zcanvas" id="zc"><div class="zpage" id="zp"><img id="zimg" alt=""><div class="hl" id="zhl"></div><div class="wm"></div></div></div>
+  <button class="tb zclose" id="zClose" title="ปิด (Esc)"><svg class="ico"><use href="#i-x"/></svg></button>
+  <div class="zbar">
+    <button class="tb" id="zPrev" title="หน้าก่อน"><svg class="ico"><use href="#i-left"/></svg></button>
+    <button class="tb" id="zOut" title="ย่อ (−)"><svg class="ico"><use href="#i-zout"/></svg></button>
+    <span class="zl" id="zLbl"></span>
+    <button class="tb" id="zIn" title="ขยาย (+)"><svg class="ico"><use href="#i-zin"/></svg></button>
+    <button class="tb" id="zFit" title="พอดีจอ (0)"><svg class="ico"><use href="#i-fit"/></svg></button>
+    <button class="tb" id="zNext" title="หน้าถัดไป"><svg class="ico"><use href="#i-right"/></svg></button>
+  </div>
+</div>
+
+<dialog class="gadm" id="adm">
+  <div class="dh">
+    <div class="tabs" role="tablist">
+      <button role="tab" data-at="readers" aria-selected="true">ผู้มีสิทธิ์อ่าน</button>
+      <button role="tab" data-at="upload" aria-selected="false">อัปโหลดเอกสาร</button>
+      <button role="tab" data-at="views" aria-selected="false">ประวัติการเปิดอ่าน</button>
+    </div>
+    <button class="tb" data-close title="ปิด"><svg class="ico"><use href="#i-x"/></svg></button>
+  </div>
+  <div class="dbody" data-ap="readers">
+    <p class="note">ติ๊กเพื่อให้สิทธิ์อ่าน · ผู้ดูแล (admin) อ่านได้เสมอ · เอาติ๊กออก = ถอนสิทธิ์ทันที · การให้/ถอนสิทธิ์ลงประวัติการแก้ไขในหน้าผู้ดูแล</p>
+    <table><thead><tr><th style="width:44px">อ่าน</th><th>ผู้ใช้</th><th>สิทธิ์ในระบบ</th></tr></thead><tbody id="rdRows"></tbody></table>
+  </div>
+  <div class="dbody" data-ap="upload" hidden>
+    <p class="note">
+      1) ในเครื่องผู้ดูแล รัน <code>python3 build.py "ไฟล์.pdf"</code> ในโฟลเดอร์ cowboy-ebook (ได้ <code>book.json</code> + <code>pages/</code> + <code>thumbs/</code>)<br>
+      2) กด "เลือกโฟลเดอร์" แล้วเลือกโฟลเดอร์ cowboy-ebook · ระบบอัปโหลดเฉพาะ book.json และรูปหน้า แทนที่ฉบับเดิม
+    </p>
+    <input type="file" id="upDir" webkitdirectory multiple hidden>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <button class="btn primary" id="upPick">📁 เลือกโฟลเดอร์…</button>
+      <button class="btn" id="upDel" style="color:var(--crit)">ลบเอกสารออกจากระบบ</button>
+    </div>
+    <div class="prog" hidden id="upProg"><i></i></div>
+    <div class="note" id="upMsg" style="margin-top:8px"></div>
+  </div>
+  <div class="dbody" data-ap="views" hidden>
+    <p class="note">ใครเปิดอ่านหน้าไหน (รวมช่วงที่เปิดต่อเนื่องไม่เกิน 30 นาทีเป็นแถวเดียว) · 300 ครั้งล่าสุด · ไม่มีใครแก้หรือลบบันทึกนี้ได้</p>
+    <table><thead><tr><th>เวลา</th><th>ผู้อ่าน</th><th>หน้า</th></tr></thead><tbody id="vwRows"></tbody></table>
+  </div>
+</dialog>
+<div class="toast" id="toast"></div>
+
+<script type="module">
+  import { requireAuth, isAdmin } from "./js/auth.js";
+  import { renderTopbar } from "./js/ui.js";
+  import { supabase } from "./js/supabase.js";
+
+  const BUCKET = "cowboy-guide";
+  const SIGN_SECS = 900, RESIGN_MS = 12 * 60 * 1000;   // ลิงก์รูปอายุ 15 นาที · ขอใหม่ทุก 12 นาที
+  const $ = (id) => document.getElementById(id);
+  const escH = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  const store = { get(k){ try { return localStorage.getItem("guide:" + k); } catch { return null; } },
+                  set(k, v){ try { localStorage.setItem("guide:" + k, v); } catch {} } };
+  const pad = (n) => String(n).padStart(2, "0");
+  const pPath = (n) => `pages/p${pad(n)}.jpg`, tPath = (n) => `thumbs/p${pad(n)}.jpg`;
+  function toast(t) { const el = $("toast"); el.textContent = t; el.classList.add("show"); clearTimeout(el._t); el._t = setTimeout(() => el.classList.remove("show"), 1500); }
+  const msg = (title, body) => { $("book").innerHTML = `<div class="gmsg"><b>${title}</b>${body || ""}</div>`; };
+
+  const profile = await requireAuth();
+  if (profile) {
+    renderTopbar(profile);
+    const admin = isAdmin(profile);
+    if (admin) { $("bAdm").hidden = false; $("bAdm").onclick = openAdm; }
+    $("bFull").onclick = () => document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen?.();
+
+    const { data: ok, error: okErr } = await supabase.rpc("can_read_guide");
+    if (okErr) msg("ยังไม่ได้ติดตั้งระบบ COWBOY GUIDE", "ผู้ดูแลต้องรัน migration_66 ก่อน");
+    else if (!ok) msg("ยังไม่มีสิทธิ์อ่านเอกสารนี้", "COWBOY GUIDE เป็นเอกสารชั้น ลับมาก · ติดต่อผู้ดูแลระบบเพื่อขอสิทธิ์");
+    else await start();
+
+    // ===================================================================
+    //  โหลดเอกสาร: book.json (ดัชนี) + signed URL ของรูปทุกหน้า
+    // ===================================================================
+    async function start() {
+      const { data: blob, error } = await supabase.storage.from(BUCKET).download("book.json");
+      if (error || !blob) {
+        msg("ยังไม่มีเอกสารในระบบ", admin ? "กด ⚙ จัดการ → อัปโหลดเอกสาร" : "รอผู้ดูแลอัปโหลด");
+        if (admin) { openAdm(); admTab("upload"); }
+        return;
+      }
+      let B;
+      try { B = JSON.parse(await blob.text()); } catch { msg("ไฟล์ดัชนีเสีย", "ผู้ดูแลอัปโหลดใหม่อีกครั้ง"); return; }
+      const URLS = new Map();
+      async function sign() {
+        const paths = B.pages.flatMap((p) => [pPath(p.n), tPath(p.n)]);
+        const { data, error: e } = await supabase.storage.from(BUCKET).createSignedUrls(paths, SIGN_SECS);
+        if (e) throw e;
+        data.forEach((d) => { if (d.signedUrl) URLS.set(d.path, d.signedUrl); });
+      }
+      try { await sign(); } catch (e) { msg("โหลดรูปเอกสารไม่สำเร็จ", escH(e.message)); return; }
+      setInterval(() => sign().catch(() => {}), RESIGN_MS);
+      reader(B, (n) => URLS.get(pPath(n)) || "", (n) => URLS.get(tPath(n)) || "");
+    }
+
+    // ลายน้ำ: ชื่อ + อีเมล + เวลาที่เปิด (ทับทุกหน้า) — ถ้าภาพหลุดออกไป รู้ว่ามาจากใคร
+    function watermarkCss() {
+      const now = new Date().toLocaleString("th-TH", { dateStyle: "short", timeStyle: "short" });
+      const t = `${profile.full_name || ""} · ${profile.email} · ${now}`.replace(/[<>&'"]/g, "");
+      const svg = `<svg xmlns='http://www.w3.org/2000/svg' width='460' height='240'><text x='230' y='120' text-anchor='middle' transform='rotate(-28 230 120)' font-family='sans-serif' font-size='15' fill='rgba(170,25,25,0.15)'>${t}</text></svg>`;
+      return `url("data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}")`;
+    }
+
+    // ===================================================================
+    //  ตัวอ่านหนังสือ (พลิกหน้า / ซูม / สารบัญ / ค้นหา)
+    // ===================================================================
+    function reader(B, src, thumb) {
+      const N = B.pages.length, RATIO = B.ratio || .75;
+      const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
+      const WM = watermarkCss();
+      document.querySelectorAll(".wm").forEach((w) => { w.style.backgroundImage = WM; });
+      $("rev").textContent = B.rev || "";
+      $("pgTot").textContent = N; $("slider").max = N;
+      ["bMenu", "bSearch", "bMode", "slider", "pgIn"].forEach((id) => { $(id).disabled = false; });
+      $("bPrev").hidden = $("bNext").hidden = false;
+      $("shint").textContent = "ค้นได้ทั้งไทย อังกฤษ และตัวเลข (เลขไทย ๖๐๓ = 603)";
+
+      const norm = (s) => s.toLowerCase().replace(/[๐-๙]/g, (d) => String(d.charCodeAt(0) - 0x0E50)).replace(/\s+/g, "");
+      B.pages.forEach((p) => p.lines.forEach((l) => { l.k = norm(l[0]); }));
+      let query = "", hits = [], hitIdx = -1;
+
+      let pref = store.get("mode");
+      let page = Math.min(N, Math.max(1, +(location.hash.match(/p=(\d+)/) || [])[1] || +store.get("page") || 1));
+      let busy = false;
+      const isSpread = () => pref ? pref === "spread" : innerWidth >= 900 && innerWidth / Math.max(1, $("stage").clientHeight) > 1.05;
+      const spreadOf = (n) => Math.floor(n / 2);
+      const pagesOf = (s) => [2 * s, 2 * s + 1].map((n) => (n >= 1 && n <= N ? n : 0));
+
+      // ---- บันทึกการเปิดอ่าน: หน้าที่เปิดค้างไว้ ≥ 2 วินาที · หน้าเดิมซ้ำภายใน 10 นาทีไม่บันทึกซ้ำ ----
+      const logged = new Map();
+      let logT;
+      function logView(nums) {
+        clearTimeout(logT);
+        logT = setTimeout(async () => {
+          const now = Date.now();
+          const rows = nums.filter((n) => n && !(logged.get(n) > now - 600000)).map((n) => ({ page: n }));
+          if (!rows.length) return;
+          rows.forEach((r) => logged.set(r.page, now));
+          await supabase.from("guide_views").insert(rows);
+        }, 2000);
+      }
+
+      function size() {
+        const st = $("stage"), sp = isSpread();
+        const aw = st.clientWidth - (innerWidth < 600 ? 16 : 110), ah = st.clientHeight - 24;
+        const pw = Math.max(120, Math.floor(Math.min(sp ? aw / 2 : aw, ah * RATIO)));
+        document.documentElement.style.setProperty("--pw", pw + "px");
+        document.documentElement.style.setProperty("--ph", Math.floor(pw / RATIO) + "px");
+      }
+      function pageEl(n) {
+        const d = document.createElement("div");
+        d.className = "page"; d.dataset.n = n;
+        d.innerHTML = `<img src="${src(n)}" alt="หน้า ${n}" draggable="false"><div class="hl"></div><div class="wm" style="background-image:${WM.replace(/"/g, "&quot;")}"></div><span class="pno">${n}</span>`;
+        paintHl(d.querySelector(".hl"), n);
+        return d;
+      }
+      function slot(n, cls) {
+        const s = document.createElement("div");
+        s.className = `slot ${cls}${n ? "" : " empty"}`;
+        if (n) s.append(pageEl(n));
+        return s;
+      }
+      function paintHl(layer, n) {
+        if (!query) { layer.innerHTML = ""; return; }
+        const cur = hits[hitIdx];
+        layer.innerHTML = B.pages[n - 1].lines.map((l, i) => l.k.includes(query)
+          ? `<i class="${cur && cur.n === n && cur.i === i ? "on" : ""}" style="left:${l[1] * 100}%;top:${l[2] * 100}%;width:${l[3] * 100}%;height:${l[4] * 100}%"></i>` : "").join("");
+      }
+      const repaintHl = () => document.querySelectorAll(".page").forEach((p) => paintHl(p.querySelector(".hl"), +p.dataset.n));
+
+      function render() {
+        size();
+        const book = $("book"), sp = isSpread();
+        book.className = "book" + (sp ? " spread" : "");
+        book.innerHTML = "";
+        if (sp) { const [l, r] = pagesOf(spreadOf(page)); book.append(slot(l, "l"), slot(r, "r")); }
+        else book.append(slot(page, "s"));
+        $("modeLbl").textContent = sp ? "หน้าคู่" : "หน้าเดียว";
+        $("bMode").setAttribute("aria-pressed", String(sp));
+        syncUi();
+        [-2, -1, 1, 2, 3].forEach((d) => { const n = page + d; if (n >= 1 && n <= N) new Image().src = src(n); });
+      }
+      const secStart = (n) => (B.toc || []).filter((t) => t.page <= n).pop()?.page;
+      function syncUi() {
+        const sp = isSpread(), [l, r] = sp ? pagesOf(spreadOf(page)) : [page, 0];
+        const shown = [l, r].filter(Boolean);
+        $("pgIn").value = shown.join("–");
+        $("slider").value = page;
+        $("secName").textContent = B.pages[shown[0] - 1].section || "";
+        $("bPrev").disabled = sp ? spreadOf(page) === 0 : page <= 1;
+        $("bNext").disabled = sp ? spreadOf(page) >= spreadOf(N) : page >= N;
+        store.set("page", page);
+        history.replaceState(null, "", "#p=" + page);
+        document.querySelectorAll(".toc a").forEach((a) => a.classList.toggle("cur", +a.dataset.sec === secStart(shown[0])));
+        document.querySelectorAll(".thumbs button").forEach((b) => b.classList.toggle("cur", shown.includes(+b.dataset.n)));
+        logView(shown);
+      }
+
+      // ---- พลิกหน้า ----
+      function face(n, cls) {
+        const f = document.createElement("div");
+        f.className = "face " + cls;
+        f.innerHTML = n ? `<img src="${src(n)}" alt=""><div class="shade"></div>` : `<div class="shade"></div>`;
+        if (!n) f.style.background = "transparent";
+        return f;
+      }
+      function animate(el, from, to, ms, done) {
+        if (reduce) { done(); return; }
+        const t0 = performance.now(), sh = el.querySelectorAll(".shade");
+        el.style.transform = `rotateY(${from}deg)`;
+        const stepF = (t) => {
+          const k = Math.min(1, (t - t0) / ms), e = k < .5 ? 4 * k * k * k : 1 - Math.pow(-2 * k + 2, 3) / 2;
+          const a = from + (to - from) * e;
+          el.style.transform = `rotateY(${a}deg)`;
+          const dark = Math.sin(Math.abs(a) / 180 * Math.PI) * .35;
+          sh.forEach((s) => { s.style.opacity = dark; });
+          if (k < 1) requestAnimationFrame(stepF); else done();
+        };
+        requestAnimationFrame(stepF);
+      }
+      function go(target, animateIt = true) {
+        target = Math.min(N, Math.max(1, target));
+        if (busy) return;
+        const sp = isSpread();
+        const fromS = sp ? spreadOf(page) : page, toS = sp ? spreadOf(target) : target;
+        if (fromS === toS) { page = target; syncUi(); return; }
+        if (!animateIt || reduce) { page = target; render(); return; }
+        const fwd = toS > fromS, book = $("book");
+        busy = true;
+        book.innerHTML = "";
+        if (sp) {
+          const [cl, cr] = pagesOf(fromS), [nl, nr] = pagesOf(toS);
+          book.append(slot(fwd ? cl : nl, "l"), slot(fwd ? nr : cr, "r"));
+          const fl = document.createElement("div");
+          fl.className = "flip " + (fwd ? "fwd" : "bwd");
+          fl.style.left = fwd ? "50%" : "0";
+          fl.append(face(fwd ? cr : cl, "front"), face(fwd ? nl : nr, "back"));
+          book.append(fl);
+          animate(fl, 0, fwd ? -180 : 180, 720, () => { page = target; busy = false; render(); });
+        } else {
+          book.append(slot(fwd ? target : page, "s"));
+          const fl = document.createElement("div");
+          fl.className = "flip fwd"; fl.style.left = "0";
+          fl.append(face(fwd ? page : target, "front"));
+          book.append(fl);
+          animate(fl, fwd ? 0 : -100, fwd ? -100 : 0, 520, () => { page = target; busy = false; render(); });
+        }
+      }
+      const step = (d) => {
+        if (isSpread()) { const [l, r] = pagesOf(spreadOf(page) + d); if (l || r) go(l || r); }
+        else go(page + d);
+      };
+      const jump = (n) => go(n, Math.abs(isSpread() ? spreadOf(n) - spreadOf(page) : n - page) === 1);
+
+      // ---- สารบัญ + รูปย่อ ----
+      $("toc").innerHTML = (B.toc || []).map((t) => `<a href="#p=${t.page}" data-sec="${t.page}" data-go="${t.page}">${escH(t.title)}<span>${t.page}</span></a>`).join("");
+      $("thumbs").innerHTML = B.pages.map((p) => `<button data-go="${p.n}" data-n="${p.n}" title="${escH(p.section)}"><img loading="lazy" src="${thumb(p.n)}" alt="">${p.n}</button>`).join("");
+      $("drawer").addEventListener("click", (e) => {
+        const g = e.target.closest("[data-go]");
+        if (!g) return;
+        e.preventDefault();
+        if (innerWidth < 900) closeDrawer();
+        jump(+g.dataset.go);
+      });
+      function openDrawer(tab) {
+        $("drawer").classList.add("open"); $("scrim").classList.add("open");
+        const s = tab === "search";
+        $("tabToc").setAttribute("aria-selected", String(!s)); $("tabSearch").setAttribute("aria-selected", String(s));
+        $("paneToc").hidden = s; $("paneSearch").hidden = !s;
+        if (s) setTimeout(() => $("q").focus(), 50);
+        else document.querySelector(".thumbs button.cur")?.scrollIntoView({ block: "nearest" });
+      }
+      function closeDrawer() { $("drawer").classList.remove("open"); $("scrim").classList.remove("open"); }
+      $("bMenu").onclick = () => $("drawer").classList.contains("open") && $("paneSearch").hidden ? closeDrawer() : openDrawer("toc");
+      $("bSearch").onclick = () => openDrawer("search");
+      $("tabToc").onclick = () => openDrawer("toc"); $("tabSearch").onclick = () => openDrawer("search");
+      $("bClose").onclick = closeDrawer; $("scrim").onclick = closeDrawer;
+
+      // ---- ค้นหา ----
+      function markText(t) {
+        const chars = [...t], map = [];
+        let flat = "";
+        chars.forEach((c, i) => { for (const x of norm(c)) { flat += x; map.push(i); } });
+        const at = flat.indexOf(query);
+        if (at < 0) return escH(t);
+        const a = map[at], b = map[at + query.length - 1] + 1;
+        return escH(chars.slice(0, a).join("")) + "<mark>" + escH(chars.slice(a, b).join("")) + "</mark>" + escH(chars.slice(b).join(""));
+      }
+      function runSearch() {
+        query = norm($("q").value);
+        hits = []; hitIdx = -1;
+        if (query) B.pages.forEach((p) => p.lines.forEach((l, i) => { if (l.k.includes(query)) hits.push({ n: p.n, i, t: l[0] }); }));
+        const pagesHit = new Set(hits.map((h) => h.n)).size;
+        $("shint").textContent = !query ? "ค้นได้ทั้งไทย อังกฤษ และตัวเลข (เลขไทย ๖๐๓ = 603)"
+          : hits.length ? `พบ ${hits.length} แห่ง ใน ${pagesHit} หน้า · Enter = ไปที่ถัดไป` : "ไม่พบ";
+        $("hits").innerHTML = hits.slice(0, 300).map((h, k) =>
+          `<button class="hit" data-hit="${k}"><small>หน้า ${h.n} · ${escH(B.pages[h.n - 1].section)}</small>${markText(h.t)}</button>`).join("");
+        repaintHl();
+      }
+      let tmr;
+      $("q").addEventListener("input", () => { clearTimeout(tmr); tmr = setTimeout(runSearch, 120); });
+      function gotoHit(k) {
+        if (!hits.length) return;
+        hitIdx = (k + hits.length) % hits.length;
+        document.querySelectorAll(".hit").forEach((b) => b.classList.toggle("on", +b.dataset.hit === hitIdx));
+        document.querySelector(`.hit[data-hit="${hitIdx}"]`)?.scrollIntoView({ block: "nearest" });
+        const n = hits[hitIdx].n;
+        if (isSpread() ? spreadOf(n) === spreadOf(page) : n === page) { page = n; repaintHl(); syncUi(); }
+        else jump(n);
+      }
+      $("q").addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); gotoHit(hitIdx + (e.shiftKey ? -1 : 1)); } });
+      $("hits").addEventListener("click", (e) => {
+        const b = e.target.closest("[data-hit]");
+        if (!b) return;
+        if (innerWidth < 900) closeDrawer();
+        gotoHit(+b.dataset.hit);
+      });
+
+      // ---- ซูม ----
+      const Z = { n: 1, s: 1, x: 0, y: 0, fit: 1, w: 1500, h: 2000 };
+      const zc = $("zc"), zp = $("zp");
+      function zApply() {
+        zp.style.width = Z.w + "px"; zp.style.height = Z.h + "px";
+        zp.style.transform = `translate(${Z.x}px,${Z.y}px) scale(${Z.s})`;
+        $("zLbl").textContent = `${Math.round(Z.s / Z.fit * 100)}% · ${Z.n}/${N}`;
+      }
+      function zClamp() {
+        const W = zc.clientWidth, H = zc.clientHeight, w = Z.w * Z.s, h = Z.h * Z.s;
+        Z.x = w <= W ? (W - w) / 2 : Math.min(40, Math.max(W - w - 40, Z.x));
+        Z.y = h <= H ? (H - h) / 2 : Math.min(40, Math.max(H - h - 40, Z.y));
+      }
+      function zFit() {
+        Z.h = Math.round(Z.w / RATIO);
+        Z.fit = Math.min((zc.clientWidth - 24) / Z.w, (zc.clientHeight - 90) / Z.h);
+        Z.s = Z.fit; zClamp(); zApply();
+      }
+      function zTo(s, cx = zc.clientWidth / 2, cy = zc.clientHeight / 2) {
+        s = Math.min(Z.fit * 6, Math.max(Z.fit * .9, s));
+        Z.x = cx - (cx - Z.x) * (s / Z.s); Z.y = cy - (cy - Z.y) * (s / Z.s); Z.s = s;
+        zClamp(); zApply();
+      }
+      function zOpen(n, fx, fy) {
+        Z.n = n;
+        $("zimg").src = src(n);
+        paintHl($("zhl"), n);
+        $("zoom").classList.add("open");
+        zFit();
+        if (fx != null) zTo(Z.fit * 2.2, Z.x + fx * Z.w * Z.s, Z.y + fy * Z.h * Z.s);
+        $("zPrev").disabled = n <= 1; $("zNext").disabled = n >= N;
+        logView([n]);
+      }
+      function zCloseFn() { $("zoom").classList.remove("open"); if (Z.n !== page) jump(Z.n); }
+      $("zClose").onclick = zCloseFn;
+      $("zIn").onclick = () => zTo(Z.s * 1.5); $("zOut").onclick = () => zTo(Z.s / 1.5); $("zFit").onclick = zFit;
+      $("zPrev").onclick = () => Z.n > 1 && zOpen(Z.n - 1); $("zNext").onclick = () => Z.n < N && zOpen(Z.n + 1);
+      zc.addEventListener("wheel", (e) => {
+        e.preventDefault();
+        if (e.ctrlKey || e.metaKey) zTo(Z.s * Math.exp(-e.deltaY * .01), e.clientX, e.clientY);
+        else { Z.x -= e.deltaX; Z.y -= e.deltaY; zClamp(); zApply(); }
+      }, { passive: false });
+      const ptrs = new Map(); let pinch = null, lastTap = 0, moved = false;
+      zc.addEventListener("pointerdown", (e) => {
+        zc.setPointerCapture(e.pointerId); ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY }); moved = false;
+        if (ptrs.size === 2) { const [a, b] = [...ptrs.values()]; pinch = { d: Math.hypot(a.x - b.x, a.y - b.y), s: Z.s }; }
+        zc.classList.add("drag");
+      });
+      zc.addEventListener("pointermove", (e) => {
+        const p = ptrs.get(e.pointerId); if (!p) return;
+        const dx = e.clientX - p.x, dy = e.clientY - p.y;
+        if (Math.abs(dx) + Math.abs(dy) > 3) moved = true;
+        p.x = e.clientX; p.y = e.clientY;
+        if (ptrs.size === 2 && pinch) {
+          const [a, b] = [...ptrs.values()];
+          zTo(pinch.s * Math.hypot(a.x - b.x, a.y - b.y) / pinch.d, (a.x + b.x) / 2, (a.y + b.y) / 2);
+        } else if (ptrs.size === 1) { Z.x += dx; Z.y += dy; zClamp(); zApply(); }
+      });
+      const up = (e) => {
+        ptrs.delete(e.pointerId); if (ptrs.size < 2) pinch = null;
+        if (!ptrs.size) zc.classList.remove("drag");
+        if (e.type === "pointerup" && !moved) {
+          const now = Date.now();
+          if (now - lastTap < 300) { Math.abs(Z.s - Z.fit) < .01 ? zTo(Z.fit * 2.5, e.clientX, e.clientY) : zFit(); lastTap = 0; }
+          else lastTap = now;
+        }
+      };
+      zc.addEventListener("pointerup", up); zc.addEventListener("pointercancel", up);
+
+      let down = null;
+      $("book").addEventListener("pointerdown", (e) => { down = { x: e.clientX, y: e.clientY }; });
+      $("book").addEventListener("click", (e) => {
+        const p = e.target.closest(".page");
+        if (!p || busy || !down || Math.abs(e.clientX - down.x) > 8) return;
+        const r = p.getBoundingClientRect();
+        zOpen(+p.dataset.n, (e.clientX - r.left) / r.width, (e.clientY - r.top) / r.height);
+      });
+      // กดค้าง / คลิกขวาที่รูป = ไม่เปิดเมนูบันทึกรูป
+      document.addEventListener("contextmenu", (e) => { if (e.target.closest(".page, .zpage, .thumbs, .flip")) e.preventDefault(); });
+
+      let sw = null;
+      $("stage").addEventListener("touchstart", (e) => { if (e.touches.length === 1) sw = { x: e.touches[0].clientX, y: e.touches[0].clientY, t: Date.now() }; }, { passive: true });
+      $("stage").addEventListener("touchend", (e) => {
+        if (!sw) return;
+        const t = e.changedTouches[0], dx = t.clientX - sw.x, dy = t.clientY - sw.y;
+        if (Math.abs(dx) > 50 && Math.abs(dx) > Math.abs(dy) * 1.4 && Date.now() - sw.t < 700) { down = null; step(dx < 0 ? 1 : -1); }
+        sw = null;
+      });
+
+      // ---- ปุ่ม / คีย์ลัด ----
+      $("bPrev").onclick = () => step(-1); $("bNext").onclick = () => step(1);
+      $("slider").addEventListener("input", (e) => { page = +e.target.value; render(); });
+      $("pgIn").addEventListener("focus", (e) => e.target.select());
+      $("pgIn").addEventListener("keydown", (e) => {
+        if (e.key !== "Enter") return;
+        const n = parseInt(norm(e.target.value), 10);
+        if (n >= 1 && n <= N) { jump(n); e.target.blur(); } else toast(`มีหน้า 1–${N}`);
+      });
+      $("bMode").onclick = () => { pref = isSpread() ? "single" : "spread"; store.set("mode", pref); render(); toast(pref === "spread" ? "หน้าคู่" : "หน้าเดียว"); };
+      addEventListener("keydown", (e) => {
+        if (e.target.matches?.("input, select, textarea") && e.key !== "Escape") return;
+        if ($("adm").open) return;
+        const zoomOpen = $("zoom").classList.contains("open");
+        if (e.key === "Escape") { if (zoomOpen) zCloseFn(); else closeDrawer(); return; }
+        if (zoomOpen) {
+          if (e.key === "ArrowRight") $("zNext").click(); else if (e.key === "ArrowLeft") $("zPrev").click();
+          else if (e.key === "+" || e.key === "=") zTo(Z.s * 1.5); else if (e.key === "-") zTo(Z.s / 1.5); else if (e.key === "0") zFit();
+          return;
+        }
+        if (e.key === "ArrowRight" || e.key === "PageDown") { e.preventDefault(); step(1); }
+        else if (e.key === "ArrowLeft" || e.key === "PageUp") { e.preventDefault(); step(-1); }
+        else if (e.key === "Home") jump(1); else if (e.key === "End") jump(N);
+        else if (e.key === "/") { e.preventDefault(); openDrawer("search"); }
+        else if (e.key.toLowerCase() === "t") openDrawer("toc");
+        else if (e.key.toLowerCase() === "d") $("bMode").click();
+        else if (e.key.toLowerCase() === "f") $("bFull").click();
+      });
+      let rt; addEventListener("resize", () => { clearTimeout(rt); rt = setTimeout(() => { render(); if ($("zoom").classList.contains("open")) zFit(); }, 120); });
+      addEventListener("hashchange", () => { const n = +(location.hash.match(/p=(\d+)/) || [])[1]; if (n && n !== page) jump(n); });
+
+      render();
+    }
+
+    // ===================================================================
+    //  จัดการ (เฉพาะ admin): ผู้มีสิทธิ์อ่าน / อัปโหลด / ประวัติการเปิดอ่าน
+    // ===================================================================
+    function openAdm() { if (!$("adm").open) $("adm").showModal(); admTab(document.querySelector(".gadm [data-at][aria-selected=true]").dataset.at); }
+    $("adm").querySelector("[data-close]").onclick = () => $("adm").close();
+    $("adm").querySelectorAll("[data-at]").forEach((b) => { b.onclick = () => admTab(b.dataset.at); });
+    function admTab(t) {
+      $("adm").querySelectorAll("[data-at]").forEach((b) => b.setAttribute("aria-selected", String(b.dataset.at === t)));
+      $("adm").querySelectorAll("[data-ap]").forEach((p) => { p.hidden = p.dataset.ap !== t; });
+      if (t === "readers") loadReaders();
+      if (t === "views") loadViews();
+    }
+
+    async function loadReaders() {
+      const tb = $("rdRows");
+      tb.innerHTML = `<tr><td colspan="3" class="muted">กำลังโหลด…</td></tr>`;
+      const [{ data: ps, error: e1 }, { data: rs, error: e2 }] = await Promise.all([
+        supabase.from("profiles").select("id, full_name, email, rank, role, status").eq("status", "active").order("full_name"),
+        supabase.from("guide_readers").select("user_id"),
+      ]);
+      if (e1 || e2) { tb.innerHTML = `<tr><td colspan="3" class="err">โหลดไม่สำเร็จ: ${escH((e1 || e2).message)}</td></tr>`; return; }
+      const has = new Set(rs.map((r) => r.user_id));
+      ps.sort((a, b) => (b.role === "admin") - (a.role === "admin") || has.has(b.id) - has.has(a.id));
+      tb.innerHTML = ps.map((p) => `<tr>
+          <td>${p.role === "admin" ? `<input type="checkbox" checked disabled title="ผู้ดูแลอ่านได้เสมอ">` : `<input type="checkbox" data-rd="${p.id}" ${has.has(p.id) ? "checked" : ""}>`}</td>
+          <td><div style="font-weight:600">${escH(p.full_name || "-")}</div><div class="muted mono" style="font-size:12px">${escH(p.email)}</div></td>
+          <td>${escH(p.role)}${p.role === "admin" ? ` <span class="muted" style="font-size:12px">(อ่านได้เสมอ)</span>` : ""}</td></tr>`).join("")
+        || `<tr><td colspan="3" class="muted">ไม่มีผู้ใช้</td></tr>`;
+      tb.querySelectorAll("[data-rd]").forEach((cb) => cb.addEventListener("change", async () => {
+        cb.disabled = true;
+        const { error } = cb.checked
+          ? await supabase.from("guide_readers").insert({ user_id: cb.dataset.rd })
+          : await supabase.from("guide_readers").delete().eq("user_id", cb.dataset.rd);
+        cb.disabled = false;
+        if (error) { cb.checked = !cb.checked; alert("ไม่สำเร็จ: " + error.message); }
+        else toast(cb.checked ? "ให้สิทธิ์อ่านแล้ว" : "ถอนสิทธิ์แล้ว");
+      }));
+    }
+
+    async function loadViews() {
+      const tb = $("vwRows");
+      tb.innerHTML = `<tr><td colspan="3" class="muted">กำลังโหลด…</td></tr>`;
+      const { data, error } = await supabase.from("guide_views")
+        .select("user_id, page, viewed_at, profiles(full_name, email)").order("viewed_at", { ascending: false }).limit(300);
+      if (error) { tb.innerHTML = `<tr><td colspan="3" class="err">โหลดไม่สำเร็จ: ${escH(error.message)}</td></tr>`; return; }
+      // รวมแถวของคนเดียวกันที่ห่างกันไม่เกิน 30 นาที
+      const groups = [];
+      for (const v of data) {
+        const g = groups[groups.length - 1], t = new Date(v.viewed_at).getTime();
+        if (g && g.user_id === v.user_id && g.first - t <= 1800000) { g.first = t; g.pages.add(v.page); }
+        else groups.push({ user_id: v.user_id, who: v.profiles, first: t, last: t, pages: new Set([v.page]) });
+      }
+      const ranges = (set) => {
+        const a = [...set].sort((x, y) => x - y), out = [];
+        for (let i = 0; i < a.length; i++) { let j = i; while (a[j + 1] === a[j] + 1) j++; out.push(j > i ? `${a[i]}–${a[j]}` : `${a[i]}`); i = j; }
+        return out.join(", ");
+      };
+      const fmt = (t) => new Date(t).toLocaleString("th-TH", { dateStyle: "short", timeStyle: "short" });
+      tb.innerHTML = groups.map((g) => `<tr><td style="white-space:nowrap">${fmt(g.first)}${g.last - g.first > 60000 ? ` – ${new Date(g.last).toLocaleTimeString("th-TH", { timeStyle: "short" })}` : ""}</td>
+          <td>${escH(g.who?.full_name || g.who?.email || "-")}</td><td>${ranges(g.pages)}</td></tr>`).join("")
+        || `<tr><td colspan="3" class="muted">ยังไม่มีการเปิดอ่าน</td></tr>`;
+    }
+
+    // ---- อัปโหลด: เลือกโฟลเดอร์ที่ build.py สร้าง → อัปเฉพาะ book.json + pages/ + thumbs/ ----
+    const WANT = /(?:^|\/)(book\.json|(?:pages|thumbs)\/p\d{2,3}\.jpg)$/;
+    $("upPick").onclick = () => $("upDir").click();
+    $("upDir").addEventListener("change", async (e) => {
+      const files = [...e.target.files].map((f) => ({ f, m: (f.webkitRelativePath || f.name).match(WANT) })).filter((x) => x.m)
+        .map((x) => ({ file: x.f, path: x.m[1] }));
+      e.target.value = "";
+      const out = $("upMsg");
+      const bookF = files.find((x) => x.path === "book.json");
+      if (!bookF) { out.innerHTML = `<span class="err">ไม่พบ book.json ในโฟลเดอร์นี้ — เลือกโฟลเดอร์ cowboy-ebook ที่รัน build.py แล้ว</span>`; return; }
+      let B;
+      try { B = JSON.parse(await bookF.file.text()); } catch { out.innerHTML = `<span class="err">book.json อ่านไม่ได้</span>`; return; }
+      const need = B.pages.flatMap((p) => [pPath(p.n), tPath(p.n)]);
+      const have = new Map(files.map((x) => [x.path, x.file]));
+      const missing = need.filter((p) => !have.has(p));
+      if (missing.length) { out.innerHTML = `<span class="err">รูปไม่ครบ ${missing.length} ไฟล์ (เช่น ${escH(missing[0])})</span>`; return; }
+      if (!confirm(`อัปโหลด COWBOY GUIDE ${B.pages.length} หน้า แทนที่ฉบับเดิมในระบบ?\n\nผู้มีสิทธิ์อ่านจะเห็นฉบับใหม่ทันทีหลังอัปโหลดเสร็จ`)) return;
+      const jobs = need.map((p) => ({ path: p, file: have.get(p), type: "image/jpeg" }));
+      const prog = $("upProg"); prog.hidden = false;
+      let done = 0, fail = null;
+      const put = async (j) => {
+        const { error } = await supabase.storage.from(BUCKET).upload(j.path, j.file, { upsert: true, contentType: j.type, cacheControl: "60" });
+        if (error && !fail) fail = `${j.path}: ${error.message}`;
+        done++; prog.firstElementChild.style.width = `${Math.round(done / (jobs.length + 1) * 100)}%`;
+        out.textContent = `กำลังอัปโหลด ${done}/${jobs.length + 1}…`;
+      };
+      $("upPick").disabled = $("upDel").disabled = true;
+      for (let i = 0; i < jobs.length && !fail; i += 4) await Promise.all(jobs.slice(i, i + 4).map(put));
+      if (!fail) await put({ path: "book.json", file: bookF.file, type: "application/json" });   // ดัชนีขึ้นทีหลังสุด → ผู้อ่านไม่เห็นฉบับครึ่ง ๆ กลาง ๆ
+      if (!fail) {                                                                            // ลบหน้าที่เกินจากฉบับเก่า
+        const keep = new Set(need);
+        for (const dir of ["pages", "thumbs"]) {
+          const { data } = await supabase.storage.from(BUCKET).list(dir, { limit: 1000 });
+          const extra = (data || []).map((o) => `${dir}/${o.name}`).filter((p) => !keep.has(p));
+          if (extra.length) await supabase.storage.from(BUCKET).remove(extra);
+        }
+      }
+      $("upPick").disabled = $("upDel").disabled = false;
+      out.innerHTML = fail ? `<span class="err">ไม่สำเร็จ: ${escH(fail)}</span>` : `<span class="ok">✓ อัปโหลดแล้ว ${B.pages.length} หน้า — กำลังโหลดใหม่…</span>`;
+      if (!fail) setTimeout(() => location.reload(), 900);
+    });
+    $("upDel").onclick = async () => {
+      if (!confirm("ลบ COWBOY GUIDE ออกจากระบบทั้งหมด?\n\nรูปทุกหน้าและดัชนีค้นหาจะถูกลบถาวร ผู้อ่านเปิดไม่ได้ทันที\n(รายชื่อผู้มีสิทธิ์และประวัติการเปิดอ่านยังอยู่)")) return;
+      const out = $("upMsg"); out.textContent = "กำลังลบ…";
+      let n = 0;
+      for (const dir of ["pages", "thumbs", ""]) {
+        const { data } = await supabase.storage.from(BUCKET).list(dir, { limit: 1000 });
+        const files = (data || []).filter((o) => o.id).map((o) => (dir ? `${dir}/${o.name}` : o.name));
+        if (files.length) { const { error } = await supabase.storage.from(BUCKET).remove(files); if (error) { out.innerHTML = `<span class="err">${escH(error.message)}</span>`; return; } n += files.length; }
+      }
+      out.innerHTML = `<span class="ok">✓ ลบแล้ว ${n} ไฟล์</span>`;
+      setTimeout(() => location.reload(), 900);
+    };
+  }
+</script>
+</body>
+</html>

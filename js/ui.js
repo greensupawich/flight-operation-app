@@ -2,7 +2,7 @@
 //  ui.js — ส่วนประกอบหน้าจอที่ใช้ร่วมกัน (แถบเมนูด้านบน)
 // =====================================================================
 import { signOut, canPlan, isAdmin } from "./auth.js";
-import { DB_ENV } from "./supabase.js";
+import { DB_ENV, supabase } from "./supabase.js";
 import { esc as escHtml } from "./esc.js";
 const EMBLEM = new URL("../assets/emblem-603.png", import.meta.url).href;   // ตรา ฝูง.603 (มุมซ้ายบน)
 
@@ -19,6 +19,7 @@ const LINKS = [
   { href: "stats.html",     label: "สถิติ" },
   { href: "safety.html",    label: "นิรภัย" },
   { href: "archive.html",   label: "ย้อนหลัง" },
+  { href: "guide.html",     label: "COWBOY GUIDE", guideOnly: true },   // เฉพาะผู้มีสิทธิ์อ่าน (migration_66) — ตรวจแล้วค่อยแสดง
   { href: "https://greensupawich.github.io/flightplan/", label: "Flight Plan ↗", external: true },
   { href: "admin.html",     label: "ผู้ดูแล", adminOnly: true },
 ];
@@ -35,6 +36,7 @@ export function renderTopbar(profile) {
   const here = location.pathname.split("/").pop() || "dashboard.html";
   const links = LINKS
     .filter((l) => (!l.adminOnly || isAdmin(profile)) && (!l.plannerOnly || canPlan(profile)))
+    .filter((l) => !l.guideOnly || guideOk(profile) === true)
     .map((l) => l.external
       ? `<a href="${l.href}" target="_blank" rel="noopener" title="เปิด Flight Plan Generator ในแท็บใหม่">${l.label}</a>`
       : `<a href="${l.href}" class="${l.href === here ? "active" : ""}">${l.label}</a>`)
@@ -58,6 +60,17 @@ export function renderTopbar(profile) {
   document.body.prepend(bar);
   document.getElementById("__signout").addEventListener("click", signOut);
 
+  // ลิงก์ COWBOY GUIDE: ถามสิทธิ์จากฐาน (ครั้งเดียวต่อ session) แล้วค่อยเติมลิงก์
+  if (guideOk(profile) === null) checkGuide(profile).then((ok) => {
+    if (!ok) return;
+    const g = LINKS.find((l) => l.guideOnly);
+    const a = document.createElement("a");
+    a.href = g.href; a.textContent = g.label;
+    if (g.href === here) a.className = "active";
+    const before = [...bar.querySelectorAll("#__nav a")].find((x) => x.getAttribute("href") === "admin.html" || x.getAttribute("href")?.startsWith("http"));
+    bar.querySelector("#__nav").insertBefore(a, before || null);
+  });
+
   // เมนูมือถือ: กด ☰ เพื่อเปิด/ปิด · ปิดเมื่อคลิกนอกแถบ
   const toggle = document.getElementById("__navToggle");
   toggle.addEventListener("click", (e) => {
@@ -70,6 +83,19 @@ export function renderTopbar(profile) {
       bar.classList.remove("open"); toggle.setAttribute("aria-expanded", "false");
     }
   });
+}
+
+// สิทธิ์อ่าน COWBOY GUIDE: true / false / null (ยังไม่รู้) · จำไว้ใน sessionStorage ต่อผู้ใช้
+const GUIDE_KEY = (p) => "guideOk:" + p.id;
+function guideOk(p) {
+  if (isAdmin(p)) return true;
+  try { const v = sessionStorage.getItem(GUIDE_KEY(p)); return v === null ? null : v === "1"; } catch { return null; }
+}
+async function checkGuide(p) {
+  const { data, error } = await supabase.rpc("can_read_guide");
+  const ok = !error && data === true;
+  if (!error) { try { sessionStorage.setItem(GUIDE_KEY(p), ok ? "1" : "0"); } catch { /* ไม่จำ */ } }
+  return ok;
 }
 
 export { canPlan, isAdmin };
