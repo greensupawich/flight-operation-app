@@ -60,6 +60,17 @@ export function renderTopbar(profile) {
   document.body.prepend(bar);
   document.getElementById("__signout").addEventListener("click", signOut);
 
+  // เมนูไม่พอดีแถว (ลิงก์เยอะ / จอไม่กว้างพอ) → ยุบเป็น ☰ แทนการล้นขอบ
+  const wrap = bar.querySelector(".wrap");
+  const fit = () => {
+    if (matchMedia("(max-width:1080px)").matches) { bar.classList.remove("compact"); return; }   // จอแคบยุบด้วย CSS อยู่แล้ว
+    bar.classList.remove("compact");
+    if (wrap.scrollWidth > wrap.clientWidth + 1) bar.classList.add("compact");
+  };
+  fit();
+  addEventListener("resize", fit);
+  document.fonts?.ready.then(fit);
+
   // ลิงก์ COWBOY GUIDE: ถามสิทธิ์จากฐาน (ครั้งเดียวต่อ session) แล้วค่อยเติมลิงก์
   if (guideOk(profile) === null) checkGuide(profile).then((ok) => {
     if (!ok) return;
@@ -69,6 +80,7 @@ export function renderTopbar(profile) {
     if (g.href === here) a.className = "active";
     const before = [...bar.querySelectorAll("#__nav a")].find((x) => x.getAttribute("href") === "admin.html" || x.getAttribute("href")?.startsWith("http"));
     bar.querySelector("#__nav").insertBefore(a, before || null);
+    fit();
   });
 
   // เมนูมือถือ: กด ☰ เพื่อเปิด/ปิด · ปิดเมื่อคลิกนอกแถบ
