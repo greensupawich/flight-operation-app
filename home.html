@@ -217,7 +217,7 @@
 <script type="module">
   import { getCurrentProfile, canPlan } from "./js/auth.js";
   import { renderTopbar } from "./js/ui.js";
-  import { loadMissionsByDate, reportOf, loadCrewRoster, DEFAULT_CREW_SLOTS, stbyLabel, fmtPhone, fmtPhonesIn } from "./js/missions.js";
+  import { loadMissionsByDate, reportOf, loadCrewRoster, DEFAULT_CREW_SLOTS, stbyLabel, fmtPhone, fmtPhonesIn, splitDefect } from "./js/missions.js";
   import { sheetHTML, orderMissions, hasCustomOrder, wireReorder, resetOrder, wireSheetDelete } from "./js/mission-sheet.js";
   import { loadAircraft, loadDefects, loadChecks, boardAsOf, boardAhead } from "./js/status.js";
   import { supabase } from "./js/supabase.js";
@@ -285,7 +285,7 @@
 
     function acpRow(a, defs, chks) {
       const dHTML = defs.length
-        ? `<ol>${defs.map(d => `<li>${esc(d)}</li>`).join("")}</ol>`
+        ? `<ol>${defs.map(d => `<li>${splitDefect(d).map(esc).join("<br>")}</li>`).join("")}</ol>`
         : `<span class="dash">—</span>`;
       const cHTML = chks.length
         ? chks.map(c => `<div class="acp-chk"><span class="nm">${esc(c.name)}</span><span class="due">${esc(c.due_text || "")}</span></div>`).join("")

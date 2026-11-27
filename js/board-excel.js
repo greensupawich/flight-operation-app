@@ -7,7 +7,7 @@
 //  • ไลบรารี ExcelJS โหลดเมื่อกดปุ่มเท่านั้น (pin เวอร์ชัน + SRI)
 // =====================================================================
 import { orderMissions, hidePilotRow } from "./mission-sheet.js";
-import { pocLines, missionNameLines, stbyLabel, fmtPhone, fmtPhonesIn } from "./missions.js";
+import { pocLines, missionNameLines, stbyLabel, fmtPhone, fmtPhonesIn, splitDefect } from "./missions.js";
 
 const EXCELJS_URL = new URL("../vendor/exceljs-4.4.0.min.js", import.meta.url).href;   // เก็บในระบบเอง (vendor/README.md)
 const EXCELJS_SRI = "sha384-Pqp51FUN2/qzfxZxBCtF0stpc9ONI6MYZpVqmo8m20SoaQCzf+arZvACkLkirlPz";
@@ -181,7 +181,11 @@ function fillPanel(ws, aircraft, defMap, chkMap, stLabel) {
     a, defs: (defMap.get(a.id) || []).map(clean).filter(Boolean),
     chks: chkMap.get(a.id) || [],
   }));
-  blocks.forEach((b) => { b.h = Math.max(3, b.defs.length, b.chks.length); });
+  // ข้อขัดข้องที่มี "/" → ส่วนถัดไปลงแถวใหม่ข้างล่าง (ไม่ขยายช่อง) · บรรทัดต่อย่อหน้าตามเลขข้อ
+  blocks.forEach((b) => {
+    b.lines = b.defs.flatMap((d, i) => splitDefect(d).map((p, j) => (j ? `\u00A0\u00A0\u00A0\u00A0${p}` : `${i + 1}. ${p}`)));
+    b.h = Math.max(3, b.lines.length, b.chks.length);
+  });
   // พื้นที่เกิน 28 แถว → ลดบล็อกที่ยาวสุด (ข้อขัดข้องที่ล้นรวมไว้บรรทัดสุดท้าย)
   while (blocks.reduce((s, b) => s + b.h, 0) > total) {
     const big = blocks.reduce((x, y) => (y.h > x.h ? y : x));
@@ -197,7 +201,7 @@ function fillPanel(ws, aircraft, defMap, chkMap, stLabel) {
     const first = r, last = Math.min(r + b.h - 1, PANEL_LAST);
     const st = stLabel(b.a);
     const fill = STATUS_FILL[b.a.status];
-    const lines = b.defs.map((d, i) => `${i + 1}. ${d}`);
+    const lines = [...b.lines];
     const n = last - first + 1;
     if (lines.length > n) lines.splice(n - 1, lines.length, lines.slice(n - 1).join("  "));
     for (let rr = first; rr <= last; rr++) {
