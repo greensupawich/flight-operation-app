@@ -94,6 +94,7 @@
   import { loadAircraft, setAircraftStatus, setAircraftStatusOn, loadRecentDiscrepancies, boardAsOf, boardAhead, clearAircraftPlan,
            loadDefects, saveDefects, loadChecks, saveChecks,
            AC_STATUS, AC_STATUS_LABEL, AC_STATUS_COLORS, AC_STATUS_UI, AC_STATUS_UI_LABEL, statusParts, statusFields } from "./js/status.js";
+  import { splitDefect } from "./js/missions.js";
 
   const profile = await requireAuth();
   if (profile) {
@@ -144,7 +145,7 @@
             : a.status_updated_at ? `<div class="updated">อัปเดตสถานภาพ: ${thDate(a.status_updated_at)}</div>` : ""}
 
           <h4>รายการข้อขัดข้อง</h4>
-          ${defs.length ? `<ol class="defs">${defs.map(d => `<li>${esc(d)}</li>`).join("")}</ol>`
+          ${defs.length ? `<ol class="defs">${defs.map(d => `<li>${splitDefect(d).map(esc).join("<br>")}</li>`).join("")}</ol>`
                         : `<div class="none">✓ ไม่มี</div>`}
 
           <h4>รายการเช็คตามวงรอบ</h4>
@@ -183,7 +184,7 @@
       </div>`;
     }
 
-    const defRow = (v="") => `<div class="ed-row"><input data-def value="${esc(v)}" placeholder="รายละเอียดข้อขัดข้อง"><button type="button" class="btn-mini" data-rm>−</button></div>`;
+    const defRow = (v="") => `<div class="ed-row"><input data-def value="${esc(v)}" placeholder="รายละเอียดข้อขัดข้อง (ใส่ &quot; / &quot; เพื่อขึ้นบรรทัดใหม่)"><button type="button" class="btn-mini" data-rm>−</button></div>`;
     const chkRow = (n="",d="") => `<div class="ed-row"><input class="nmin" data-cname value="${esc(n)}" placeholder="เช่น 2 M"><input data-cdue value="${esc(d)}" placeholder="กำหนดครบ เช่น 21 - 22 ก.ย.69"><button type="button" class="btn-mini" data-rm>−</button></div>`;
 
     function wireCard(el) {
