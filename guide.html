@@ -223,12 +223,14 @@
   </div>
   <div class="dbody" data-ap="upload" hidden>
     <p class="note">
-      1) ในเครื่องผู้ดูแล รัน <code>python3 build.py "ไฟล์.pdf"</code> ในโฟลเดอร์ cowboy-ebook (ได้ <code>book.json</code> + <code>pages/</code> + <code>thumbs/</code>)<br>
-      2) กด "เลือกโฟลเดอร์" แล้วเลือกโฟลเดอร์ cowboy-ebook · ระบบอัปโหลดเฉพาะ book.json และรูปหน้า แทนที่ฉบับเดิม
+      เลือกไฟล์ <b>COWBOY-GUIDE-upload.zip</b> ในโฟลเดอร์ cowboy-ebook บนเครื่องผู้ดูแล (สร้างด้วย <code>python3 build.py "ไฟล์.pdf"</code>)
+      · ระบบอัปโหลดเฉพาะ book.json และรูปหน้า แทนที่ฉบับเดิม
     </p>
+    <input type="file" id="upZip" accept=".zip,application/zip" hidden>
     <input type="file" id="upDir" webkitdirectory multiple hidden>
     <div style="display:flex;gap:8px;flex-wrap:wrap">
-      <button class="btn primary" id="upPick">📁 เลือกโฟลเดอร์…</button>
+      <button class="btn primary" id="upPick">📦 เลือกไฟล์ .zip…</button>
+      <button class="btn" id="upPickDir" title="ทางเลือก: เลือกทั้งโฟลเดอร์ cowboy-ebook">📁 หรือเลือกโฟลเดอร์</button>
       <button class="btn" id="upDel" style="color:var(--crit)">ลบเอกสารออกจากระบบ</button>
     </div>
     <div class="prog" hidden id="upProg"><i></i></div>
@@ -702,23 +704,46 @@
         || `<tr><td colspan="3" class="muted">ยังไม่มีการเปิดอ่าน</td></tr>`;
     }
 
-    // ---- อัปโหลด: เลือกโฟลเดอร์ที่ build.py สร้าง → อัปเฉพาะ book.json + pages/ + thumbs/ ----
+    // ---- อัปโหลด: zip จาก build.py (หรือทั้งโฟลเดอร์) → เฉพาะ book.json + pages/ + thumbs/ ----
     const WANT = /(?:^|\/)(book\.json|(?:pages|thumbs)\/p\d{2,3}\.jpg)$/;
-    $("upPick").onclick = () => $("upDir").click();
+    const upBtns = ["upPick", "upPickDir", "upDel"];
+    $("upPick").onclick = () => $("upZip").click();
+    $("upPickDir").onclick = () => $("upDir").click();
+    const loadJSZip = () => window.JSZip ? Promise.resolve(window.JSZip) : new Promise((res, rej) => {
+      const s = document.createElement("script");
+      s.src = "vendor/jszip-3.10.1.min.js"; s.onload = () => res(window.JSZip); s.onerror = () => rej(new Error("โหลดตัวอ่าน zip ไม่สำเร็จ"));
+      document.head.append(s);
+    });
+    $("upZip").addEventListener("change", async (e) => {
+      const f = e.target.files[0]; e.target.value = "";
+      if (!f) return;
+      const out = $("upMsg"); out.textContent = "กำลังเปิดไฟล์ zip…";
+      try {
+        const zip = await (await loadJSZip()).loadAsync(f);
+        const have = new Map();
+        for (const ent of Object.values(zip.files)) {
+          const m = !ent.dir && ent.name.match(WANT);
+          if (m) have.set(m[1], await ent.async("blob"));
+        }
+        await uploadSet(have, `ใน ${escH(f.name)} มี ${Object.keys(zip.files).length} รายการ`);
+      } catch (err) { out.innerHTML = `<span class="err">เปิดไฟล์ zip ไม่ได้: ${escH(err.message)}</span>`; }
+    });
     $("upDir").addEventListener("change", async (e) => {
-      const files = [...e.target.files].map((f) => ({ f, m: (f.webkitRelativePath || f.name).match(WANT) })).filter((x) => x.m)
-        .map((x) => ({ file: x.f, path: x.m[1] }));
-      e.target.value = "";
+      const all = [...e.target.files]; e.target.value = "";
+      const have = new Map();
+      all.forEach((f) => { const m = (f.webkitRelativePath || f.name).match(WANT); if (m) have.set(m[1], f); });
+      const top = (all[0]?.webkitRelativePath || "").split("/")[0];
+      await uploadSet(have, `เบราว์เซอร์ส่งมา ${all.length} ไฟล์${top ? ` จากโฟลเดอร์ "${escH(top)}"` : ""}`);
+    });
+    async function uploadSet(have, srcInfo) {
       const out = $("upMsg");
-      const bookF = files.find((x) => x.path === "book.json");
-      if (!bookF) { out.innerHTML = `<span class="err">ไม่พบ book.json ในโฟลเดอร์นี้ — เลือกโฟลเดอร์ cowboy-ebook ที่รัน build.py แล้ว</span>`; return; }
+      if (!have.has("book.json")) { out.innerHTML = `<span class="err">ไม่พบ book.json (${srcInfo}) — ใช้ไฟล์ COWBOY-GUIDE-upload.zip ที่ build.py สร้าง</span>`; return; }
       let B;
-      try { B = JSON.parse(await bookF.file.text()); } catch { out.innerHTML = `<span class="err">book.json อ่านไม่ได้</span>`; return; }
+      try { B = JSON.parse(await have.get("book.json").text()); } catch { out.innerHTML = `<span class="err">book.json อ่านไม่ได้</span>`; return; }
       const need = B.pages.flatMap((p) => [pPath(p.n), tPath(p.n)]);
-      const have = new Map(files.map((x) => [x.path, x.file]));
       const missing = need.filter((p) => !have.has(p));
-      if (missing.length) { out.innerHTML = `<span class="err">รูปไม่ครบ ${missing.length} ไฟล์ (เช่น ${escH(missing[0])})</span>`; return; }
-      if (!confirm(`อัปโหลด COWBOY GUIDE ${B.pages.length} หน้า แทนที่ฉบับเดิมในระบบ?\n\nผู้มีสิทธิ์อ่านจะเห็นฉบับใหม่ทันทีหลังอัปโหลดเสร็จ`)) return;
+      if (missing.length) { out.innerHTML = `<span class="err">รูปไม่ครบ ${missing.length} ไฟล์ (เช่น ${escH(missing[0])}) · ${srcInfo}</span>`; return; }
+      if (!confirm(`อัปโหลด COWBOY GUIDE ${B.pages.length} หน้า แทนที่ฉบับเดิมในระบบ?\n\nผู้มีสิทธิ์อ่านจะเห็นฉบับใหม่ทันทีหลังอัปโหลดเสร็จ`)) { out.textContent = ""; return; }
       const jobs = need.map((p) => ({ path: p, file: have.get(p), type: "image/jpeg" }));
       const prog = $("upProg"); prog.hidden = false;
       let done = 0, fail = null;
@@ -728,10 +753,10 @@
         done++; prog.firstElementChild.style.width = `${Math.round(done / (jobs.length + 1) * 100)}%`;
         out.textContent = `กำลังอัปโหลด ${done}/${jobs.length + 1}…`;
       };
-      $("upPick").disabled = $("upDel").disabled = true;
+      upBtns.forEach((id) => { $(id).disabled = true; });
       for (let i = 0; i < jobs.length && !fail; i += 4) await Promise.all(jobs.slice(i, i + 4).map(put));
-      if (!fail) await put({ path: "book.json", file: bookF.file, type: "application/json" });   // ดัชนีขึ้นทีหลังสุด → ผู้อ่านไม่เห็นฉบับครึ่ง ๆ กลาง ๆ
-      if (!fail) {                                                                            // ลบหน้าที่เกินจากฉบับเก่า
+      if (!fail) await put({ path: "book.json", file: have.get("book.json"), type: "application/json" });   // ดัชนีขึ้นทีหลังสุด → ผู้อ่านไม่เห็นฉบับครึ่ง ๆ กลาง ๆ
+      if (!fail) {                                                                                       // ลบหน้าที่เกินจากฉบับเก่า
         const keep = new Set(need);
         for (const dir of ["pages", "thumbs"]) {
           const { data } = await supabase.storage.from(BUCKET).list(dir, { limit: 1000 });
@@ -739,10 +764,10 @@
           if (extra.length) await supabase.storage.from(BUCKET).remove(extra);
         }
       }
-      $("upPick").disabled = $("upDel").disabled = false;
+      upBtns.forEach((id) => { $(id).disabled = false; });
       out.innerHTML = fail ? `<span class="err">ไม่สำเร็จ: ${escH(fail)}</span>` : `<span class="ok">✓ อัปโหลดแล้ว ${B.pages.length} หน้า — กำลังโหลดใหม่…</span>`;
       if (!fail) setTimeout(() => location.reload(), 900);
-    });
+    }
     $("upDel").onclick = async () => {
       if (!confirm("ลบ COWBOY GUIDE ออกจากระบบทั้งหมด?\n\nรูปทุกหน้าและดัชนีค้นหาจะถูกลบถาวร ผู้อ่านเปิดไม่ได้ทันที\n(รายชื่อผู้มีสิทธิ์และประวัติการเปิดอ่านยังอยู่)")) return;
       const out = $("upMsg"); out.textContent = "กำลังลบ…";
