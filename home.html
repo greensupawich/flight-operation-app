@@ -120,6 +120,8 @@
   .acp-stby .poc{margin-top:5px;font-size:11px;color:var(--muted)}
   /* ช่อง STBY แก้ได้ (ผู้วางแผน) */
   .acp-stby .ed-c{cursor:pointer;border-radius:3px;padding:0 2px}
+  .acp-stby .hd .tag[data-f]{cursor:pointer}
+  .acp-stby .hd .tag[data-f]:hover{background:var(--primary-soft);box-shadow:inset 0 0 0 1px var(--primary)}
   .acp-stby .ed-c:hover{background:var(--primary-soft);box-shadow:inset 0 0 0 1px var(--primary)}
   .acp-stby .ed-c.ed-on{background:var(--accent-soft);box-shadow:inset 0 0 0 2px var(--accent)}
   .acp-stby .ed-plus{color:var(--faint);font-weight:700;margin-inline-start:4px}
@@ -314,7 +316,7 @@
         }).join("") + (planner ? `<div class="ed-newline"><span class="ed-c" data-crew-new>+ เพิ่มลูกเรือ</span></div>` : "");
         const label = esc(stbyLabel(m));                              // ป้าย = ชื่อภารกิจที่กรอก
         return `<div class="acp-stby" data-mid="${m.id}">
-          <div class="hd">${m.kind === "stby_dechochai" ? "STBY เดโชชัย" : "STBY"} <span class="tag nm">${label}</span> <span class="tag">Callsign ${esc(m.callsign || "-")}</span></div>
+          <div class="hd">${m.kind === "stby_dechochai" ? "STBY เดโชชัย" : "STBY"} <span class="tag nm"${planner ? ` data-f="mission_name" title="แก้ชื่อ"` : ""}>${label}</span> <span class="tag"${planner ? ` data-f="callsign" title="แก้ Callsign"` : ""}>Callsign ${esc(m.callsign || "-")}</span></div>
           ${lines ? `<div class="cw">${lines}</div>` : `<div class="poc">— ยังไม่ระบุลูกเรือ —</div>`}
         </div>`;
       }).join("");

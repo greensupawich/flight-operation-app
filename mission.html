@@ -162,7 +162,7 @@
   import { requireAuth, canPlan } from "./js/auth.js";
   import { renderTopbar } from "./js/ui.js";
   import { getMission, saveMission, loadAircraft, loadCrewRoster, acLabel,
-           KINDS, DEFAULT_KIND, KIND_COLORS, QUALS, qualStyle, PILOT_ROLES, OTHER_ROLES, DEFAULT_CREW_SLOTS, esc, parsePoc, pocFields, parseMissionNames, missionNameField } from "./js/missions.js";
+           KINDS, DEFAULT_KIND, KIND_COLORS, QUALS, qualStyle, PILOT_ROLES, OTHER_ROLES, DEFAULT_CREW_SLOTS, esc, parsePoc, pocFields, parseMissionNames, missionNameField, STBY_DEFAULT_NAME } from "./js/missions.js";
 
   const profile = await requireAuth();
   if (profile) {
@@ -368,6 +368,14 @@
         el.querySelector(`[data-mn="${names.length - 1}"]`).focus();
       });
     }
+
+    // เลือกชนิด STBY (Standby) ตอนชื่อภารกิจยังว่าง → ใส่ชื่อเริ่มต้น ATR 72-500/600 (แก้ได้) · เปลี่ยนเป็นชนิดอื่นและยังเป็นชื่อเริ่มต้น → ล้างออก
+    kindSel.addEventListener("change", () => {
+      const blank = names.every(t => !String(t).trim());
+      const isDef = names.length === 1 && String(names[0]).trim() === STBY_DEFAULT_NAME;
+      if (kindSel.value === "stby" && blank) { names = [STBY_DEFAULT_NAME]; renderNames(); }
+      else if (kindSel.value !== "stby" && isDef) { names = [""]; renderNames(); }
+    });
 
     // ---- POC คณะ: 1 แถว = ชื่อ + เบอร์ · เพิ่ม/ลบได้ (เก็บแบบ pocFields ใน missions.js) ----
     let pocs = [];

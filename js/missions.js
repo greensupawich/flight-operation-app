@@ -33,6 +33,8 @@ export const KIND_COLORS = {
 //  stby_mission = STBY ทุกอย่าง ต่างแค่หน้าหลัก/Export Excel วางเป็นการ์ดภารกิจ (เหมือน STBY เดโชชัย)
 export const STBY_KINDS = ["stby", "stby_dechochai", "stby_mission"];
 export const isStby = (k) => STBY_KINDS.includes(k);
+// ชื่อเริ่มต้นของภารกิจชนิด STBY (Standby) — ป้ายในช่อง STBY หน้าหลัก / Excel
+export const STBY_DEFAULT_NAME = "ATR 72-500/600";
 export const kindStyle = (k) => {
   const c = KIND_COLORS[k] || KIND_COLORS[DEFAULT_KIND];
   return `background:${c.bg};color:${c.fg}`;
@@ -270,7 +272,7 @@ export function missionNameField(list) {
 //  ชื่อว่าง / มีแค่ "STBY" → ใช้แบบเครื่อง หรือ "ATR72-500/600"
 export function stbyLabel(m) {
   const l = parseMissionNames(m).map((x) => x.replace(/^ST\s*-?\s*BY\b[\s\-:·]*/i, "").trim()).filter(Boolean);
-  if (!l.length) return String(m?.aircraft?.type || "").trim() || "ATR72-500/600";
+  if (!l.length) return String(m?.aircraft?.type || "").trim() || STBY_DEFAULT_NAME;
   return l.length > 1 ? l.map((x, i) => `(${i + 1}) ${x}`).join(" / ") : l[0];
 }
 // บรรทัดที่แสดงในช่องภารกิจ (การ์ด / Excel) · หลายภารกิจ → ขึ้นต้น (1) (2) …
